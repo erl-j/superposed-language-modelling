@@ -93,13 +93,20 @@ class Tokenizer():
 
         self.note_attribute_order = note_attribute_order
         
-        
         self.attributes_per_note=len(self.note_attribute_order)
 
         self.meta_len = len(self.meta_attribute_order)
         self.total_len = self.meta_len + self.attributes_per_note * self.config["max_notes"]
 
         self.token2idx = {token: idx for idx, token in enumerate(self.vocab)}
+
+    def encode(self, sm, tag):
+        tokens = self.sm_to_tokens(sm, tag)
+        return self.tokens_to_indices(tokens)
+
+    def decode(self, indices):
+        tokens = self.indices_to_tokens(indices)
+        return self.tokens_to_sm(tokens)
 
     def tokens_to_indices(self, tokens):
         return [self.token2idx[token] for token in tokens]
@@ -150,6 +157,12 @@ class Tokenizer():
                     elif note_attr == "velocity":
                         note_encoding.append("velocity:" + str(note.velocity))
                 note_encodings.append(note_encoding)
+
+        # add empty notes up to max_notes
+        for i in range(len(note_encodings), self.config["max_notes"]):
+            blank_note = [attr + ":-" for attr in self.note_attribute_order]
+            note_encodings.append(blank_note)
+
         # shuffle notes
         if self.config["shuffle_notes"]:
             np.random.shuffle(note_encodings)
@@ -182,6 +195,11 @@ class Tokenizer():
         note_recs = []
         # parse notes
         for note in notes:
+
+            # if all attributes are "-", skip note
+            if all([attr.split(":")[1] == "-" for attr in note]):
+                continue
+
             program = 0
             pitch = None
             onset = None
@@ -189,8 +207,8 @@ class Tokenizer():
             offset = None
             offset_tick = None
             velocity = None
-    
-            for i, note_attr in enumerate(self.note_attribute_order):                
+
+            for i, note_attr in enumerate(self.note_attribute_order):                  
                 if note_attr == "program":
                     assert note[i].split(":")[0] == "program"
                     program = int(note[i].split(":")[1])

@@ -13,7 +13,7 @@ def test_cycle_consistency():
 
     tokenizer_config = {
         "ticks_per_beat":24,
-        "pitch_range":[31, 108],
+        "pitch_range":[0, 128],
         "max_beats":33,
         "max_notes":128,
         "min_tempo":50,
@@ -32,11 +32,11 @@ def test_cycle_consistency():
         "tests/test_assets/midi/loop_nr_1_n_bars=4.0_start_tick=0_end_tick=16384.mid"
     )
     
-    y = tk.sm_to_tokens(x, "rock")
+    y = tk.encode(x, "rock")
 
-    x2 = tk.tokens_to_sm(y)
+    x2 = tk.decode(y)
 
-    y2 = tk.sm_to_tokens(x2, "rock")
+    y2 = tk.encode(x2, "rock")
 
     # sort y alphabetically
     y = sorted(y)
