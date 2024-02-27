@@ -5,22 +5,32 @@ import pandas as pd
 import itertools
 from tqdm import tqdm
 import random
+from augmentation import transpose_sm
 
 class MidiDataset(torch.utils.data.Dataset):
-    def __init__(self, cache_path, genre_list, path_filter_fn, tokenizer):
+    def __init__(self, cache_path, genre_list, path_filter_fn, tokenizer, transposition_range=[-7, 7]):
         self.tokenizer = tokenizer
         self.records = torch.load(cache_path)
         for i in range(len(self.records)):
             self.records[i] = [x for x in self.records[i] if path_filter_fn(x["path"])]
             self.records[i] = [{**x, "genre": [g for g in x["genre"] if g in genre_list]} for x in self.records[i]]
         self.records = [x for x in self.records if len(x) > 0]
+        self.transposition_range = transposition_range
 
     def __len__(self):
         return len(self.records)
     
     def __getitem__(self, idx):
         record = random.choice(self.records[idx])
-        return torch.tensor(self.tokenizer.encode(record["midi"], random.choice(record["genre"] if len(record["genre"]) > 0 else ["other"])))
+        midi = record["midi"]
+        if self.transposition_range is not None:
+            transposition = random.randint(*self.transposition_range)
+            midi = transpose_sm(midi, transposition)
+        return torch.tensor(
+            self.tokenizer.encode(midi
+            ,random.choice(record["genre"] if len(record["genre"]) > 0 else ["other"])
+            )
+        )
 
 
 

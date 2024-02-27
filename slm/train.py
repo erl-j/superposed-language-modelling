@@ -11,6 +11,7 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, RichProg
 from pytorch_lightning.loggers import WandbLogger
 from tokenizer import Tokenizer
 from torch import nn
+from augmentation import transpose_sm
 
 
 class DecoderOnlyModel(pl.LightningModule):
@@ -66,8 +67,8 @@ class DecoderOnlyModel(pl.LightningModule):
         self.mask = get_mask(max_seq_len)
        
         # save fig of mask
-        plt.imshow(get_mask(4))
-        plt.savefig("artefacts/mask.png")
+        # plt.imshow(get_mask(4))
+        # plt.savefig("artefacts/mask.png")
         self.seq_len = max_seq_len
 
     
@@ -269,7 +270,7 @@ if __name__ == "__main__":
         "ticks_per_beat":24,
         "pitch_range":[0, 128],
         "max_beats":16,
-        "max_notes":400,
+        "max_notes":200,
         "min_tempo":50,
         "max_tempo":200,
         "n_tempo_bins": 16,
@@ -291,6 +292,7 @@ if __name__ == "__main__":
         path_filter_fn = lambda x: "n_bars=2" in x,
         genre_list=genre_list,
         tokenizer=tokenizer,
+        transposition_range=[-4, 4],
     )
 
     val_ds = MidiDataset(
@@ -300,7 +302,7 @@ if __name__ == "__main__":
         tokenizer=tokenizer,
     )
   
-    BATCH_SIZE = 2
+    BATCH_SIZE = 8
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds,
@@ -341,7 +343,7 @@ if __name__ == "__main__":
     progress_bar_callback = RichProgressBar(refresh_rate=1)
 
     trainer = pl.Trainer(accelerator="gpu",
-    devices=[3],
+    devices=[5],
     precision=32,
     max_epochs=None,
     log_every_n_steps=1,
@@ -354,7 +356,7 @@ if __name__ == "__main__":
             save_top_k=3,
             save_last=True,
             filename="{epoch}-{step}-{val/loss:.2f}",
-            train_time_interval = datetime.timedelta(minutes=60),)],
+            train_time_interval = datetime.timedelta(minutes=10),)],
     logger=wandb_logger,
     )
 
