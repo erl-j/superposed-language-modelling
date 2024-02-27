@@ -1,6 +1,7 @@
 import symusic
 import pydash
 import numpy as np
+import torch
 
 class Tokenizer():
     def __init__(self, config):
@@ -100,6 +101,8 @@ class Tokenizer():
 
         self.token2idx = {token: idx for idx, token in enumerate(self.vocab)}
 
+        self.format_mask = self.get_format_mask()
+
     def encode(self, sm, tag):
         tokens = self.sm_to_tokens(sm, tag)
         return self.tokens_to_indices(tokens)
@@ -113,6 +116,26 @@ class Tokenizer():
 
     def indices_to_tokens(self, indices):
         return [self.vocab[idx] for idx in indices]
+    
+    def get_format_mask(self):
+        '''
+        Returns a format mask for the given tokenization.
+        The format mask is a binary matrix of shape (total_len, len(vocab)) where each row corresponds to a token and each column to a valid token.
+        '''
+        format_mask = torch.zeros(self.total_len, len(self.vocab))
+
+        # go through meta tokens
+        for meta_idx, meta_token in enumerate(self.meta_attribute_order):
+            for token in self.vocab:
+                if token.startswith(meta_token) and not token.endswith("-"):
+                    format_mask[meta_idx, self.token2idx[token]] = 1
+
+        for note_idx in range(self.config["max_notes"]):
+            for attr_idx, note_attr in enumerate(self.note_attribute_order):
+                for token in self.vocab:
+                    if token.startswith(note_attr):
+                        format_mask[self.meta_len + note_idx * self.attributes_per_note + attr_idx, self.token2idx[token]] = 1
+        return format_mask
 
     def sm_to_tokens(self, sm, tag):
 
@@ -136,36 +159,42 @@ class Tokenizer():
         # get notes
         note_encodings = []
         for track in sm.tracks:
-            for note in track.notes:
-                note_encoding = [
-                ]
-                for note_attr in self.note_attribute_order:
-                    if note_attr == "program":
-                        note_encoding.append("program:" + str(track.program))
-                    elif note_attr == "pitch":
-                        note_encoding.append("pitch:" + str(note.pitch))
-                    elif note_attr == "pitch, onset/beat":
-                        note_encoding.append("pitch, onset/beat:" + str(note.pitch) + "," + str(note.start // self.config["ticks_per_beat"]))
-                    elif note_attr == "onset/beat":
-                        note_encoding.append("onset/beat:" + str(note.start // self.config["ticks_per_beat"]))
-                    elif note_attr == "onset/tick":
-                        note_encoding.append("onset/tick:" + str(note.start % self.config["ticks_per_beat"]))
-                    elif note_attr == "offset/beat":
-                        note_encoding.append("offset/beat:" + str(note.end // self.config["ticks_per_beat"]))
-                    elif note_attr == "offset/tick":
-                        note_encoding.append("offset/tick:" + str(note.end % self.config["ticks_per_beat"]))
-                    elif note_attr == "velocity":
-                        note_encoding.append("velocity:" + str(note.velocity))
-                note_encodings.append(note_encoding)
+            if track.name not in self.config["ignored_track_names"]:
+                for note in track.notes:
+                    note_encoding = [
+                    ]
+                    for note_attr in self.note_attribute_order:
+                        if note_attr == "program":
+                            note_encoding.append("program:" + str(track.program))
+                        elif note_attr == "pitch":
+                            note_encoding.append("pitch:" + str(note.pitch))
+                        elif note_attr == "pitch, onset/beat":
+                            note_encoding.append("pitch, onset/beat:" + str(note.pitch) + "," + str(note.start // self.config["ticks_per_beat"]))
+                        elif note_attr == "onset/beat":
+                            note_encoding.append("onset/beat:" + str(note.start // self.config["ticks_per_beat"]))
+                        elif note_attr == "onset/tick":
+                            note_encoding.append("onset/tick:" + str(note.start % self.config["ticks_per_beat"]))
+                        elif note_attr == "offset/beat":
+                            note_encoding.append("offset/beat:" + str(note.end // self.config["ticks_per_beat"]))
+                        elif note_attr == "offset/tick":
+                            note_encoding.append("offset/tick:" + str(note.end % self.config["ticks_per_beat"]))
+                        elif note_attr == "velocity":
+                            note_encoding.append("velocity:" + str(note.velocity))
+                    note_encodings.append(note_encoding)
+
+        # shuffle notes
+        if self.config["shuffle_notes"]:
+            np.random.shuffle(note_encodings)
+
+        # if more notes than max_notes, remove notes
+        if len(note_encodings) > self.config["max_notes"]:
+            note_encodings = note_encodings[:self.config["max_notes"]]
 
         # add empty notes up to max_notes
         for i in range(len(note_encodings), self.config["max_notes"]):
             blank_note = [attr + ":-" for attr in self.note_attribute_order]
             note_encodings.append(blank_note)
 
-        # shuffle notes
-        if self.config["shuffle_notes"]:
-            np.random.shuffle(note_encodings)
         # flatten note_encodings
         note_encodings = pydash.flatten(note_encodings)
         return meta + note_encodings
