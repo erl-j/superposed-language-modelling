@@ -11,20 +11,22 @@ def test_midi_load():
 
 def test_cycle_consistency():
 
+    N_BARS = 4
     tokenizer_config = {
         "ticks_per_beat":24,
         "pitch_range":[0, 128],
-        "max_beats":33,
-        "max_notes":128,
+        "max_beats":4*N_BARS,
+        "max_notes":100 * N_BARS,
         "min_tempo":50,
         "max_tempo":200,
         "n_tempo_bins": 16,
         "time_signatures": None,
-        "tags": ["rock","pop"],
+        "tags": ["pop","rock"],
         "shuffle_notes": True,
         "use_offset": True,
         "merge_pitch_and_beat":True,
         "use_program": True,
+        "ignored_track_names":[f"Layers{i}" for i in range(0, 8)],
     }
 
     tk = tokenizer.Tokenizer(tokenizer_config)

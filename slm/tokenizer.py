@@ -2,6 +2,7 @@ import symusic
 import pydash
 import numpy as np
 import torch
+import pretty_midi
 
 class Tokenizer():
     def __init__(self, config):
@@ -273,7 +274,7 @@ class Tokenizer():
         # group by program
         note_recs = pydash.group_by(note_recs, "program")
         for program, notes in note_recs.items():
-            track = symusic.Track(program=program)
+            track = symusic.Track(program=program, name=pretty_midi.program_to_instrument_name(program))
             for note in notes:
                 track.notes.append(symusic.Note(pitch=note["pitch"], time=note["onset"], duration=note["offset"]-note["onset"], velocity=note["velocity"]))
             sm.tracks.append(track)
