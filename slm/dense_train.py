@@ -1,0 +1,312 @@
+import datetime
+import logging
+
+import matplotlib.pyplot as plt
+import pytorch_lightning as pl
+import torch
+import torch.nn.functional as F
+import wandb
+from data import MidiDataset
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, RichProgressBar
+from pytorch_lightning.loggers import WandbLogger
+from dense_tokenizer import DenseTokenizer
+from torch import nn
+from augmentation import transpose_sm
+from unet import UNet2D
+
+# model 
+
+
+class DecoderOnlyModel(pl.LightningModule):
+    def __init__(
+        self,
+        hidden_size,
+        vocab,
+        learning_rate,
+        tokenizer_config,
+        one_hot_input=False,
+    ):
+        """
+        seq_len: length of chart sequence (equal or longer to audio sequence)
+        """
+        super().__init__()
+        self.save_hyperparameters()
+        vocab_size = len(vocab)
+        self.tokenizer = DenseTokenizer(tokenizer_config)
+        self.format_mask = self.tokenizer.get_format_mask()
+        self.vocab = vocab
+        
+        # intialize positional encoding. one per step in sequence
+        self.voice_embedding = nn.Embedding(self.tokenizer.n_voices, hidden_size)
+        self.time_embedding = nn.Embedding(self.tokenizer.timesteps, hidden_size)
+
+        self.embedding_layer = nn.Linear(vocab_size, hidden_size, bias=False)
+        self.one_hot_input = one_hot_input
+
+        self.main_block = UNet2D(in_channels=hidden_size, out_channels=hidden_size)
+
+        self.decoder_output_layer = nn.Linear(hidden_size, vocab_size)
+
+    
+    def forward(self, x):
+
+        constraint = x
+
+        # embed
+        x = self.embedding_layer(x)
+
+        batch,time,voice,ch = x.shape
+        # sum channels
+        x = x.sum(dim=-1)
+        # add voice and time embeddings
+        x += self.voice_embedding.weight[None, ...].to(x.device)
+        x += self.time_embedding.weight[None, ...].to(x.device)
+        
+        # main block
+        x = self.main_block(x)
+
+        # output layer
+        x = self.decoder_output_layer(x)
+
+        # repeat x to match ch
+        x = x[..., None, :].repeat(1, 1, 1, ch)
+
+        # mutliply by format mask
+        x = x * self.format_mask[None, ...].to(x.device)
+
+        # multiply by constraint
+        x = x * constraint
+       
+        return x
+    
+    def step(self, batch, batch_idx):
+        if self.one_hot_input:
+            x = batch
+        else:
+            x = torch.nn.functional.one_hot(batch, num_classes=len(self.vocab)).float()
+
+        batch_size = x.shape[0]
+        # create masking ratios
+        masking_ratios = torch.rand(batch_size, device=self.device)
+        mask = torch.rand_like(x, device=self.device)<masking_ratios[:,None,None]
+        # mask encoder input
+        # encoder input is mask or token tensor with undefined
+        encoder_input = torch.clamp(x + mask, 0, 1)
+
+        decoder_output_logits = self(encoder_input)
+
+        ce = F.cross_entropy(
+            x,
+            encoder_input,
+        )
+        metrics = {}
+        metrics["cross_entropy"] = ce
+        # TODO: check that this code is correct
+        # with torch.no_grad():
+        #     # get probability of the correct token
+        #     decoder_output_probs = F.softmax(decoder_output_logits, dim=-1)
+        #     probability = torch.gather(
+        #         decoder_output_probs, dim=-1, index=decoder_output_tokens_index.unsqueeze(-1)
+        #     ).squeeze(-1)
+        #     metrics["probability"] = probability.mean()
+        #     # sort yhat by probability
+        #     decoder_output_probs_sort = torch.argsort(
+        #         decoder_output_probs, dim=-1, descending=True
+        #     )
+        #     for k in [1, 2, 4]:
+        #         metrics[f"accuracy@{k}"] = (
+        #             (
+        #                 decoder_output_tokens_index.unsqueeze(-1)
+        #                 == decoder_output_probs_sort[:, :, :k]
+        #             )
+        #             .any(dim=-1)
+        #             .float()
+        #             .mean()
+        #         )
+        return metrics
+
+    def training_step(self, batch, batch_idx):
+        metrics = self.step(batch, batch_idx)
+        for metric in metrics:
+            self.log(f"trn/{metric}", metrics[metric], prog_bar=True)
+        loss = metrics["cross_entropy"]
+        self.log("trn/loss", loss, prog_bar=True, on_step=True, on_epoch=True)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        if False and batch_idx == 0:
+            if self.one_hot_input:
+                x = batch
+            else:
+                x = torch.nn.functional.one_hot(batch, num_classes=len(self.vocab)).float()
+            encoder_input = x
+            decoder_input = x
+            generated = self.generate(
+                encoder_input*0+1, decoder_input[:,:4], temperature=1.0, max_len=50
+            )
+            generated = torch.argmax(generated, dim=-1)
+            generated = generated.cpu().numpy()
+            generated = generated[0]
+            # decode with vocab
+            generated = [self.vocab[i] for i in generated]
+             # write to file
+            print(generated)
+            with open("artefacts/generated.txt", "w") as f:
+                f.write("\n".join(generated))
+
+        with torch.no_grad():
+            metrics = self.step(batch, batch_idx)
+        for metric in metrics:
+            self.log(f"val/{metric}", metrics[metric], prog_bar=True, on_step=True, on_epoch=True)
+        loss = metrics["cross_entropy"]
+        self.log("val/loss", loss, prog_bar=True, on_step=True, on_epoch=True)
+        return loss
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
+
+if __name__ == "__main__":
+
+    genre_list = [
+    "other",
+    "pop",
+    "rock",
+    "italian%2cfrench%2cspanish",
+    "classical",
+    "romantic",
+    "renaissance",
+    "alternative-indie",
+    "metal",
+    "traditional",
+    "country",
+    "baroque",
+    "punk",
+    "modern",
+    "jazz",
+    "dance-eletric",
+    "rnb-soul",
+    "medley",
+    "blues",
+    "hip-hop-rap",
+    "hits of the 2000s",
+    "instrumental",
+    "midi karaoke",
+    "folk",
+    "newage",
+    "latino",
+    "hits of the 1980s",
+    "hits of 2011 2020",
+    "musical%2cfilm%2ctv",
+    "reggae-ska",
+    "hits of the 1970s",
+    "christian-gospel",
+    "world",
+    "early_20th_century",
+    "hits of the 1990s",
+    "grunge",
+    "australian artists",
+    "funk",
+    "best of british"
+    ]
+
+    N_BARS = 4
+
+    tokenizer_config = {
+        "ticks_per_beat":24,
+        "pitch_range":[0, 128],
+        "max_beats":4*N_BARS,
+        "max_notes":100 * N_BARS,
+        "min_tempo":50,
+        "max_tempo":200,
+        "n_tempo_bins": 16,
+        "time_signatures": None,
+        "tags": genre_list,
+        "shuffle_notes": True,
+        "use_offset": True,
+        "merge_pitch_and_beat":True,
+        "use_program": True,
+        "ignored_track_names":[f"Layers{i}" for i in range(0, 8)],
+    }
+
+    tokenizer = DenseTokenizer(
+        tokenizer_config
+    )
+
+    trn_ds = MidiDataset(
+        cache_path="./artefacts/trn_midi_records.pt",
+        path_filter_fn = lambda x: f"n_bars={N_BARS}" in x,
+        genre_list=genre_list,
+        tokenizer=tokenizer,
+        transposition_range=[-4, 4],
+    )
+
+    val_ds = MidiDataset(
+        cache_path="./artefacts/val_midi_records.pt",
+        path_filter_fn = lambda x: "n_bars=2" in x,
+        genre_list=genre_list,
+        tokenizer=tokenizer,
+    )
+  
+    BATCH_SIZE = 2
+
+    trn_dl = torch.utils.data.DataLoader(
+        trn_ds,
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=True,
+    )
+
+    val_dl = torch.utils.data.DataLoader(
+        val_ds,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True,
+    )
+    
+    
+    model = DecoderOnlyModel(
+        hidden_size=768,
+        n_heads=8,
+        feed_forward_size=4*768,
+        n_layers=10,
+        vocab = tokenizer.vocab,
+        max_seq_len=tokenizer.total_len,
+        learning_rate=1e-4,
+        tokenizer_config=tokenizer_config,
+        sliding_mask=True,
+    )
+
+    wandb_logger = WandbLogger(log_model="all", project="slm")
+    # get name
+    name = wandb_logger.experiment.name
+
+    logger = logging.getLogger("wandb")
+    logger.setLevel(logging.ERROR)
+
+    progress_bar_callback = RichProgressBar(refresh_rate=1)
+
+    trainer = pl.Trainer(accelerator="gpu",
+    devices=[3],
+    precision=32,
+    max_epochs=None,
+    log_every_n_steps=1,
+    # val_check_interval=10,
+    callbacks=[progress_bar_callback,
+            pl.callbacks.ModelCheckpoint(
+            dirpath=f"./checkpoints/{name}/",
+            monitor="val/loss",
+            mode="min",
+            save_top_k=3,
+            save_last=True,
+            filename="{epoch}-{step}-{val/loss:.2f}-{trn/loss:.2f}",
+            train_time_interval = datetime.timedelta(minutes=30),)],
+    logger=wandb_logger,
+    accumulate_grad_batches=4
+    )
+
+    trainer.fit(model,
+     trn_dl,
+     val_dl,
+    )

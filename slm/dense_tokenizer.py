@@ -45,24 +45,27 @@ class DenseTokenizer():
         # vocab to index
         self.vocab2idx = {v: i for i, v in enumerate(vocab)}
 
+        self.timesteps = self.config["cells_per_beat"] * self.config["beats_per_bar"] * self.config["n_bars"]
+        self.n_voices = 128*2
+
     def encode(self, sm):
         # downsample the score to tick resolution
         sm = sm.resample(tpq=24,min_dur=0)
         
         n_timesteps = self.config["cells_per_beat"] * self.config["beats_per_bar"] * self.config["n_bars"]
-        n_pitches = 128  
+        
 
         # number of tracks
-        action = np.ones((n_timesteps, n_pitches*2), dtype=np.int32) * self.vocab2idx["action:-"]
-        program = np.ones((n_timesteps, n_pitches*2),dtype=np.int32) * self.vocab2idx["program:-"]
+        action = np.ones((n_timesteps, self.n_voices), dtype=np.int32) * self.vocab2idx["action:-"]
+        program = np.ones((n_timesteps, self.n_voices),dtype=np.int32) * self.vocab2idx["program:-"]
 
-        pitch_to_notes = [[] for _ in range(n_pitches*2)]
+        pitch_to_notes = [[] for _ in range(self.n_voices)]
 
         for track in sm.tracks:
             if track.name.startswith("Layer"):
                 continue
             for note in track.notes:
-                pitch_to_notes[note.pitch + n_pitches * (track.is_drum)].append({"program": track.program, "note": note})
+                pitch_to_notes[note.pitch + 128 * (track.is_drum)].append({"program": track.program, "note": note})
            
         for voice_idx, notes in enumerate(pitch_to_notes):
             # sort the notes by start time in reverse order
@@ -86,7 +89,6 @@ class DenseTokenizer():
 
     def decode(self, encoded):
 
-        n_pitches = 128
         action = encoded[..., 0]
         program = encoded[..., 1]
 
@@ -130,7 +132,7 @@ class DenseTokenizer():
             for note in notes:
                 track.notes.append(
                     symusic.Note(
-                        pitch=note["voice_idx"] % n_pitches,
+                        pitch=note["voice_idx"] % 128,
                         time=note["start"],
                         duration= note["duration"],
                         velocity=note["velocity"],
