@@ -12,12 +12,13 @@ from pytorch_lightning.loggers import WandbLogger
 from dense_tokenizer import DenseTokenizer
 from torch import nn
 from augmentation import transpose_sm
-from unet import UNet2D
+from unet.unet import UNet2D
+import einops
 
 # model 
 
 
-class DecoderOnlyModel(pl.LightningModule):
+class UnetModel(pl.LightningModule):
     def __init__(
         self,
         hidden_size,
@@ -33,7 +34,7 @@ class DecoderOnlyModel(pl.LightningModule):
         self.save_hyperparameters()
         vocab_size = len(vocab)
         self.tokenizer = DenseTokenizer(tokenizer_config)
-        self.format_mask = self.tokenizer.get_format_mask()
+        self.format_mask = torch.tensor(self.tokenizer.get_format_mask())
         self.vocab = vocab
         
         # intialize positional encoding. one per step in sequence
@@ -50,36 +51,42 @@ class DecoderOnlyModel(pl.LightningModule):
     
     def forward(self, x):
 
+        # multiply with format mask
+        x = x * self.format_mask[None, ...].to(x.device)
+
         constraint = x
 
         # embed
         x = self.embedding_layer(x)
 
-        batch,time,voice,ch = x.shape
+        batch,time,voice,ch,ft = x.shape
         # sum channels
-        x = x.sum(dim=-1)
+        x = x.sum(dim=-2)
         # add voice and time embeddings
-        x += self.voice_embedding.weight[None, ...].to(x.device)
-        x += self.time_embedding.weight[None, ...].to(x.device)
+
+        x += self.voice_embedding.weight[None, None, :, :].to(x.device)
+        x += self.time_embedding.weight[None, :, None, :].to(x.device)
+
+        x = einops.rearrange(x, "batch time voice ft -> batch ft time voice")
         
         # main block
         x = self.main_block(x)
 
-        # output layer
-        x = self.decoder_output_layer(x)
+        x = einops.rearrange(x, "batch ft time voice -> batch time voice ft")
 
         # repeat x to match ch
-        x = x[..., None, :].repeat(1, 1, 1, ch)
+        x = x[..., None, :].repeat(1, 1, 1, ch, 1)
 
-        # mutliply by format mask
-        x = x * self.format_mask[None, ...].to(x.device)
+        # output layer
+        logits = self.decoder_output_layer(x)
 
         # multiply by constraint
-        x = x * constraint
+        logits = logits - (1- constraint) * 1e5
        
-        return x
+        return logits
     
     def step(self, batch, batch_idx):
+        batch = batch.long()
         if self.one_hot_input:
             x = batch
         else:
@@ -88,7 +95,7 @@ class DecoderOnlyModel(pl.LightningModule):
         batch_size = x.shape[0]
         # create masking ratios
         masking_ratios = torch.rand(batch_size, device=self.device)
-        mask = torch.rand_like(x, device=self.device)<masking_ratios[:,None,None]
+        mask = torch.rand_like(x, device=self.device)<masking_ratios[:,None,None,None,None]
         # mask encoder input
         # encoder input is mask or token tensor with undefined
         encoder_input = torch.clamp(x + mask, 0, 1)
@@ -96,33 +103,15 @@ class DecoderOnlyModel(pl.LightningModule):
         decoder_output_logits = self(encoder_input)
 
         ce = F.cross_entropy(
-            x,
-            encoder_input,
+            decoder_output_logits.reshape(-1, decoder_output_logits.shape[-1]),
+            batch.reshape(-1),
         )
+        # multiply by batch
+        # multiply by mask
+
         metrics = {}
         metrics["cross_entropy"] = ce
-        # TODO: check that this code is correct
-        # with torch.no_grad():
-        #     # get probability of the correct token
-        #     decoder_output_probs = F.softmax(decoder_output_logits, dim=-1)
-        #     probability = torch.gather(
-        #         decoder_output_probs, dim=-1, index=decoder_output_tokens_index.unsqueeze(-1)
-        #     ).squeeze(-1)
-        #     metrics["probability"] = probability.mean()
-        #     # sort yhat by probability
-        #     decoder_output_probs_sort = torch.argsort(
-        #         decoder_output_probs, dim=-1, descending=True
-        #     )
-        #     for k in [1, 2, 4]:
-        #         metrics[f"accuracy@{k}"] = (
-        #             (
-        #                 decoder_output_tokens_index.unsqueeze(-1)
-        #                 == decoder_output_probs_sort[:, :, :k]
-        #             )
-        #             .any(dim=-1)
-        #             .float()
-        #             .mean()
-        #         )
+        
         return metrics
 
     def training_step(self, batch, batch_idx):
@@ -164,6 +153,72 @@ class DecoderOnlyModel(pl.LightningModule):
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
+    
+
+    def generate(self, x, sampling_steps, temperature):
+        x = x
+        # multiply by format mask
+        x = x * self.format_mask[None, ...].to(x.device)
+        batch, time, voice, ch, ft = x.shape
+        print(x.shape)
+        # linspace from schedule
+        schedule = torch.linspace(0, 1, sampling_steps, dtype=torch.float32, device=x.device)
+        total_tokens = time * voice * ch 
+        # count number of known tokens
+        masked_tokens = (x.sum(-1) > 1).sum().int()
+        # find masking ratio
+        masking_ratio = masked_tokens / total_tokens
+
+        # find step in schedule
+        step = torch.argmin((1- schedule - masking_ratio).abs())
+
+        print(f"step: {step}")
+        for i in range(step+1, sampling_steps):
+
+            print(f"step: {i}")
+
+            logits = self(x.float())
+
+            probs = F.softmax(logits/temperature, dim=-1)
+            # invert probs
+            # flatten
+            flat_probs = einops.rearrange(probs, "b t v c l -> (b t v c) l")
+            sampled = torch.multinomial(flat_probs, 1).squeeze(-1)
+
+            print(sampled.shape)
+
+            flat_x = einops.rearrange(x, "b t v c l -> (b t v c) l")
+
+            masked_indices = torch.where(flat_x.sum(-1) > 1)[0]
+
+            # sample x
+            # 
+            n_masked = masked_indices.shape[0]
+            target_masking_ratio = 1-schedule[i].item()
+
+            target_n_masked = int(total_tokens * target_masking_ratio)
+            # tokens to unmask
+
+
+
+            n_tokens_to_unmask = n_masked - target_n_masked
+
+            # get indices of tokens to unmask
+            # get indices of masked tokens
+            # shuffle masked indices
+            masked_indices = masked_indices[torch.randperm(n_masked)]
+            indices_to_unmask = masked_indices[:n_tokens_to_unmask]
+
+
+            # replace with sampled values
+            flat_x[indices_to_unmask] = torch.nn.functional.one_hot(sampled[indices_to_unmask], num_classes=flat_x.shape[-1])
+
+            x = einops.rearrange(flat_x, "(b t v c) l -> b t v c l", b=batch, t=time, v=voice, c=ch)
+        return x
+
+
+
+
 
 if __name__ == "__main__":
 
@@ -212,20 +267,21 @@ if __name__ == "__main__":
     N_BARS = 4
 
     tokenizer_config = {
-        "ticks_per_beat":24,
-        "pitch_range":[0, 128],
-        "max_beats":4*N_BARS,
-        "max_notes":100 * N_BARS,
-        "min_tempo":50,
-        "max_tempo":200,
+        "beats_per_bar": 4,
+        "cells_per_beat": 24,
+        "pitch_range": [0, 128],
+        "n_bars": N_BARS,
+        "max_notes": 100 * N_BARS,
+        "min_tempo": 50,
+        "max_tempo": 200,
         "n_tempo_bins": 16,
         "time_signatures": None,
-        "tags": genre_list,
+        "tags": ["pop"],
         "shuffle_notes": True,
         "use_offset": True,
-        "merge_pitch_and_beat":True,
+        "merge_pitch_and_beat": True,
         "use_program": True,
-        "ignored_track_names":[f"Layers{i}" for i in range(0, 8)],
+        "ignored_track_names": [f"Layers{i}" for i in range(0, 8)],
     }
 
     tokenizer = DenseTokenizer(
@@ -242,18 +298,18 @@ if __name__ == "__main__":
 
     val_ds = MidiDataset(
         cache_path="./artefacts/val_midi_records.pt",
-        path_filter_fn = lambda x: "n_bars=2" in x,
+        path_filter_fn = lambda x: f"n_bars={N_BARS}" in x,
         genre_list=genre_list,
         tokenizer=tokenizer,
     )
   
-    BATCH_SIZE = 2
+    BATCH_SIZE = 4
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds,
         batch_size=BATCH_SIZE,
         shuffle=True,
-        num_workers=4,
+        num_workers=4,  
         pin_memory=True,
     )
 
@@ -266,19 +322,14 @@ if __name__ == "__main__":
     )
     
     
-    model = DecoderOnlyModel(
-        hidden_size=768,
-        n_heads=8,
-        feed_forward_size=4*768,
-        n_layers=10,
+    model = UnetModel(
+        hidden_size=64,
         vocab = tokenizer.vocab,
-        max_seq_len=tokenizer.total_len,
-        learning_rate=1e-4,
+        learning_rate=1e-2,
         tokenizer_config=tokenizer_config,
-        sliding_mask=True,
     )
 
-    wandb_logger = WandbLogger(log_model="all", project="slm")
+    wandb_logger = WandbLogger(log_model="all", project="slm-dense")
     # get name
     name = wandb_logger.experiment.name
 
@@ -287,13 +338,15 @@ if __name__ == "__main__":
 
     progress_bar_callback = RichProgressBar(refresh_rate=1)
 
-    trainer = pl.Trainer(accelerator="gpu",
-    devices=[3],
+    trainer = pl.Trainer(
+    accelerator="gpu",
+    devices=[1],
     precision=32,
     max_epochs=None,
     log_every_n_steps=1,
     # val_check_interval=10,
-    callbacks=[progress_bar_callback,
+    callbacks=[
+            progress_bar_callback,
             pl.callbacks.ModelCheckpoint(
             dirpath=f"./checkpoints/{name}/",
             monitor="val/loss",

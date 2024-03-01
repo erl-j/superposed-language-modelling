@@ -2,25 +2,7 @@
 import numpy as np
 import symusic
 import pretty_midi
-
-N_BARS = 4
-tokenizer_config = {
-    "beats_per_bar": 4,
-    "cells_per_beat": 24,
-    "pitch_range": [0, 128],
-    "n_bars": N_BARS,
-    "max_notes": 100 * N_BARS,
-    "min_tempo": 50,
-    "max_tempo": 200,
-    "n_tempo_bins": 16,
-    "time_signatures": None,
-    "tags": ["pop"],
-    "shuffle_notes": True,
-    "use_offset": True,
-    "merge_pitch_and_beat": True,
-    "use_program": True,
-    "ignored_track_names": [f"Layers{i}" for i in range(0, 8)],
-}
+import torch
 
 
 class DenseTokenizer():
@@ -37,7 +19,7 @@ class DenseTokenizer():
 
         vocab.append("action:-")
         for velocity in range(128):
-            vocab.append(f"onset vel:{velocity}")
+            vocab.append(f"action vel:{velocity}")
         vocab.append("action:hold")
 
         self.vocab = vocab
@@ -48,9 +30,27 @@ class DenseTokenizer():
         self.timesteps = self.config["cells_per_beat"] * self.config["beats_per_bar"] * self.config["n_bars"]
         self.n_voices = 128*2
 
-    def encode(self, sm):
+
+    def get_format_mask(self):
+        action_idx = [i for i, v in enumerate(self.vocab) if v.startswith("action")]
+        program_idx = [i for i, v in enumerate(self.vocab) if v.startswith("program")]
+
+        # multihot
+        action_mh = np.zeros((self.timesteps, self.n_voices, len(self.vocab)), dtype=np.int64)
+        program_mh = np.zeros((self.timesteps, self.n_voices, len(self.vocab)), dtype=np.int64)
+
+        for action in action_idx:
+            action_mh[..., action] = 1
+
+        for program in program_idx:
+            program_mh[..., program] = 1
+        
+        return torch.tensor(np.stack([action_mh, program_mh], axis=-2))
+
+
+    def encode(self, sm, tag=None):
         # downsample the score to tick resolution
-        sm = sm.resample(tpq=24,min_dur=0)
+        sm = sm.resample(tpq=self.config["cells_per_beat"], min_dur=0)
         
         n_timesteps = self.config["cells_per_beat"] * self.config["beats_per_bar"] * self.config["n_bars"]
         
@@ -72,8 +72,10 @@ class DenseTokenizer():
             notes.sort(key=lambda x: x["note"].start)
             for note in notes:
                 start_tick = note["note"].start
+                if start_tick >= n_timesteps:
+                    continue
                 end_tick = note["note"].end
-                action[start_tick, voice_idx] = self.vocab2idx["onset vel:" + str(note["note"].velocity)]
+                action[start_tick, voice_idx] = self.vocab2idx["action vel:" + str(note["note"].velocity)]
                 program[start_tick:end_tick, voice_idx] = self.vocab2idx[
                     f"program:{note['program']}"
                 ]
@@ -95,14 +97,13 @@ class DenseTokenizer():
         # get pitch notes
         notes = []
 
-        print(action.shape)
-
         for voice_idx in range(action.shape[1]):
             current_note = None #{"start": None, "duration": None, "velocity": None, "pitch": None, "program": None}
             for time_idx in range(action.shape[0]):
                 action_str = self.vocab[action[ time_idx, voice_idx]]
                 program_str = self.vocab[program[ time_idx, voice_idx]]
-                if action_str.startswith("onset"):
+                print(action_str, program_str)
+                if action_str.startswith("action vel"):
                     if current_note is not None:
                         notes.append(current_note)
                     current_note = {"start": time_idx, "duration": 1, "velocity": int(action_str.split(":")[-1]), "voice_idx": voice_idx, "program": int(program_str.split(":")[-1])}

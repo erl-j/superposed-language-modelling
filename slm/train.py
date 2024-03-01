@@ -95,7 +95,7 @@ class DecoderOnlyModel(pl.LightningModule):
         # # multiply decoder_logits by right shifted encoder fts
         # # overlap between encoder and decoder
         # remove -inf from decoder logits
-        decoder_logits[:,:-1]= decoder_logits[:,:-1] + (1-cnst[:,1:,:])*-1e9
+        decoder_logits[:,:-1]= decoder_logits[:,:-1] + (1-cnst[:,1:,:])*1e9
         # crop to decoder length
         decoder_logits = decoder_logits[:, :decoder_len, :]
         return decoder_logits
@@ -298,7 +298,7 @@ if __name__ == "__main__":
 
     val_ds = MidiDataset(
         cache_path="./artefacts/val_midi_records.pt",
-        path_filter_fn = lambda x: "n_bars=2" in x,
+        path_filter_fn = lambda x: f"n_bars={N_BARS}" in x,
         genre_list=genre_list,
         tokenizer=tokenizer,
     )
