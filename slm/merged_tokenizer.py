@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import pretty_midi
 
-class Tokenizer():
+class MergedTokenizer():
     def __init__(self, config):
         self.config = config
 
@@ -123,19 +123,21 @@ class Tokenizer():
         Returns a format mask for the given tokenization.
         The format mask is a binary matrix of shape (total_len, len(vocab)) where each row corresponds to a token and each column to a valid token.
         '''
-        format_mask = torch.zeros(self.total_len, len(self.vocab))
+        # format_mask = torch.zeros(self.total_len, len(self.vocab))
+        
 
-        # go through meta tokens
-        for meta_idx, meta_token in enumerate(self.meta_attribute_order):
-            for token in self.vocab:
-                if token.startswith(meta_token) and not token.endswith("-"):
-                    format_mask[meta_idx, self.token2idx[token]] = 1
+        # # go through meta tokens
+        # for meta_idx, meta_token in enumerate(self.meta_attribute_order):
+        #     for token in self.vocab:
+        #         if token.startswith(meta_token) and not token.endswith("-"):
+        #             format_mask[meta_idx, self.token2idx[token]] = 1
 
+        format_mask = np.zeros((self.config["max_notes"] * len(self.note_attribute_order), len(self.vocab)))
         for note_idx in range(self.config["max_notes"]):
             for attr_idx, note_attr in enumerate(self.note_attribute_order):
                 for token in self.vocab:
                     if token.startswith(note_attr):
-                        format_mask[self.meta_len + note_idx * self.attributes_per_note + attr_idx, self.token2idx[token]] = 1
+                        format_mask[note_idx * self.attributes_per_note + attr_idx, self.token2idx[token]] = 1
         return format_mask
 
     def sm_to_tokens(self, sm, tag):
@@ -145,18 +147,6 @@ class Tokenizer():
         # assert right ticks per beat
         assert sm.ticks_per_quarter == self.config["ticks_per_beat"]
 
-        meta = []
-        for meta_attr in self.meta_attribute_order:
-            if meta_attr == "special":
-                meta.append("special:sos")
-            elif meta_attr == "tag":
-                meta.append("tag:" + tag)
-            elif meta_attr == "time_signature":
-                ts = sm.time_signatures[0].numerator + "/" + sm.time_signatures[0].denominator
-                meta.append("time_signature:" + ts)
-            elif meta_attr == "tempo":
-                meta.append("tempo:" + str(self.tempo_to_tempo_bin(sm.tempos[0].qpm)))
-        
         # get notes
         note_encodings = []
         for track in sm.tracks:
@@ -198,7 +188,7 @@ class Tokenizer():
 
         # flatten note_encodings
         note_encodings = pydash.flatten(note_encodings)
-        return meta + note_encodings
+        return note_encodings
         
     def tokens_to_sm(self, tokens):
         sm = symusic.Score()

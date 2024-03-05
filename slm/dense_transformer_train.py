@@ -18,11 +18,14 @@ import einops
 # model 
 
 
-class UnetModel(pl.LightningModule):
+class DenseModel(pl.LightningModule):
     def __init__(
         self,
         hidden_size,
+        num_layers,
+        n_heads,
         vocab,
+        pitch_time_factorization,
         learning_rate,
         tokenizer_config,
         one_hot_input=False,
@@ -44,24 +47,22 @@ class UnetModel(pl.LightningModule):
         self.embedding_layer = nn.Linear(vocab_size, hidden_size, bias=False)
         self.one_hot_input = one_hot_input
 
-        # self.main_block = UNet2D(in_channels=hidden_size, out_channels=hidden_size,
-        #                          conv_depths=(16, 32, 64, 128, 256, 512, 1024)
-        # )
+        self.pitch_time_factorization = pitch_time_factorization
 
         self.main_block = torch.nn.TransformerEncoder(
             encoder_layer=torch.nn.TransformerEncoderLayer(
                 batch_first=True,
                 d_model=hidden_size,
                 dim_feedforward=hidden_size*4,
-                nhead=4,
+                nhead=n_heads,
                 dropout=0.1,
             ),
-            num_layers=6,
+            num_layers=num_layers,
+            norm = nn.LayerNorm(hidden_size),
         )
 
 
         self.decoder_output_layer = nn.Linear(hidden_size, vocab_size)
-
 
     
     def forward(self, x):
@@ -82,16 +83,27 @@ class UnetModel(pl.LightningModule):
 
         x += self.voice_embedding.weight[None, None, :, :].to(x.device)
         x += self.time_embedding.weight[None, :, None, :].to(x.device)
+    
+        if self.pitch_time_factorization:  
+            for layer in range(len(self.main_block.layers)):
+                x_voice = einops.rearrange(x, "batch time voice ft -> (batch time) voice ft", time=time, voice=voice, ft=ft)
+                x_voice = self.main_block.layers[layer](x_voice)
+                x_voice = einops.rearrange(x_voice, "(batch time) voice ft -> batch time voice ft", time=time, voice=voice, ft=ft)
 
-        if isinstance(self.main_block, UNet2D):
-            x = einops.rearrange(x, "batch time voice ft -> batch ft time voice")
-            # main block
+                x_time = einops.rearrange(x, "batch time voice ft -> (batch voice) time ft", time=time, voice=voice, ft=ft)
+                x_time = self.main_block.layers[layer](x_time)
+                x_time = einops.rearrange(x_time, "(batch voice) time ft -> batch time voice ft", time=time, voice=voice, ft=ft)
+
+                # sum
+                x = x_voice + x_time
+
+            if self.main_block.norm is not None:
+                x = self.main_block.norm(x)
+          
+        else:
+            x = einops.rearrange(x, "batch time voice ft -> batch (time voice) ft", time=time, voice=voice, ft=ft)
             x = self.main_block(x)
-            x = einops.rearrange(x, "batch ft time voice -> batch time voice ft")
-        elif isinstance(self.main_block, torch.nn.TransformerEncoder):
-            x = einops.rearrange(x, "batch time voice ft -> batch (time voice) ft")
-            x = self.main_block(x)
-            x = einops.rearrange(x, "batch (time voice) ft -> batch time voice ft", time=time, voice=voice)
+            x = einops.rearrange(x, "batch (time voice) ft -> batch time voice ft", time=time, voice=voice, ft=ft)
 
         # repeat x to match ch
         x = x[..., None, :].repeat(1, 1, 1, ch, 1)
@@ -271,7 +283,7 @@ if __name__ == "__main__":
 
     tokenizer_config = {
         "beats_per_bar": 4,
-        "cells_per_beat": 12,
+        "cells_per_beat": 2,
         "pitch_range": [0, 128],
         "n_bars": N_BARS,
         "max_notes": 100 * N_BARS,
@@ -306,7 +318,7 @@ if __name__ == "__main__":
         tokenizer=tokenizer,
     )
   
-    BATCH_SIZE = 8
+    BATCH_SIZE = 4
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds,
@@ -325,10 +337,13 @@ if __name__ == "__main__":
     )
     
     
-    model = UnetModel(
-        hidden_size=16,
+    model = DenseModel(
+        hidden_size=512,
+        num_layers=8,
+        pitch_time_factorization=True,
+        n_heads=8,
         vocab = tokenizer.vocab,
-        learning_rate=1e-3,
+        learning_rate=1e-4,
         tokenizer_config=tokenizer_config,
     )
 
@@ -343,7 +358,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
     accelerator="gpu",
-    devices=[1],
+    devices=[4],
     precision=32,
     max_epochs=None,
     log_every_n_steps=1,

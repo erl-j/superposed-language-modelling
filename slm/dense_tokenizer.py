@@ -103,10 +103,14 @@ class DenseTokenizer():
                 action_str = self.vocab[action[ time_idx, voice_idx]]
                 program_str = self.vocab[program[ time_idx, voice_idx]]
                 print(action_str, program_str)
+                if program_str == "program:-":
+                    program_nr = 0
+                else:
+                    program_nr = int(program_str.split(":")[-1])
                 if action_str.startswith("action vel"):
                     if current_note is not None:
                         notes.append(current_note)
-                    current_note = {"start": time_idx, "duration": 1, "velocity": int(action_str.split(":")[-1]), "voice_idx": voice_idx, "program": int(program_str.split(":")[-1])}
+                    current_note = {"start": time_idx, "duration": 1, "velocity": int(action_str.split(":")[-1]), "voice_idx": voice_idx, "program": program_nr}
                 elif action_str.startswith("action:-"):
                     if current_note is not None:
                         notes.append(current_note)
@@ -143,3 +147,4 @@ class DenseTokenizer():
 
         return sm
             
+# %%

@@ -9,10 +9,10 @@ import wandb
 from data import MidiDataset
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, RichProgressBar
 from pytorch_lightning.loggers import WandbLogger
-from tokenizer import Tokenizer
+from merged_tokenizer import MergedTokenizer
 from torch import nn
 from augmentation import transpose_sm
-
+import einops
 
 class DecoderOnlyModel(pl.LightningModule):
     def __init__(
@@ -34,8 +34,8 @@ class DecoderOnlyModel(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         vocab_size = len(vocab)
-        self.tokenizer = Tokenizer(tokenizer_config)
-        self.format_mask = self.tokenizer.get_format_mask()
+        self.tokenizer = MergedTokenizer(tokenizer_config)
+        self.format_mask = torch.Tensor(self.tokenizer.get_format_mask())
         self.vocab = vocab
         # intialize positional encoding. one per step in sequence
         self.positional_encoding  = nn.Parameter(torch.zeros(1, max_seq_len*2, hidden_size), requires_grad=True)
@@ -51,6 +51,18 @@ class DecoderOnlyModel(pl.LightningModule):
             ),
             num_layers=n_layers,
         )
+
+        self.note_decoder = torch.nn.TransformerDecoder(
+            decoder_layer=torch.nn.TransformerDecoderLayer(
+            d_model=hidden_size,
+            nhead=n_heads,
+            batch_first=True,
+            dim_feedforward=feed_forward_size,
+            dropout=0.1,
+            ),
+            num_layers=2,
+        )
+
         self.decoder_output_layer = nn.Linear(hidden_size, vocab_size)
 
         def get_mask(seq_len):
@@ -64,40 +76,74 @@ class DecoderOnlyModel(pl.LightningModule):
                     m[i+seq_len, 0:i+seq_len+1] = 0
             return m
         
-        self.mask = get_mask(max_seq_len)
+        self.mask = get_mask(tokenizer.config["max_notes"])
        
         # save fig of mask
-        # plt.imshow(get_mask(4))
-        # plt.savefig("artefacts/mask.png")
+        plt.imshow(get_mask(10))
+        plt.savefig("artefacts/mask.png")
         self.seq_len = max_seq_len
 
+        self.n_attributes = len(tokenizer.note_attribute_order)
+
+        self.attribute_embedding = nn.Embedding(self.n_attributes, hidden_size)
+
+        self.attribute_mask = torch.nn.Transformer.generate_square_subsequent_mask(len(tokenizer.note_attribute_order))
+
     
-    def forward(self, cnst, seq):
-        cnst = cnst*self.format_mask[None,...].to(self.device)
-        decoder_len = seq.shape[1]
-        # pad decoder tokens with zeros
-        seq = F.pad(seq, (0, 0, 0, self.seq_len-seq.shape[1]))
-        # concatenate cnst_and_seq and seq
-        cnst_and_seq = torch.cat([cnst, seq], dim=1)
-        # assert cnst_and_seq.shape[1] == self.seq_len*2
-        ze = self.embedding_layer(cnst_and_seq)
-        pos = self.positional_encoding[:, :2*self.seq_len, :].to(self.device)
-        # repeat
-        # add positional encoding
+    def forward(self, con, tgt):
+
+        # TODO: No padding currently, make sure it's not needed
+        # get shape
+        batch, time_attr, ft = con.shape
+
+        con = con * self.format_mask[None, ...].to(self.device)
+        tgt = tgt * self.format_mask[None, ...].to(self.device)
+
+        con_flat = con
+
+        # reshape
+        con = einops.rearrange(con, "b (t a) ft -> b t a ft", a=self.n_attributes)
+        tgt = einops.rearrange(tgt, "b (t a) ft -> b t a ft", a=self.n_attributes)
+
+        n_notes = con.shape[1]
+
+
+        con_and_tgt = torch.cat([con, tgt], dim=1)
+        # embed
+        ze = self.embedding_layer(con_and_tgt)
+        ze = ze.sum(dim=2)
+        pos = self.positional_encoding[:, :ze.shape[1], :].to(self.device)
         ze = ze + pos
         # pass through transformer
         zl = self.transformer(ze, mask=self.mask.to(self.device))
-        zd = zl[:, self.seq_len:, :]
-        # assert zd.shape[1] == self.seq_len
+        # get output part
+        zd = zl[:, n_notes-1:-1, :]
+
+        # note embeddings
+        note_z = einops.rearrange(zd, "b t ft -> (b t) 1 ft")
+
+        attr_tgt= einops.rearrange(tgt, "b t a ft -> (b t) a ft", a=self.n_attributes)
+
+        attr_z = self.embedding_layer(attr_tgt)
+
+        # pad in_tgt with zero at start of attribute axis
+        attr_z = F.pad(attr_z, (0, 0, 1, 0))
+        # remove last frame
+        attr_z = attr_z[:, :-1, :]
+
+        # add attribute embedding
+        attr_z = attr_z + self.attribute_embedding.weight[None, :, :]
+
+
+        # run through decoder
+        zd = self.note_decoder(attr_z, note_z, tgt_is_causal=True, tgt_mask=self.attribute_mask.to(self.device))
+
+        zd = einops.rearrange(zd, "(b t) a ft -> b (t a) ft", t=n_notes, ft=zd.shape[-1])
+
         decoder_logits = self.decoder_output_layer(zd)
-        # assert decoder_logits.shape[1] == self.seq_len
-        # # to ensure the encoder constraint is respected
-        # # multiply decoder_logits by right shifted encoder fts
-        # # overlap between encoder and decoder
-        # remove -inf from decoder logits
-        decoder_logits[:,:-1]= decoder_logits[:,:-1] + (1-cnst[:,1:,:])*-1e9
+      
+        decoder_logits = decoder_logits - (1-con_flat)*1e5
         # crop to decoder length
-        decoder_logits = decoder_logits[:, :decoder_len, :]
         return decoder_logits
     
 
@@ -134,8 +180,9 @@ class DecoderOnlyModel(pl.LightningModule):
             x = batch
         else:
             x = torch.nn.functional.one_hot(batch, num_classes=len(self.vocab)).float()
-
+        
         batch_size = x.shape[0]
+
         # create masking ratios
         masking_ratios = torch.rand(batch_size, device=self.device)
         mask = torch.rand_like(x, device=self.device)<masking_ratios[:,None,None]
@@ -146,8 +193,8 @@ class DecoderOnlyModel(pl.LightningModule):
         decoder_input = x
         decoder_output_logits = self(encoder_input, decoder_input)
 
-        decoder_output_tokens = decoder_input[:, 1:]
-        decoder_output_logits = decoder_output_logits[:, :-1]
+        decoder_output_tokens = decoder_input
+        decoder_output_logits = decoder_output_logits
 
         decoder_output_tokens_index = torch.argmax(decoder_output_tokens, dim=-1)
 
@@ -284,7 +331,7 @@ if __name__ == "__main__":
         "ignored_track_names":[f"Layers{i}" for i in range(0, 8)],
     }
 
-    tokenizer = Tokenizer(
+    tokenizer = MergedTokenizer(
         tokenizer_config
     )
 
@@ -344,7 +391,7 @@ if __name__ == "__main__":
     progress_bar_callback = RichProgressBar(refresh_rate=1)
 
     trainer = pl.Trainer(accelerator="gpu",
-    devices=[3],
+    devices=[2],
     precision=32,
     max_epochs=None,
     log_every_n_steps=1,

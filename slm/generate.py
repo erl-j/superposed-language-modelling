@@ -11,8 +11,9 @@ device = "cuda:7"
 # )
 
 model = DecoderOnlyModel.load_from_checkpoint(
-    "../checkpoints/cool-plasma-16/epoch=1-step=15529-val/loss=0.26-trn/loss=0.30.ckpt"
-, map_location=device)
+    "../checkpoints/cool-plasma-16/epoch=5-step=73905-val/loss=0.21-trn/loss=0.23.ckpt",
+    map_location=device,
+)
 
 # Move the model to the device
 model = model.to(device)
@@ -48,7 +49,7 @@ plt.show()
 #%%
 
 # Generate a sequence
-sequence = model.generate(a, max_len=model.tokenizer.total_len, temperature=0.99)
+sequence = model.generate(a, max_len=model.tokenizer.total_len, temperature=0.98)
 # %%
 
 token_idx = sequence[0].cpu().numpy()

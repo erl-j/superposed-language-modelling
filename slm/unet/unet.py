@@ -6,7 +6,7 @@ from .blocks import *
 
 
 class UNet2D(nn.Module):
-    def __init__(self, in_channels, out_channels, conv_depths=(64, 128, 256, 512, 1024)):
+    def __init__(self, in_channels, out_channels, conv_depths=1):
         assert len(conv_depths) > 2, 'conv_depths must have at least 3 members'
 
         super(UNet2D, self).__init__()
@@ -41,6 +41,12 @@ class UNet2D(nn.Module):
                 dim=1
             )
             x_dec.append(dec_layer(x_cat))
+
+        # for x in x_enc:
+        #     print(f"enc: {x.shape}")
+        
+        # for x in x_dec:
+        #     print(f"dec: {x.shape}")
 
         if not return_all:
             return x_dec[-1]
@@ -84,6 +90,8 @@ class UNet3D(nn.Module):
                 dim=1
             )
             x_dec.append(dec_layer(x_cat))
+
+    
 
         if not return_all:
             return x_dec[-1]
