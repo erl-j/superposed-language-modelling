@@ -183,10 +183,6 @@ class Tokenizer():
                             note_encoding.append("velocity:" + str(note.velocity))
                     note_encodings.append(note_encoding)
 
-        # shuffle notes
-        if self.config["shuffle_notes"]:
-            np.random.shuffle(note_encodings)
-
         # if more notes than max_notes, remove notes
         if len(note_encodings) > self.config["max_notes"]:
             note_encodings = note_encodings[:self.config["max_notes"]]
@@ -195,6 +191,10 @@ class Tokenizer():
         for i in range(len(note_encodings), self.config["max_notes"]):
             blank_note = [attr + ":-" for attr in self.note_attribute_order]
             note_encodings.append(blank_note)
+
+        # shuffle notes
+        if self.config["shuffle_notes"]:
+            np.random.shuffle(note_encodings)
 
         # flatten note_encodings
         note_encodings = pydash.flatten(note_encodings)

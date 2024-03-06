@@ -173,10 +173,6 @@ class MergedTokenizer():
                             note_encoding.append("velocity:" + str(note.velocity))
                     note_encodings.append(note_encoding)
 
-        # shuffle notes
-        if self.config["shuffle_notes"]:
-            np.random.shuffle(note_encodings)
-
         # if more notes than max_notes, remove notes
         if len(note_encodings) > self.config["max_notes"]:
             note_encodings = note_encodings[:self.config["max_notes"]]
@@ -185,6 +181,10 @@ class MergedTokenizer():
         for i in range(len(note_encodings), self.config["max_notes"]):
             blank_note = [attr + ":-" for attr in self.note_attribute_order]
             note_encodings.append(blank_note)
+        
+        # shuffle notes
+        if self.config["shuffle_notes"]:
+            np.random.shuffle(note_encodings)
 
         # flatten note_encodings
         note_encodings = pydash.flatten(note_encodings)
@@ -193,21 +193,23 @@ class MergedTokenizer():
     def tokens_to_sm(self, tokens):
         sm = symusic.Score()
         sm = sm.resample(tpq=self.config["ticks_per_beat"],min_dur=1)
-        meta = tokens[:self.meta_len]
-        notes = tokens[self.meta_len:]
-        for i, meta_attr in enumerate(self.meta_attribute_order):
-            if meta_attr == "tempo":
-                assert meta[i].split(":")[0] == "tempo"
-                qpm = int(tokens[i].split(":")[1])
-                sm.tempos.append(symusic.Tempo(qpm=qpm, time=0))
-            elif meta_attr == "time_signature":
-                assert meta[i].split(":")[0] == "time_signature"
-                ts = tokens[i].split(":")[1]
-                ts = ts.split("/")
-                sm.time_signatures.append(symusic.TimeSignature(numerator=int(ts[0]), denominator=int(ts[1])))
-            elif meta_attr == "tag":
-                assert meta[i].split(":")[0] == "tag"
-                tag = meta[i].split(":")[1]
+        # meta = tokens[:self.meta_len]
+        notes = tokens
+        # print(self.meta_len)
+        # notes = tokens[self.meta_len:]
+        # for i, meta_attr in enumerate(self.meta_attribute_order):
+        #     if meta_attr == "tempo":
+        #         assert meta[i].split(":")[0] == "tempo"
+        #         qpm = int(tokens[i].split(":")[1])
+        #         sm.tempos.append(symusic.Tempo(qpm=qpm, time=0))
+        #     elif meta_attr == "time_signature":
+        #         assert meta[i].split(":")[0] == "time_signature"
+        #         ts = tokens[i].split(":")[1]
+        #         ts = ts.split("/")
+        #         sm.time_signatures.append(symusic.TimeSignature(numerator=int(ts[0]), denominator=int(ts[1])))
+        #     elif meta_attr == "tag":
+        #         assert meta[i].split(":")[0] == "tag"
+        #         tag = meta[i].split(":")[1]
 
         # make sublists of note tokens
         notes = [notes[i:i+self.attributes_per_note] for i in range(0, len(notes), self.attributes_per_note)]
@@ -216,8 +218,10 @@ class MergedTokenizer():
         # parse notes
         for note in notes:
 
+            print(note)
+
             # if all attributes are "-", skip note
-            if all([attr.split(":")[1] == "-" for attr in note]):
+            if any([attr.split(":")[1] == "-" for attr in note]):
                 continue
 
             program = 0

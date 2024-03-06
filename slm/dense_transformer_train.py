@@ -29,6 +29,7 @@ class DenseModel(pl.LightningModule):
         learning_rate,
         tokenizer_config,
         one_hot_input=False,
+        beat_factorization=False,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -39,10 +40,44 @@ class DenseModel(pl.LightningModule):
         self.tokenizer = DenseTokenizer(tokenizer_config)
         self.format_mask = torch.tensor(self.tokenizer.get_format_mask())
         self.vocab = vocab
-        
+
+        self.beat_factorization = beat_factorization
+
         # intialize positional encoding. one per step in sequence
         self.voice_embedding = nn.Embedding(self.tokenizer.n_voices, hidden_size)
-        self.time_embedding = nn.Embedding(self.tokenizer.timesteps, hidden_size)
+
+        self.n_beats = self.tokenizer.config["beats_per_bar"] * self.tokenizer.config["n_bars"]
+        self.n_cells_per_beat = self.tokenizer.config["cells_per_beat"]
+
+        if self.beat_factorization:
+            self.beat_embedding = nn.Embedding(self.n_beats, hidden_size)
+            self.cell_embedding = nn.Embedding(self.tokenizer.config["cells_per_beat"], hidden_size)
+
+            self.beat_encoder = nn.TransformerEncoder(
+                encoder_layer=torch.nn.TransformerEncoderLayer(
+                    batch_first=True,
+                    d_model=hidden_size,
+                    dim_feedforward=hidden_size*4,
+                    nhead=n_heads,
+                    dropout=0.1,
+                ),
+                num_layers=1,
+                norm = nn.LayerNorm(hidden_size),
+            )
+            self.beat_decoder = nn.TransformerEncoder(
+                encoder_layer=torch.nn.TransformerEncoderLayer(
+                    batch_first=True,
+                    d_model=hidden_size,
+                    dim_feedforward=hidden_size*4,
+                    nhead=n_heads,
+                    dropout=0.1,
+                ),
+                num_layers=1,
+                norm = nn.LayerNorm(hidden_size),
+            )
+
+        else:
+            self.time_embedding = nn.Embedding(self.tokenizer.timesteps, hidden_size)
 
         self.embedding_layer = nn.Linear(vocab_size, hidden_size, bias=False)
         self.one_hot_input = one_hot_input
@@ -61,11 +96,12 @@ class DenseModel(pl.LightningModule):
             norm = nn.LayerNorm(hidden_size),
         )
 
-
         self.decoder_output_layer = nn.Linear(hidden_size, vocab_size)
 
+  
     
     def forward(self, x):
+
 
         # multiply with format mask
         x = x * self.format_mask[None, ...].to(x.device)
@@ -80,31 +116,49 @@ class DenseModel(pl.LightningModule):
         # sum channels
         x = x.sum(dim=-2)
         # add voice and time embeddings
-
         x += self.voice_embedding.weight[None, None, :, :].to(x.device)
-        x += self.time_embedding.weight[None, :, None, :].to(x.device)
-    
-        if self.pitch_time_factorization:  
-            for layer in range(len(self.main_block.layers)):
-                x_voice = einops.rearrange(x, "batch time voice ft -> (batch time) voice ft", time=time, voice=voice, ft=ft)
-                x_voice = self.main_block.layers[layer](x_voice)
-                x_voice = einops.rearrange(x_voice, "(batch time) voice ft -> batch time voice ft", time=time, voice=voice, ft=ft)
 
-                x_time = einops.rearrange(x, "batch time voice ft -> (batch voice) time ft", time=time, voice=voice, ft=ft)
+        if not self.beat_factorization:
+            x += self.time_embedding.weight[None, :, None, :].to(x.device)
+
+        if self.beat_factorization:
+            x = einops.rearrange(x, "batch (beat cell) voice ft -> (batch beat voice) cell ft", voice=voice, ft=ft, beat=self.n_beats, cell=self.tokenizer.config["cells_per_beat"])
+            # add cell embedding
+            x += self.cell_embedding.weight[None, :, :].to(x.device)
+            x = self.beat_encoder(x).mean(dim=1)
+            x = einops.rearrange(x, "(batch beat voice) ft -> batch beat voice ft", voice=voice, ft=ft, beat=self.n_beats)
+            # add beat embedding
+            x += self.beat_embedding.weight[None, :, None, :].to(x.device)
+
+        if self.pitch_time_factorization or self.pitch_time_factorization =="pitch_time":  
+            for layer in range(len(self.main_block.layers)):
+                x_voice = einops.rearrange(x, "batch time voice ft -> (batch time) voice ft",  voice=voice, ft=ft, batch=batch)
+                x_voice = self.main_block.layers[layer](x_voice)
+                x_voice = einops.rearrange(x_voice, "(batch time) voice ft -> batch time voice ft",  voice=voice, ft=ft, batch=batch)
+
+                x_time = einops.rearrange(x, "batch time voice ft -> (batch voice) time ft",  voice=voice, ft=ft, batch=batch)
                 x_time = self.main_block.layers[layer](x_time)
-                x_time = einops.rearrange(x_time, "(batch voice) time ft -> batch time voice ft", time=time, voice=voice, ft=ft)
+                x_time = einops.rearrange(x_time, "(batch voice) time ft -> batch time voice ft",  voice=voice, ft=ft, batch=batch)
 
                 # sum
                 x = x_voice + x_time
 
             if self.main_block.norm is not None:
                 x = self.main_block.norm(x)
-          
+
         else:
             x = einops.rearrange(x, "batch time voice ft -> batch (time voice) ft", time=time, voice=voice, ft=ft)
             x = self.main_block(x)
             x = einops.rearrange(x, "batch (time voice) ft -> batch time voice ft", time=time, voice=voice, ft=ft)
 
+        if self.beat_factorization:
+            x = einops.rearrange(x, "batch beat voice ft -> (batch beat voice) 1 ft", voice=voice, ft=ft, beat=self.n_beats)
+            # repeat in cell dimension
+            x = x.repeat(1, self.tokenizer.config["cells_per_beat"], 1)
+            # add cell embedding
+            x += self.cell_embedding.weight[None, :, :].to(x.device)
+            x = self.beat_decoder(x)
+            x = einops.rearrange(x, "(batch beat voice) cell ft -> batch (beat cell) voice ft", voice=voice, ft=ft, beat=self.n_beats)
         # repeat x to match ch
         x = x[..., None, :].repeat(1, 1, 1, ch, 1)
 
@@ -283,7 +337,7 @@ if __name__ == "__main__":
 
     tokenizer_config = {
         "beats_per_bar": 4,
-        "cells_per_beat": 2,
+        "cells_per_beat": 12,
         "pitch_range": [0, 128],
         "n_bars": N_BARS,
         "max_notes": 100 * N_BARS,
@@ -318,7 +372,7 @@ if __name__ == "__main__":
         tokenizer=tokenizer,
     )
   
-    BATCH_SIZE = 4
+    BATCH_SIZE = 2
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds,
@@ -345,6 +399,7 @@ if __name__ == "__main__":
         vocab = tokenizer.vocab,
         learning_rate=1e-4,
         tokenizer_config=tokenizer_config,
+        beat_factorization=True
     )
 
     wandb_logger = WandbLogger(log_model="all", project="slm-dense")
@@ -358,7 +413,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
     accelerator="gpu",
-    devices=[4],
+    devices=[3],
     precision=32,
     max_epochs=None,
     log_every_n_steps=1,

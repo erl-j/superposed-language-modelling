@@ -44,9 +44,9 @@ class UnetModel(pl.LightningModule):
         self.embedding_layer = nn.Linear(vocab_size, hidden_size, bias=False)
         self.one_hot_input = one_hot_input
 
-        self.main_block = UNet2D(in_channels=hidden_size, out_channels=hidden_size,
-                                 conv_depths=(16, 32, 64, 128, 256, 512, 1024)
-        )
+        # self.main_block = UNet2D(in_channels=hidden_size, out_channels=hidden_size,
+        #                          conv_depths=(16, 32, 64, 128, 256, 512, 1024)
+        # )
 
         self.main_block = torch.nn.TransformerEncoder(
             encoder_layer=torch.nn.TransformerEncoderLayer(

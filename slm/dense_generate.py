@@ -9,7 +9,7 @@ from util import piano_roll
 
 #%%
 
-device = "cuda:2"
+device = "cuda:7"
 
 # Load the model
 # model = DecoderOnlyModel.load_from_checkpoint(
@@ -27,7 +27,7 @@ device = "cuda:2"
 # )
 
 model = DenseModel.load_from_checkpoint(
-    "../checkpoints/stellar-wood-46/epoch=0-step=6297-trn/loss=0.01.ckpt",
+    "../checkpoints/stellar-wood-46/epoch=3-step=23583-val/loss=0.04-trn/loss=0.04.ckpt",
     map_location=device,
 )
 #%%
@@ -77,7 +77,7 @@ plt.show()
 #%%
 
 print(a.shape)
-s = model.generate(a, sampling_steps=100, temperature=0.95)
+s = model.generate(a, sampling_steps=20, temperature=0.98)
 
 print(s.shape)
 

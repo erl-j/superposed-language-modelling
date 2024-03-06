@@ -1,5 +1,9 @@
 #%%
-from train import DecoderOnlyModel
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+from merged_train import DecoderOnlyModel
+from util import piano_roll
 
 #%%
 
@@ -11,16 +15,49 @@ device = "cuda:7"
 # )
 
 model = DecoderOnlyModel.load_from_checkpoint(
-    "../checkpoints/cool-plasma-16/epoch=8-step=119002-val/loss=0.20-trn/loss=0.15.ckpt",
+    "../checkpoints/astral-dew-72/epoch=2-step=5341-val/loss=0.78-trn/loss=0.64.ckpt",
     map_location=device,
 )
 
 # Move the model to the device
 model = model.to(device)
 
+#%%
 # Generate a sequence
-a = model.tokenizer.get_format_mask()[None,...].to(model.device)
+a = model.format_mask[None,...].to(model.device)
 
+
+# Generate a sequence
+sequence = model.generate(a, max_len=model.tokenizer.total_len, temperature=0.95)
+
+token_idx = sequence[0].cpu().numpy()
+
+# argmax
+token_idx = token_idx.argmax(axis=1)
+
+#%%
+
+# index to token
+tokens = model.tokenizer.indices_to_tokens(token_idx)
+
+print(tokens)
+
+#%%
+
+
+# decode
+sm = model.tokenizer.decode(token_idx)
+
+pr = piano_roll(sm)
+
+plt.figure(figsize=(10, 10))
+sns.heatmap(pr, cmap="magma")
+plt.show()
+
+
+
+# save the sequence
+sm.dump_midi("../artefacts/generated.mid")
 
 #%%
 
@@ -40,7 +77,7 @@ similarity = embedding.T @ embedding
 
 # plot the similarity matrix
 # make large figure
-plt.figure(figsize=(40, 40))
+plt.figure(figsize=(10, 10))
 # set small font
 sns.set(font_scale=0.5)
 sns.heatmap(similarity, cmap="magma", xticklabels=vocab, yticklabels=vocab)
@@ -48,20 +85,5 @@ plt.show()
 
 #%%
 
-# Generate a sequence
-sequence = model.generate(a, max_len=model.tokenizer.total_len, temperature=0.98)
-# %%
-
-token_idx = sequence[0].cpu().numpy()
-
-# argmax
-token_idx = token_idx.argmax(axis=1)
-
-# decode
-sm = model.tokenizer.decode(token_idx)
-
-
-# save the sequence
-sm.dump_midi("../artefacts/generated.mid")
 
 # %%
