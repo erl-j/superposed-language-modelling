@@ -14,7 +14,7 @@ from torch import nn
 from augmentation import transpose_sm
 from unet.unet import UNet2D
 import einops
-
+from tqdm import tqdm
 # model 
 
 
@@ -147,9 +147,9 @@ class DenseModel(pl.LightningModule):
                 x = self.main_block.norm(x)
 
         else:
-            x = einops.rearrange(x, "batch time voice ft -> batch (time voice) ft", time=time, voice=voice, ft=ft)
+            x = einops.rearrange(x, "batch time voice ft -> batch (time voice) ft", batch=batch, voice=voice, ft=ft)
             x = self.main_block(x)
-            x = einops.rearrange(x, "batch (time voice) ft -> batch time voice ft", time=time, voice=voice, ft=ft)
+            x = einops.rearrange(x, "batch (time voice) ft -> batch time voice ft", batch=batch, voice=voice, ft=ft)
 
         if self.beat_factorization:
             x = einops.rearrange(x, "batch beat voice ft -> (batch beat voice) 1 ft", voice=voice, ft=ft, beat=self.n_beats)
@@ -191,9 +191,6 @@ class DenseModel(pl.LightningModule):
             decoder_output_logits.reshape(-1, decoder_output_logits.shape[-1]),
             batch.reshape(-1),
         )
-
-
-
         # multiply by batch
         # multiply by mask
 
@@ -230,7 +227,7 @@ class DenseModel(pl.LightningModule):
         x = x * self.format_mask[None, ...].to(x.device)
         batch, time, voice, ch, ft = x.shape
         # linspace from schedule
-        schedule = torch.linspace(0, 1, sampling_steps, dtype=torch.float32, device=x.device)**2
+        schedule = torch.linspace(0, 1, sampling_steps, dtype=torch.float32, device=x.device)**4
         total_tokens = time * voice * ch 
         # count number of known tokens
         masked_tokens = (x.sum(-1) > 1).sum().int()
@@ -241,20 +238,32 @@ class DenseModel(pl.LightningModule):
         step = torch.argmin((1- schedule - masking_ratio).abs())
 
         print(f"step: {step}")
-        for i in range(step+1, sampling_steps):
-
-            print(f"step: {i}")
+        for i in tqdm(range(step+1, sampling_steps)):
 
             logits = self(x.float())
 
             probs = F.softmax(logits/temperature, dim=-1)
+
+            if False:
+                program_probs = probs[..., 1, :].sum(0).sum(0).sum(0)
+
+                print(program_probs)
+                program_probs = torch.log(program_probs)
+
+
+                # plot histogram of probs
+                plt.bar(range(len(program_probs)), program_probs.cpu().detach().numpy())
+                plt.show()
+
+
+
+
             # invert probs
             # flatten
             flat_probs = einops.rearrange(probs, "b t v c l -> (b t v c) l")
 
             sampled = torch.multinomial(flat_probs, 1).squeeze(-1)
 
-            print(f"sampled: {sampled.shape}")
 
 
             flat_x = einops.rearrange(x, "b t v c l -> (b t v c) l")
@@ -262,7 +271,6 @@ class DenseModel(pl.LightningModule):
             masked_indices = torch.where(flat_x.sum(-1) > 1)[0]
             # 
             n_masked = masked_indices.shape[0]
-            print(f"n_masked: {n_masked}")
             target_masking_ratio = 1-schedule[i].item()
 
             target_n_masked = int(total_tokens * target_masking_ratio)
@@ -270,7 +278,9 @@ class DenseModel(pl.LightningModule):
 
             n_tokens_to_unmask = n_masked - target_n_masked
 
-            print(f"n_tokens_to_unmask: {n_tokens_to_unmask}")
+            n_tokens_to_unmask = max(n_tokens_to_unmask, 1)
+            n_tokens_to_unmask = min(n_tokens_to_unmask, n_masked)
+
 
             # get indices of tokens to unmask
             # get indices of masked tokens
@@ -372,7 +382,7 @@ if __name__ == "__main__":
         tokenizer=tokenizer,
     )
   
-    BATCH_SIZE = 2
+    BATCH_SIZE = 8
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds,
@@ -392,14 +402,14 @@ if __name__ == "__main__":
     
     
     model = DenseModel(
-        hidden_size=512,
+        hidden_size=256,
         num_layers=8,
         pitch_time_factorization=True,
         n_heads=8,
         vocab = tokenizer.vocab,
-        learning_rate=1e-4,
+        learning_rate=1e-5,
         tokenizer_config=tokenizer_config,
-        beat_factorization=True
+        beat_factorization=True,
     )
 
     wandb_logger = WandbLogger(log_model="all", project="slm-dense")
@@ -413,7 +423,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
     accelerator="gpu",
-    devices=[3],
+    devices=[5],
     precision=32,
     max_epochs=None,
     log_every_n_steps=1,

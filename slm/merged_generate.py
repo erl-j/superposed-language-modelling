@@ -15,9 +15,14 @@ device = "cuda:7"
 # )
 
 model = DecoderOnlyModel.load_from_checkpoint(
-    "../checkpoints/astral-dew-72/epoch=2-step=5341-val/loss=0.78-trn/loss=0.64.ckpt",
+    "../checkpoints/astral-dew-72/epoch=20-step=38622-val/loss=0.62-trn/loss=0.66.ckpt",
     map_location=device,
 )
+
+# model = DecoderOnlyModel.load_from_checkpoint(
+#     "../checkpoints/logical-darkness-79/epoch=2-step=10848-val/loss=0.77-trn/loss=0.71.ckpt",
+#     map_location=device,
+# )
 
 # Move the model to the device
 model = model.to(device)
@@ -28,21 +33,19 @@ a = model.format_mask[None,...].to(model.device)
 
 
 # Generate a sequence
-sequence = model.generate(a, max_len=model.tokenizer.total_len, temperature=0.95)
+sequence = model.generate(a, max_len=model.tokenizer.total_len, temperature=0.95,top_p=0.99)
 
 token_idx = sequence[0].cpu().numpy()
 
 # argmax
 token_idx = token_idx.argmax(axis=1)
 
-#%%
 
 # index to token
 tokens = model.tokenizer.indices_to_tokens(token_idx)
 
 print(tokens)
 
-#%%
 
 
 # decode
@@ -53,8 +56,6 @@ pr = piano_roll(sm)
 plt.figure(figsize=(10, 10))
 sns.heatmap(pr, cmap="magma")
 plt.show()
-
-
 
 # save the sequence
 sm.dump_midi("../artefacts/generated.mid")

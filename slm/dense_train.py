@@ -181,10 +181,11 @@ class UnetModel(pl.LightningModule):
 
             logits = self(x.float())
 
-            probs = F.softmax(logits/temperature, dim=-1)
             # invert probs
             # flatten
-            flat_probs = einops.rearrange(probs, "b t v c l -> (b t v c) l")
+            flat_logits = einops.rearrange(logits, "b t v c l -> (b t v c) l")
+
+            flat_probs = F.softmax(flat_logits / temperature, dim=-1)
 
             sampled = torch.multinomial(flat_probs, 1).squeeze(-1)
 
@@ -215,6 +216,8 @@ class UnetModel(pl.LightningModule):
 
             # replace with sampled values
             flat_x[indices_to_unmask] = torch.nn.functional.one_hot(sampled[indices_to_unmask], num_classes=flat_x.shape[-1])
+
+            # plot 
 
             x = einops.rearrange(flat_x, "(b t v c) l -> b t v c l", b=batch, t=time, v=voice, c=ch)
         return x

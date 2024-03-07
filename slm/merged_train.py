@@ -14,6 +14,7 @@ from torch import nn
 from augmentation import transpose_sm
 import einops
 from tqdm import tqdm
+from util import top_k_top_p_filtering
 
 class DecoderOnlyModel(pl.LightningModule):
     def __init__(
@@ -221,13 +222,15 @@ class DecoderOnlyModel(pl.LightningModule):
     
 
     def generate(
-        self, con, temperature=1.0, max_len=1000, top_p=0.9, top_k=0
+        self, con, temperature=1.0, max_len=1000, top_p=1, top_k=0
     ):
         """
         Does not use KV caching so it's slow
         """
         # make copies
         seq = con.clone()
+
+        batch, time, ft = seq.shape
         
         self.eval()
         with torch.no_grad():
@@ -235,14 +238,17 @@ class DecoderOnlyModel(pl.LightningModule):
                     note_z = self.note_forward(con, seq)
                     for attribute_idx in range(self.n_attributes):
                         decoder_logits = self.attribute_forward(con, seq, note_z)
+
+                        decoder_logits = einops.rearrange(decoder_logits, "b s v -> (b s) v", b=batch)
+
+                        decoder_logits = top_k_top_p_filtering(decoder_logits, top_k=top_k, top_p=top_p)
+
+                        decoder_logits = einops.rearrange(decoder_logits, "(b s) v -> b s v", b=batch)
+
                         decoder_probs = F.softmax(decoder_logits / temperature, dim=-1)
                         # top k
-                        if top_k > 0:
-                            # mask
-                            decoder_probs[decoder_probs < torch.topk(decoder_probs, top_k)[0][..., -1:]] = 0
-                            # renormalize
-                            decoder_probs = decoder_probs / decoder_probs.sum(dim=-1, keepdim=True)
 
+                        
                         sampled_token = torch.multinomial(decoder_probs[0], num_samples=1)[None,...]
                         # one hot
                         sampled_token = torch.nn.functional.one_hot(sampled_token, num_classes=len(self.vocab))
@@ -309,6 +315,8 @@ class DecoderOnlyModel(pl.LightningModule):
             self.log(f"trn/{metric}", metrics[metric], prog_bar=True)
         loss = metrics["cross_entropy"]
         self.log("trn/loss", loss, prog_bar=True, on_step=True, on_epoch=True)
+        # log wandb name
+        self.log("gpu", loss.device.index)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -425,7 +433,7 @@ if __name__ == "__main__":
         tokenizer=tokenizer,
     )
   
-    BATCH_SIZE = 16
+    BATCH_SIZE = 32
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds,
@@ -445,9 +453,9 @@ if __name__ == "__main__":
     
     
     model = DecoderOnlyModel(
-        hidden_size=512,
+        hidden_size=256,
         n_heads=8,
-        feed_forward_size=4*512,
+        feed_forward_size=4*256,
         n_layers=10,
         vocab = tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
@@ -466,7 +474,7 @@ if __name__ == "__main__":
     progress_bar_callback = RichProgressBar(refresh_rate=1)
 
     trainer = pl.Trainer(accelerator="gpu",
-    devices=[6],
+    devices=[2],
     precision=32,
     max_epochs=None,
     log_every_n_steps=1,
@@ -481,7 +489,7 @@ if __name__ == "__main__":
             filename="{epoch}-{step}-{val/loss:.2f}-{trn/loss:.2f}",
             train_time_interval = datetime.timedelta(minutes=30),)],
     logger=wandb_logger,
-    accumulate_grad_batches=4,
+    # accumulate_grad_batches=4,
     )
 
     trainer.fit(model,

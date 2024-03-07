@@ -123,6 +123,8 @@ class MergedTokenizer():
         Returns a format mask for the given tokenization.
         The format mask is a binary matrix of shape (total_len, len(vocab)) where each row corresponds to a token and each column to a valid token.
         '''
+
+        
         # format_mask = torch.zeros(self.total_len, len(self.vocab))
         
 

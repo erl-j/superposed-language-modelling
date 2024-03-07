@@ -31,9 +31,16 @@ class DenseTokenizer():
         self.n_voices = 128*2
 
 
-    def get_format_mask(self):
+    def get_format_mask(self, program_idxs=None, scale_idxs=None):
         action_idx = [i for i, v in enumerate(self.vocab) if v.startswith("action")]
-        program_idx = [i for i, v in enumerate(self.vocab) if v.startswith("program")]
+
+        if program_idxs is not None:
+            program_idx = [self.vocab2idx[f"program:{i}"] for i in program_idxs]
+            program_idx.append(self.vocab2idx["program:-"])
+        else:
+            program_idx = [i for i, v in enumerate(self.vocab) if v.startswith("program")]
+            # add the program:- token
+            
 
         # multihot
         action_mh = np.zeros((self.timesteps, self.n_voices, len(self.vocab)), dtype=np.int64)
@@ -43,8 +50,8 @@ class DenseTokenizer():
             action_mh[..., action] = 1
 
         for program in program_idx:
-            program_mh[..., program] = 1
-        
+            program_mh[..., program] = 1    
+
         return torch.tensor(np.stack([action_mh, program_mh], axis=-2))
 
 
@@ -143,6 +150,8 @@ class DenseTokenizer():
                         velocity=note["velocity"],
                     )
                 )
+                if note["voice_idx"] >= 128:
+                    track.is_drum = True
             sm.tracks.append(track)
 
         return sm
