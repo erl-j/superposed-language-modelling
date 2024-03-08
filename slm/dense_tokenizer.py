@@ -53,7 +53,12 @@ class DenseTokenizer():
             program_mh[..., program] = 1    
 
         return torch.tensor(np.stack([action_mh, program_mh], axis=-2))
+    
+    def sanitize(self, x):
+        # wherever there is hold or no action, set the program to program:-
 
+        # one hot encode hold_no_action
+        # later, wherever there is program, limit action to onsets
 
     def encode(self, sm, tag=None):
         # downsample the score to tick resolution

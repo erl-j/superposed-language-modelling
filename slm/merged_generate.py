@@ -14,15 +14,20 @@ device = "cuda:7"
 #     "../checkpoints/glamorous-water-14/epoch=14-step=220322-val/loss=0.35.ckpt"
 # )
 
-model = DecoderOnlyModel.load_from_checkpoint(
-    "../checkpoints/astral-dew-72/epoch=20-step=38622-val/loss=0.62-trn/loss=0.66.ckpt",
-    map_location=device,
-)
+# model = DecoderOnlyModel.load_from_checkpoint(
+#     "../checkpoints/astral-dew-72/epoch=33-step=62817-val/loss=0.60-trn/loss=0.60.ckpt",
+#     map_location=device,
+# )
 
 # model = DecoderOnlyModel.load_from_checkpoint(
 #     "../checkpoints/logical-darkness-79/epoch=2-step=10848-val/loss=0.77-trn/loss=0.71.ckpt",
 #     map_location=device,
 # )
+
+model = DecoderOnlyModel.load_from_checkpoint(
+    "../checkpoints/zesty-galaxy-83/epoch=1-step=10094-val/loss=0.82-trn/loss=0.73.ckpt",
+    map_location=device,
+)
 
 # Move the model to the device
 model = model.to(device)
@@ -31,10 +36,11 @@ model = model.to(device)
 # Generate a sequence
 a = model.format_mask[None,...].to(model.device)
 
-
 # Generate a sequence
-sequence = model.generate(a, max_len=model.tokenizer.total_len, temperature=0.95,top_p=0.99)
+sequence = model.generate(a, max_len=model.tokenizer.total_len, temperature=0.99,top_p=0.9)
 
+
+#%%
 token_idx = sequence[0].cpu().numpy()
 
 # argmax
@@ -43,10 +49,6 @@ token_idx = token_idx.argmax(axis=1)
 
 # index to token
 tokens = model.tokenizer.indices_to_tokens(token_idx)
-
-print(tokens)
-
-
 
 # decode
 sm = model.tokenizer.decode(token_idx)

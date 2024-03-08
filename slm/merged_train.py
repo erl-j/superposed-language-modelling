@@ -9,7 +9,7 @@ import wandb
 from data import MidiDataset
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, RichProgressBar
 from pytorch_lightning.loggers import WandbLogger
-from merged_tokenizer import MergedTokenizer
+from merged_tokenizer_2 import MergedTokenizer2 as MergedTokenizer
 from torch import nn
 from augmentation import transpose_sm
 import einops
@@ -29,6 +29,7 @@ class DecoderOnlyModel(pl.LightningModule):
         tokenizer_config,
         sliding_mask=False,
         one_hot_input=False,
+        normalize_by_masking_ratio=False,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -91,6 +92,7 @@ class DecoderOnlyModel(pl.LightningModule):
 
         self.attribute_mask = torch.nn.Transformer.generate_square_subsequent_mask(len(self.tokenizer.note_attribute_order))
 
+        self.normalize_by_masking_ratio = normalize_by_masking_ratio
 
     def note_forward(self, con, tgt):
 
@@ -282,9 +284,16 @@ class DecoderOnlyModel(pl.LightningModule):
         ce = F.cross_entropy(
             decoder_output_logits.reshape(-1, decoder_output_logits.shape[-1]),
             decoder_output_tokens_index.reshape(-1),
+            reduction = "none",
         )
+        # reshape to batch, loss
+        ce = ce.reshape(batch_size, -1)
+
+        norm_ce = (ce.mean(dim=-1) / masking_ratios).mean()
+
         metrics = {}
-        metrics["cross_entropy"] = ce
+        metrics["cross_entropy"] = ce.mean()
+        metrics["cross_entropy_normalized"] = norm_ce
         # TODO: check that this code is correct
         with torch.no_grad():
             # get probability of the correct token
@@ -313,7 +322,10 @@ class DecoderOnlyModel(pl.LightningModule):
         metrics = self.step(batch, batch_idx)
         for metric in metrics:
             self.log(f"trn/{metric}", metrics[metric], prog_bar=True)
-        loss = metrics["cross_entropy"]
+        if self.normalize_by_masking_ratio:
+            loss = metrics["cross_entropy_normalized"]
+        else:
+            loss = metrics["cross_entropy"]
         self.log("trn/loss", loss, prog_bar=True, on_step=True, on_epoch=True)
         # log wandb name
         self.log("gpu", loss.device.index)
@@ -344,7 +356,10 @@ class DecoderOnlyModel(pl.LightningModule):
             metrics = self.step(batch, batch_idx)
         for metric in metrics:
             self.log(f"val/{metric}", metrics[metric], prog_bar=True, on_step=True, on_epoch=True)
-        loss = metrics["cross_entropy"]
+        if self.normalize_by_masking_ratio:
+            loss = metrics["cross_entropy_normalized"]
+        else:
+            loss = metrics["cross_entropy"]
         self.log("val/loss", loss, prog_bar=True, on_step=True, on_epoch=True)
         return loss
 
@@ -405,12 +420,14 @@ if __name__ == "__main__":
         "min_tempo":50,
         "max_tempo":200,
         "n_tempo_bins": 16,
+        "n_velocity_bins": 32,
         "time_signatures": None,
         "tags": genre_list,
         "shuffle_notes": True,
         "use_offset": True,
         "merge_pitch_and_beat":True,
-        "use_program": True,
+        "use_program": False,
+        "use_instrument": True,
         "ignored_track_names":[f"Layers{i}" for i in range(0, 8)],
     }
 
@@ -433,7 +450,7 @@ if __name__ == "__main__":
         tokenizer=tokenizer,
     )
   
-    BATCH_SIZE = 32
+    BATCH_SIZE = 16
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds,
@@ -453,15 +470,16 @@ if __name__ == "__main__":
     
     
     model = DecoderOnlyModel(
-        hidden_size=256,
+        hidden_size=512,
         n_heads=8,
-        feed_forward_size=4*256,
-        n_layers=10,
+        feed_forward_size=4*512,
+        n_layers=12,
         vocab = tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
         learning_rate=1e-4,
         tokenizer_config=tokenizer_config,
         sliding_mask=True,
+        normalize_by_masking_ratio=False,
     )
 
     wandb_logger = WandbLogger(log_model="all", project="slm")
@@ -473,8 +491,9 @@ if __name__ == "__main__":
 
     progress_bar_callback = RichProgressBar(refresh_rate=1)
 
-    trainer = pl.Trainer(accelerator="gpu",
-    devices=[2],
+    trainer = pl.Trainer(
+    accelerator="gpu",
+    devices=[5],
     precision=32,
     max_epochs=None,
     log_every_n_steps=1,
@@ -489,10 +508,12 @@ if __name__ == "__main__":
             filename="{epoch}-{step}-{val/loss:.2f}-{trn/loss:.2f}",
             train_time_interval = datetime.timedelta(minutes=30),)],
     logger=wandb_logger,
-    # accumulate_grad_batches=4,
+    # accumulate_grad_batches=8,
     )
 
-    trainer.fit(model,
-     trn_dl,
-     val_dl,
+    trainer.fit(
+        model,
+        trn_dl,
+        val_dl,
+        ckpt_path="checkpoints/zesty-galaxy-83/epoch=1-step=12686-val/loss=0.82-trn/loss=0.42.ckpt",
     )

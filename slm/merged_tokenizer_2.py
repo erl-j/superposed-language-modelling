@@ -4,7 +4,13 @@ import numpy as np
 import torch
 import pretty_midi
 
-class MergedTokenizer():
+# has features over old one.
+# supports velocity bins
+# drums are now a separate instrument
+# instrument classes
+# metadata is part of note attributes
+
+class MergedTokenizer2():
     def __init__(self, config):
         self.config = config
 
@@ -25,14 +31,10 @@ class MergedTokenizer():
             self.velocity_bins = range(128)
             self.velocity_to_velocity_bin = lambda velocity: int(velocity)
 
-
         # Add meta attributes
         meta_attribute_order = []
 
         self.vocab = []
-        meta_attribute_order.append("special")
-        self.vocab.append("special:-")
-        self.vocab.append("special:sos")
 
         meta_attribute_order.append("tag")
         self.vocab.append("tag:-")
@@ -125,16 +127,17 @@ class MergedTokenizer():
         for velocity in self.velocity_bins:
             self.vocab.append("velocity:" + str(velocity))
 
-        self.note_attribute_order = note_attribute_order
+        self.note_attribute_order = note_attribute_order + self.meta_attribute_order
         
         self.attributes_per_note=len(self.note_attribute_order)
 
         self.meta_len = len(self.meta_attribute_order)
-        self.total_len = self.meta_len + self.attributes_per_note * self.config["max_notes"]
+        self.total_len = self.attributes_per_note * self.config["max_notes"]
 
         self.token2idx = {token: idx for idx, token in enumerate(self.vocab)}
 
         self.format_mask = self.get_format_mask()
+
 
     def encode(self, sm, tag):
         tokens = self.sm_to_tokens(sm, tag)
@@ -155,17 +158,6 @@ class MergedTokenizer():
         Returns a format mask for the given tokenization.
         The format mask is a binary matrix of shape (total_len, len(vocab)) where each row corresponds to a token and each column to a valid token.
         '''
-
-        
-        # format_mask = torch.zeros(self.total_len, len(self.vocab))
-        
-
-        # # go through meta tokens
-        # for meta_idx, meta_token in enumerate(self.meta_attribute_order):
-        #     for token in self.vocab:
-        #         if token.startswith(meta_token) and not token.endswith("-"):
-        #             format_mask[meta_idx, self.token2idx[token]] = 1
-
         format_mask = np.zeros((self.config["max_notes"] * len(self.note_attribute_order), len(self.vocab)))
         for note_idx in range(self.config["max_notes"]):
             for attr_idx, note_attr in enumerate(self.note_attribute_order):
@@ -180,6 +172,8 @@ class MergedTokenizer():
 
         # assert right ticks per beat
         assert sm.ticks_per_quarter == self.config["ticks_per_beat"]
+
+        tempo = sm.tempos[0].qpm
 
         # get notes
         note_encodings = []
@@ -209,7 +203,11 @@ class MergedTokenizer():
                         elif note_attr == "offset/tick":
                             note_encoding.append("offset/tick:" + str(note.end % self.config["ticks_per_beat"]))
                         elif note_attr == "velocity":
-                            note_encoding.append("velocity:" + str(note.velocity))
+                            note_encoding.append("velocity:" + str(self.velocity_to_velocity_bin(note.velocity)))
+                        if note_attr == "tempo":
+                            note_encoding.append("tempo:" + str(self.tempo_to_tempo_bin(tempo)))
+                        if note_attr == "tag":
+                            note_encoding.append("tag:" + tag)
                     note_encodings.append(note_encoding)
 
         # if more notes than max_notes, remove notes
@@ -230,8 +228,7 @@ class MergedTokenizer():
         return note_encodings
         
     def tokens_to_sm(self, tokens):
-        sm = symusic.Score()
-        sm = sm.resample(tpq=self.config["ticks_per_beat"],min_dur=1)
+      
         # meta = tokens[:self.meta_len]
         notes = tokens
         # print(self.meta_len)
@@ -254,10 +251,9 @@ class MergedTokenizer():
         notes = [notes[i:i+self.attributes_per_note] for i in range(0, len(notes), self.attributes_per_note)]
         
         note_recs = []
+
         # parse notes
         for note in notes:
-
-            print(note)
 
             # if all attributes are "-", skip note
             if any([attr.split(":")[1] == "-" for attr in note]):
@@ -277,7 +273,7 @@ class MergedTokenizer():
                     program_str = note[i].split(":")[1]
                     program = int(program_str)
 
-                if note_attr == "instrument":
+                elif note_attr == "instrument":
                     assert note[i].split(":")[0] == "instrument"  
                     instrument_str = note[i].split(":")[1]
                     if instrument_str == "Drums":
@@ -302,23 +298,46 @@ class MergedTokenizer():
                     offset_tick = int(note[i].split(":")[1])
                 elif note_attr == "velocity":
                     assert note[i].split(":")[0] == "velocity"
-                    velocity = int(note[i].split(":")[1])
+                    velocity = min(int(note[i].split(":")[1]), 127)
                 elif note_attr == "pitch, onset/beat":
                     assert note[i].split(":")[0] == "pitch, onset/beat"
                     pitch = int(note[i].split(":")[1].split(",")[0])
                     onset = int(note[i].split(":")[1].split(",")[1])
+                elif note_attr == "tempo":
+                    assert note[i].split(":")[0] == "tempo"
+                    tempo = int(note[i].split(":")[1])
+                elif note_attr == "tag":
+                    assert note[i].split(":")[0] == "tag"
+                    tag = note[i].split(":")[1]
             note_recs.append({
                 "pitch": pitch,
                 "onset": onset * self.config["ticks_per_beat"] + onset_tick,
                 "offset": offset * self.config["ticks_per_beat"] + offset_tick if self.config["use_offset"] else None,
                 "velocity": velocity,
-                "program": program if self.config["use_program"] else None,
+                "program": program,
+                "tempo": tempo,
+                "tag": tag
             })
+        tempo = note_recs[0]["tempo"]
+        sm = symusic.Score()
+        # add 4/4 time signature
+        sm.time_signatures.append(symusic.TimeSignature(numerator=4, denominator=4,time=0))
+        # add tempo
+        sm.tempos.append(symusic.Tempo(qpm=tempo, time=0))
+        sm = sm.resample(tpq=self.config["ticks_per_beat"],min_dur=1)
         # group by program
         note_recs = pydash.group_by(note_recs, "program")
         for program, notes in note_recs.items():
-            track = symusic.Track(program=program if program!=-1 else 0, name=pretty_midi.program_to_instrument_name(program), is_drum=program==-1)
+            if program == -1:
+                track = symusic.Track(program=0, name="Drums", is_drum=True)
+            else:
+                track = symusic.Track(program=program, name=pretty_midi.program_to_instrument_name(program), is_drum=False)
             for note in notes:
+                for k,v in note.items():
+                    print(k)
+                    print(v)
+                    print(type(v))
+
                 track.notes.append(symusic.Note(pitch=note["pitch"], time=note["onset"], duration=note["offset"]-note["onset"], velocity=note["velocity"]))
             sm.tracks.append(track)
         return sm

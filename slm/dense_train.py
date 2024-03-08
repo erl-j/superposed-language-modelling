@@ -9,7 +9,7 @@ import wandb
 from data import MidiDataset
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, RichProgressBar
 from pytorch_lightning.loggers import WandbLogger
-from dense_tokenizer import DenseTokenizer
+from dense_tokenizer_2 import DenseTokenizer2 as DenseTokenizer
 from torch import nn
 from augmentation import transpose_sm
 from unet.unet import UNet2D
@@ -125,7 +125,6 @@ class UnetModel(pl.LightningModule):
             decoder_output_logits.reshape(-1, decoder_output_logits.shape[-1]),
             batch.reshape(-1),
         )
-
 
 
         # multiply by batch
@@ -274,19 +273,16 @@ if __name__ == "__main__":
 
     tokenizer_config = {
         "beats_per_bar": 4,
-        "cells_per_beat": 12,
-        "pitch_range": [0, 128],
+        "cells_per_beat": 4,
+        "pitch_range": [20, 101],
         "n_bars": N_BARS,
         "max_notes": 100 * N_BARS,
         "min_tempo": 50,
         "max_tempo": 200,
         "n_tempo_bins": 16,
+        "velocity_bins":32,
         "time_signatures": None,
-        "tags": ["pop"],
-        "shuffle_notes": True,
-        "use_offset": True,
-        "merge_pitch_and_beat": True,
-        "use_program": True,
+        "tags": genre_list,
         "ignored_track_names": [f"Layers{i}" for i in range(0, 8)],
     }
 
@@ -346,7 +342,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
     accelerator="gpu",
-    devices=[1],
+    devices=[2],
     precision=32,
     max_epochs=None,
     log_every_n_steps=1,

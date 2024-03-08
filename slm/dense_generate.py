@@ -13,12 +13,12 @@ device = "cuda:7"
 
 
 model = DenseModel.load_from_checkpoint(
-    "../checkpoints/stellar-wood-46/epoch=7-step=51737-val/loss=0.04-trn/loss=0.02.ckpt",
+    "../checkpoints/stellar-wood-46/epoch=10-step=73910-val/loss=0.03-trn/loss=0.05.ckpt",
     map_location=device,
 )
 
 # model = DenseModel.load_from_checkpoint(
-#     "../checkpoints/expert-grass-60/epoch=2-step=29562-val/loss=0.03-trn/loss=0.05.ckpt",
+#     "../checkpoints/expert-grass-60/epoch=3-step=50775-trn/loss=0.00.ckpt",
 #     map_location=device,
 # )
 #%%
@@ -46,12 +46,41 @@ plt.imshow(onsets.cpu().detach().numpy().T, aspect="auto", interpolation="none")
 plt.show()
 #%%
 
-s = model.generate(a, sampling_steps=300, temperature=1.0)
+import symusic
+s = model.generate(a, sampling_steps=500, temperature=0.94)
+
+
+def merge_tracks(sm):
+    all_notes = []
+    new_tracks = []
+    for track in sm.tracks:
+        if track.is_drum:
+            # add the drum track
+            new_tracks.append(track)
+        else:
+            for note in track.notes:
+                all_notes.append(note)
+    
+    # sort notes by start time
+    all_notes.sort(key=lambda x: x.start)
+    # create a new track
+    new_track = symusic.Track(program=0, is_drum=False, name="merged")
+    # add notes to the new track
+    for note in all_notes:
+        new_track.notes.append(note)
+    # remove all tracks
+    # add the new track
+    sm.tracks = new_tracks + [new_track]
+    return sm
+
+# dump
 
 # argmax
 s_idx = s.cpu().numpy().argmax(axis=-1)[0]
 
 sm = model.tokenizer.decode(s_idx)
+
+sm = merge_tracks(sm)
 # save midi
 sm.dump_midi("../artefacts/generated_dense.mid")
 

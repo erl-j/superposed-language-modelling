@@ -9,7 +9,7 @@ import wandb
 from data import MidiDataset
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, RichProgressBar
 from pytorch_lightning.loggers import WandbLogger
-from dense_tokenizer import DenseTokenizer
+from dense_tokenizer_2 import DenseTokenizer2 as DenseTokenizer
 from torch import nn
 from augmentation import transpose_sm
 from unet.unet import UNet2D
@@ -301,71 +301,66 @@ class DenseModel(pl.LightningModule):
 
 if __name__ == "__main__":
 
-    genre_list = [
-    "other",
-    "pop",
-    "rock",
-    "italian%2cfrench%2cspanish",
-    "classical",
-    "romantic",
-    "renaissance",
-    "alternative-indie",
-    "metal",
-    "traditional",
-    "country",
-    "baroque",
-    "punk",
-    "modern",
-    "jazz",
-    "dance-eletric",
-    "rnb-soul",
-    "medley",
-    "blues",
-    "hip-hop-rap",
-    "hits of the 2000s",
-    "instrumental",
-    "midi karaoke",
-    "folk",
-    "newage",
-    "latino",
-    "hits of the 1980s",
-    "hits of 2011 2020",
-    "musical%2cfilm%2ctv",
-    "reggae-ska",
-    "hits of the 1970s",
-    "christian-gospel",
-    "world",
-    "early_20th_century",
-    "hits of the 1990s",
-    "grunge",
-    "australian artists",
-    "funk",
-    "best of british"
-    ]
-
     N_BARS = 4
+
+    genre_list = [
+        "other",
+        "pop",
+        "rock",
+        "italian%2cfrench%2cspanish",
+        "classical",
+        "romantic",
+        "renaissance",
+        "alternative-indie",
+        "metal",
+        "traditional",
+        "country",
+        "baroque",
+        "punk",
+        "modern",
+        "jazz",
+        "dance-eletric",
+        "rnb-soul",
+        "medley",
+        "blues",
+        "hip-hop-rap",
+        "hits of the 2000s",
+        "instrumental",
+        "midi karaoke",
+        "folk",
+        "newage",
+        "latino",
+        "hits of the 1980s",
+        "hits of 2011 2020",
+        "musical%2cfilm%2ctv",
+        "reggae-ska",
+        "hits of the 1970s",
+        "christian-gospel",
+        "world",
+        "early_20th_century",
+        "hits of the 1990s",
+        "grunge",
+        "australian artists",
+        "funk",
+        "best of british",
+    ]
 
     tokenizer_config = {
         "beats_per_bar": 4,
-        "cells_per_beat": 12,
-        "pitch_range": [0, 128],
+        "cells_per_beat": 4,
+        "pitch_range": [20, 101],
         "n_bars": N_BARS,
         "max_notes": 100 * N_BARS,
         "min_tempo": 50,
         "max_tempo": 200,
         "n_tempo_bins": 16,
+        "velocity_bins": 32,
         "time_signatures": None,
-        "tags": ["pop"],
-        "shuffle_notes": True,
-        "use_offset": True,
-        "merge_pitch_and_beat": True,
-        "use_program": True,
+        "tags": genre_list,
         "ignored_track_names": [f"Layers{i}" for i in range(0, 8)],
     }
 
-    tokenizer = DenseTokenizer(
-        tokenizer_config
-    )
+    tokenizer = DenseTokenizer(tokenizer_config)
 
     trn_ds = MidiDataset(
         cache_path="./artefacts/trn_midi_records.pt",
@@ -402,7 +397,7 @@ if __name__ == "__main__":
     
     
     model = DenseModel(
-        hidden_size=256,
+        hidden_size=512,
         num_layers=8,
         pitch_time_factorization=True,
         n_heads=8,
@@ -423,7 +418,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
     accelerator="gpu",
-    devices=[5],
+    devices=[2],
     precision=32,
     max_epochs=None,
     log_every_n_steps=1,
