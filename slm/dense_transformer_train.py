@@ -146,6 +146,26 @@ class DenseModel(pl.LightningModule):
             if self.main_block.norm is not None:
                 x = self.main_block.norm(x)
 
+        if self.pitch_time_factorization == "pitch_beat_cell":
+            for layer in range(len(self.main_block.layers)):
+                x_voice = einops.rearrange(x, "batch time voice ft -> (batch time) voice ft",  voice=voice, ft=ft, batch=batch)
+                x_voice = self.main_block.layers[layer](x_voice)
+                x_voice = einops.rearrange(x_voice, "(batch time) voice ft -> batch time voice ft",  voice=voice, ft=ft, batch=batch)
+
+                x_cell = einops.rearrange(x, "batch (beat cell) voice ft -> (batch beat voice) cell ft",  voice=voice, ft=ft, batch=batch, beat=self.n_beats, cell=self.tokenizer.config["cells_per_beat"])
+                x_cell = self.main_block.layers[layer](x_cell)
+                x_cell = einops.rearrange(x_cell, "(batch beat voice) cell ft -> batch (beat cell) voice ft",  voice=voice, ft=ft, batch=batch, beat=self.n_beats, cell=self.tokenizer.config["cells_per_beat"])
+
+                x_beat = einops.rearrange(x, "batch (beat cell) voice ft -> (batch cell voice) beat ft",  voice=voice, ft=ft, batch=batch, beat=self.n_beats, cell=self.tokenizer.config["cells_per_beat"])
+                x_beat = self.main_block.layers[layer](x_beat)
+                x_beat = einops.rearrange(x_beat, "(batch cell voice) beat ft -> batch (beat cell) voice ft",  voice=voice, ft=ft, batch=batch, beat=self.n_beats, cell=self.tokenizer.config["cells_per_beat"])
+
+                # sum
+                x = x_voice + x_time + x_beat
+
+            if self.main_block.norm is not None:
+                x = self.main_block.norm(x)
+
         else:
             x = einops.rearrange(x, "batch time voice ft -> batch (time voice) ft", batch=batch, voice=voice, ft=ft)
             x = self.main_block(x)
@@ -357,6 +377,7 @@ if __name__ == "__main__":
         "velocity_bins": 32,
         "time_signatures": None,
         "tags": genre_list,
+        "instrument_on_hold": True,
         "ignored_track_names": [f"Layers{i}" for i in range(0, 8)],
     }
 
@@ -377,7 +398,7 @@ if __name__ == "__main__":
         tokenizer=tokenizer,
     )
   
-    BATCH_SIZE = 8
+    BATCH_SIZE = 2
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds,
@@ -398,13 +419,13 @@ if __name__ == "__main__":
     
     model = DenseModel(
         hidden_size=512,
-        num_layers=8,
-        pitch_time_factorization=True,
+        num_layers=12,
+        pitch_time_factorization="pitch_beat_cell",
         n_heads=8,
         vocab = tokenizer.vocab,
         learning_rate=1e-5,
         tokenizer_config=tokenizer_config,
-        beat_factorization=True,
+        beat_factorization=False,
     )
 
     wandb_logger = WandbLogger(log_model="all", project="slm-dense")
@@ -418,8 +439,8 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
     accelerator="gpu",
-    devices=[2],
-    precision=32,
+    devices=[6],
+    precision=16,
     max_epochs=None,
     log_every_n_steps=1,
     # val_check_interval=10,
@@ -444,7 +465,8 @@ if __name__ == "__main__":
             train_time_interval = datetime.timedelta(minutes=5),),
             ],
     logger=wandb_logger,
-    accumulate_grad_batches=4,
+    gradient_clip_val=1.0,
+    # accumulate_grad_batches=4,
     )
 
     trainer.fit(model,

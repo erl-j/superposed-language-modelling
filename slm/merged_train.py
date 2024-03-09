@@ -30,6 +30,7 @@ class DecoderOnlyModel(pl.LightningModule):
         sliding_mask=False,
         one_hot_input=False,
         normalize_by_masking_ratio=False,
+        learning_rate_gamma=0.9,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -93,6 +94,8 @@ class DecoderOnlyModel(pl.LightningModule):
         self.attribute_mask = torch.nn.Transformer.generate_square_subsequent_mask(len(self.tokenizer.note_attribute_order))
 
         self.normalize_by_masking_ratio = normalize_by_masking_ratio
+
+        self.learning_rate_gamma = learning_rate_gamma
 
     def note_forward(self, con, tgt):
 
@@ -364,7 +367,12 @@ class DecoderOnlyModel(pl.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
+        # learning rate decay
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
+        scheduler = torch.optim.lr_scheduler.StepLR(
+            optimizer, step_size=1, gamma=self.learning_rate_gamma
+        )
+        return [optimizer], [scheduler]
 
 if __name__ == "__main__":
 
@@ -450,7 +458,7 @@ if __name__ == "__main__":
         tokenizer=tokenizer,
     )
   
-    BATCH_SIZE = 16
+    BATCH_SIZE = 24
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds,
@@ -468,7 +476,6 @@ if __name__ == "__main__":
         pin_memory=True,
     )
     
-    
     model = DecoderOnlyModel(
         hidden_size=512,
         n_heads=8,
@@ -480,6 +487,7 @@ if __name__ == "__main__":
         tokenizer_config=tokenizer_config,
         sliding_mask=True,
         normalize_by_masking_ratio=False,
+        learning_rate_gamma=0.9,
     )
 
     wandb_logger = WandbLogger(log_model="all", project="slm")
@@ -493,12 +501,14 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
     accelerator="gpu",
-    devices=[5],
-    precision=32,
+    devices=[3],
+    precision=16,
     max_epochs=None,
     log_every_n_steps=1,
     # val_check_interval=10,
     callbacks=[progress_bar_callback,
+            # learning rate monitor
+            pl.callbacks.LearningRateMonitor(logging_interval="step"),
             pl.callbacks.ModelCheckpoint(
             dirpath=f"./checkpoints/{name}/",
             monitor="val/loss",
@@ -508,6 +518,7 @@ if __name__ == "__main__":
             filename="{epoch}-{step}-{val/loss:.2f}-{trn/loss:.2f}",
             train_time_interval = datetime.timedelta(minutes=30),)],
     logger=wandb_logger,
+    gradient_clip_val=1.0,
     # accumulate_grad_batches=8,
     )
 
@@ -515,5 +526,4 @@ if __name__ == "__main__":
         model,
         trn_dl,
         val_dl,
-        ckpt_path="checkpoints/zesty-galaxy-83/epoch=1-step=12686-val/loss=0.82-trn/loss=0.42.ckpt",
     )

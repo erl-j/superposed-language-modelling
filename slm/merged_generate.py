@@ -29,6 +29,11 @@ model = DecoderOnlyModel.load_from_checkpoint(
     map_location=device,
 )
 
+model = DecoderOnlyModel.load_from_checkpoint(
+    "../checkpoints/hardy-moon-81/epoch=6-step=12458-val/loss=0.77-trn/loss=0.80.ckpt",
+    map_location=device,
+)
+
 # Move the model to the device
 model = model.to(device)
 

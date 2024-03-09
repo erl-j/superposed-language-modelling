@@ -165,6 +165,10 @@ class DenseTokenizer2():
                 action[start_tick + 1 : end_tick, voice_idx] = self.vocab2idx[
                     "action:hold"
                 ]
+                if self.config["instrument_on_hold"]:
+                    instrument[start_tick + 1 : end_tick, voice_idx] = self.vocab2idx[
+                        f"instrument:{note['instrument']}"
+                    ]
                 # clear the action after the note ends
                 action[end_tick:, voice_idx] = self.vocab2idx["action:-"]
 
