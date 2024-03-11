@@ -14,6 +14,14 @@ class MergedTokenizer2():
     def __init__(self, config):
         self.config = config
 
+        if "separate_drum_pitch" not in self.config:
+            self.config["separate_drum_pitch"] = False
+
+        if "use_drum_duration" not in self.config:
+            self.config["use_drum_duration"] = True
+
+        self.drum_pitches = list(range(35, 82))
+
         # exponential tempo bins
         self.tempo_bins = np.linspace(np.log(self.config["min_tempo"]), np.log(self.config["max_tempo"]), self.config["n_tempo_bins"])
         self.tempo_bins = np.exp(self.tempo_bins)
@@ -88,6 +96,8 @@ class MergedTokenizer2():
             for instrument in instrument_class_names:
                 self.vocab.append("instrument:" + instrument)
 
+        assert not (self.config["merge_pitch_and_beat"] and self.config["separate_drum_pitch"]), "Can't merge pitch and beat and separate drum pitch at the same time. Not yet implemented."
+
         if self.config["merge_pitch_and_beat"]:
             note_attribute_order.append("pitch, onset/beat")
 
@@ -100,6 +110,9 @@ class MergedTokenizer2():
             self.vocab.append("pitch:-")
             for pitch in range(self.config["pitch_range"][0], self.config["pitch_range"][1]+1):
                 self.vocab.append("pitch:" + str(pitch))
+            if self.config["separate_drum_pitch"]:
+                for pitch in self.drum_pitches:
+                    self.vocab.append("pitch:" + str(pitch) + " (Drums)")
             
             note_attribute_order.append("onset/beat")
             self.vocab.append("onset/beat:-")
@@ -114,11 +127,15 @@ class MergedTokenizer2():
         if self.config["use_offset"]:
             note_attribute_order.append("offset/beat")
             self.vocab.append("offset/beat:-")
+            if not self.config["use_drum_duration"]:
+                self.vocab.append("offset/beat:none (Drums)")
             for offset in range(0, self.config["max_beats"]+1):
                 self.vocab.append("offset/beat:" + str(offset))
 
             note_attribute_order.append("offset/tick")
             self.vocab.append("offset/tick:-")
+            if not self.config["use_drum_duration"]:
+                self.vocab.append("offset/tick:none (Drums)")
             for offset in range(0, self.config["ticks_per_beat"]):
                 self.vocab.append("offset/tick:" + str(offset))
 
@@ -165,6 +182,39 @@ class MergedTokenizer2():
                     if token.startswith(note_attr):
                         format_mask[note_idx * self.attributes_per_note + attr_idx, self.token2idx[token]] = 1
         return format_mask
+    
+    def constraint_mask(self,tags=None, tempos=None, instruments=None, pitches=None):
+
+        constraint_mask = np.ones((len(self.note_attribute_order), len(self.vocab)), dtype=int)
+
+        for attribute_index, attribute in enumerate(self.note_attribute_order):
+
+            if attribute == "tag":
+                if tags is not None:
+                    constraint_mask[attribute_index,:] = 0
+                    constraint_mask[attribute_index,self.vocab.index("tag:-")] = 1
+                    for tag in tags:
+                        constraint_mask[attribute_index,self.vocab.index("tag:" + tag)] = 1
+            
+            if attribute == "tempo":
+                if tempos is not None:
+                    constraint_mask[attribute_index,:] = 0
+                    constraint_mask[attribute_index,self.vocab.index("tempo:-")] = 1
+                    for tempo in tempos:
+                        constraint_mask[attribute_index,self.vocab.index("tempo:" + str(tempo))] = 1
+
+            if attribute == "instrument":
+                if instruments is not None:
+                    constraint_mask[attribute_index,:] = 0
+                    constraint_mask[attribute_index,self.vocab.index("instrument:-")] = 1
+                    for instrument in instruments:
+                        constraint_mask[attribute_index,self.vocab.index("instrument:" + instrument)] = 1
+                    # allow undefined instrument
+        
+        # repeat max notes times in the first dimension
+        constraint_mask = np.tile(constraint_mask, (self.config["max_notes"], 1))
+        return torch.tensor(constraint_mask)
+        
 
     def sm_to_tokens(self, sm, tag):
 
@@ -191,17 +241,31 @@ class MergedTokenizer2():
                             else:
                                 note_encoding.append("instrument:" + pretty_midi.program_to_instrument_class(track.program))
                         elif note_attr == "pitch":
-                            note_encoding.append("pitch:" + str(note.pitch))
+                            if "separate_drum_pitch" in self.config and self.config["separate_drum_pitch"] and track.is_drum:
+                                if note.pitch < self.drum_pitches[0] or note.pitch > self.drum_pitches[-1]:
+                                    # if pitch is out of drum range
+                                    # set to closed hi-hat 
+                                    note_encoding.append("pitch:42 (Drums)")
+                                else:
+                                    note_encoding.append("pitch:" + str(note.pitch) + " (Drums)")
+                            else:
+                                note_encoding.append("pitch:" + str(note.pitch))
                         elif note_attr == "pitch, onset/beat":
                             note_encoding.append("pitch, onset/beat:" + str(note.pitch) + "," + str(note.start // self.config["ticks_per_beat"]))
                         elif note_attr == "onset/beat":
                             note_encoding.append("onset/beat:" + str(note.start // self.config["ticks_per_beat"]))
-                        elif note_attr == "onset/tick":
+                        elif note_attr == "onset/tick":                                
                             note_encoding.append("onset/tick:" + str(note.start % self.config["ticks_per_beat"]))
                         elif note_attr == "offset/beat":
-                            note_encoding.append("offset/beat:" + str(note.end // self.config["ticks_per_beat"]))
+                            if track.is_drum and not self.config["use_drum_duration"]:
+                                note_encoding.append("offset/beat:" + "none (Drums)")
+                            else:
+                                note_encoding.append("offset/beat:" + str(note.end // self.config["ticks_per_beat"]))
                         elif note_attr == "offset/tick":
-                            note_encoding.append("offset/tick:" + str(note.end % self.config["ticks_per_beat"]))
+                            if track.is_drum and not self.config["use_drum_duration"]:
+                                note_encoding.append("offset/tick:" + "none (Drums)")
+                            else:
+                                note_encoding.append("offset/tick:" + str(note.end % self.config["ticks_per_beat"]))
                         elif note_attr == "velocity":
                             note_encoding.append("velocity:" + str(self.velocity_to_velocity_bin(note.velocity)))
                         if note_attr == "tempo":
@@ -283,7 +347,8 @@ class MergedTokenizer2():
                         program = self.instrument_class_to_program_nrs[instrument_str][0]
                 elif note_attr == "pitch":
                     assert note[i].split(":")[0] == "pitch"
-                    pitch = int(note[i].split(":")[1])
+
+                    pitch = int(note[i].split(":")[1].strip(" (Drums)"))
                 elif note_attr == "onset/beat":
                     assert note[i].split(":")[0] == "onset/beat"
                     onset = int(note[i].split(":")[1])
@@ -292,10 +357,17 @@ class MergedTokenizer2():
                     onset_tick = int(note[i].split(":")[1])
                 elif note_attr == "offset/beat":
                     assert note[i].split(":")[0] == "offset/beat"
-                    offset = int(note[i].split(":")[1])
+                    if note[i].split(":")[1] == "none (Drums)":
+                        offset = 0
+                    else:
+                        offset = int(note[i].split(":")[1])
                 elif note_attr == "offset/tick":
                     assert note[i].split(":")[0] == "offset/tick"
-                    offset_tick = int(note[i].split(":")[1])
+                    if note[i].split(":")[1] == "none (Drums)":
+                        # make a quarter beat
+                        offset_tick = self.config["ticks_per_beat"] // 4
+                    else:
+                        offset_tick = int(note[i].split(":")[1])
                 elif note_attr == "velocity":
                     assert note[i].split(":")[0] == "velocity"
                     velocity = min(int(note[i].split(":")[1]), 127)
@@ -318,7 +390,10 @@ class MergedTokenizer2():
                 "tempo": tempo,
                 "tag": tag
             })
-        tempo = note_recs[0]["tempo"]
+        if len(note_recs) > 0:
+            tempo = note_recs[0]["tempo"]
+        else:
+            tempo = 120
         sm = symusic.Score()
         # add 4/4 time signature
         sm.time_signatures.append(symusic.TimeSignature(numerator=4, denominator=4,time=0))

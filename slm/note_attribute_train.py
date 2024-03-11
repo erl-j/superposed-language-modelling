@@ -31,7 +31,6 @@ class DecoderOnlyModel(pl.LightningModule):
         one_hot_input=False,
         normalize_by_masking_ratio=False,
         learning_rate_gamma=0.9,
-        note_decoder_layers=2,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -55,17 +54,6 @@ class DecoderOnlyModel(pl.LightningModule):
             batch_first=True,
             ),
             num_layers=n_layers,
-        )
-
-        self.note_decoder = torch.nn.TransformerDecoder(
-            decoder_layer=torch.nn.TransformerDecoderLayer(
-            d_model=hidden_size,
-            nhead=n_heads,
-            batch_first=True,
-            dim_feedforward=feed_forward_size,
-            dropout=0.1,
-            ),
-            num_layers=note_decoder_layers,
         )
 
         self.decoder_output_layer = nn.Linear(hidden_size, vocab_size)
@@ -425,7 +413,7 @@ if __name__ == "__main__":
         "ticks_per_beat":24,
         "pitch_range":[0, 128],
         "max_beats":4*N_BARS,
-        "max_notes":75 * N_BARS,
+        "max_notes":100 * N_BARS,
         "min_tempo":50,
         "max_tempo":200,
         "n_tempo_bins": 16,
@@ -439,7 +427,6 @@ if __name__ == "__main__":
         "use_instrument": True,
         "ignored_track_names":[f"Layers{i}" for i in range(0, 8)],
         "separate_drum_pitch": True,
-        "use_drum_duration": False,
     }
 
     tokenizer = MergedTokenizer(
@@ -452,20 +439,16 @@ if __name__ == "__main__":
         genre_list=genre_list,
         tokenizer=tokenizer,
         transposition_range=[-4, 4],
-        min_notes = 8*N_BARS,
-        max_notes = tokenizer_config["max_notes"],
     )
 
     val_ds = MidiDataset(
         cache_path="./artefacts/val_midi_records.pt",
-        path_filter_fn=lambda x: f"n_bars={N_BARS}" in x,
+        path_filter_fn = lambda x: f"n_bars={N_BARS}" in x,
         genre_list=genre_list,
         tokenizer=tokenizer,
-        min_notes=8 * N_BARS,
-        max_notes=tokenizer_config["max_notes"],
     )
   
-    BATCH_SIZE = 40
+    BATCH_SIZE = 28
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds,
@@ -490,7 +473,7 @@ if __name__ == "__main__":
         n_layers=6,
         vocab = tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
-        learning_rate=2e-4,
+        learning_rate=1e-4,
         tokenizer_config=tokenizer_config,
         sliding_mask=True,
         normalize_by_masking_ratio=False,
@@ -508,7 +491,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
     accelerator="gpu",
-    devices=[6],
+    devices=[2],
     precision=32,
     max_epochs=None,
     log_every_n_steps=1,

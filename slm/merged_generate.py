@@ -20,17 +20,12 @@ device = "cuda:7"
 # )
 
 # model = DecoderOnlyModel.load_from_checkpoint(
-#     "../checkpoints/logical-darkness-79/epoch=2-step=10848-val/loss=0.77-trn/loss=0.71.ckpt",
+#     "../checkpoints/scarlet-serenity-114/epoch=14-step=63352-val/loss=0.29-trn/loss=0.32.ckpt",
 #     map_location=device,
 # )
 
 model = DecoderOnlyModel.load_from_checkpoint(
-    "../checkpoints/zesty-galaxy-83/epoch=1-step=10094-val/loss=0.82-trn/loss=0.73.ckpt",
-    map_location=device,
-)
-
-model = DecoderOnlyModel.load_from_checkpoint(
-    "../checkpoints/scarlet-serenity-114/epoch=11-step=46907-val/loss=0.30-trn/loss=0.29.ckpt",
+    "../checkpoints/azure-frog-129/epoch=1-step=4097-val/loss=0.45-trn/loss=0.38.ckpt",
     map_location=device,
 )
 
@@ -41,11 +36,26 @@ model = model.to(device)
 # Generate a sequence
 a = model.format_mask[None,...].to(model.device)
 
+print(model.tokenizer.tempo_bins)
+
+c = model.tokenizer.constraint_mask(
+    tags=["pop"],
+    instruments=["Drums","Bass","Synth Lead"],
+    tempos = ["126"]
+)[None,...].to(model.device)
+a = c*a
+plt.figure(figsize=(10, 60))
+sns.heatmap(a[0][:15].cpu().numpy().T, cmap="magma", yticklabels=model.tokenizer.vocab)
+plt.show()
+
+
+print(a.shape)
+
 # Generate a sequence
 sequence = model.generate(a,
                            max_len=model.tokenizer.total_len, 
                           temperature=1.0,
-                          top_p=1,
+                          top_p=1.0,
                           top_k=0,
                         )
 
@@ -61,6 +71,10 @@ tokens = model.tokenizer.indices_to_tokens(token_idx)
 
 # decode
 sm = model.tokenizer.decode(token_idx)
+
+# print number of notes
+print(sm.note_num())
+
 
 pr = piano_roll(sm)
 
