@@ -31,6 +31,7 @@ class DecoderOnlyModel(pl.LightningModule):
         one_hot_input=False,
         normalize_by_masking_ratio=False,
         learning_rate_gamma=0.9,
+        note_decoder_layers=2,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -64,7 +65,7 @@ class DecoderOnlyModel(pl.LightningModule):
             dim_feedforward=feed_forward_size,
             dropout=0.1,
             ),
-            num_layers=2,
+            num_layers=note_decoder_layers,
         )
 
         self.decoder_output_layer = nn.Linear(hidden_size, vocab_size)
@@ -433,7 +434,7 @@ if __name__ == "__main__":
         "tags": genre_list,
         "shuffle_notes": True,
         "use_offset": True,
-        "merge_pitch_and_beat":True,
+        "merge_pitch_and_beat":False,
         "use_program": False,
         "use_instrument": True,
         "ignored_track_names":[f"Layers{i}" for i in range(0, 8)],
@@ -458,7 +459,7 @@ if __name__ == "__main__":
         tokenizer=tokenizer,
     )
   
-    BATCH_SIZE = 24
+    BATCH_SIZE = 16
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds,
@@ -477,17 +478,17 @@ if __name__ == "__main__":
     )
     
     model = DecoderOnlyModel(
-        hidden_size=512,
+        hidden_size=768,
         n_heads=8,
-        feed_forward_size=4*512,
-        n_layers=12,
+        feed_forward_size=2*768,
+        n_layers=8,
         vocab = tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
         learning_rate=1e-4,
         tokenizer_config=tokenizer_config,
         sliding_mask=True,
         normalize_by_masking_ratio=False,
-        learning_rate_gamma=0.9,
+        learning_rate_gamma=0.99,
     )
 
     wandb_logger = WandbLogger(log_model="all", project="slm")
@@ -501,8 +502,8 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
     accelerator="gpu",
-    devices=[3],
-    precision=16,
+    devices=[6],
+    precision=32,
     max_epochs=None,
     log_every_n_steps=1,
     # val_check_interval=10,

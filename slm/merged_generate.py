@@ -30,7 +30,7 @@ model = DecoderOnlyModel.load_from_checkpoint(
 )
 
 model = DecoderOnlyModel.load_from_checkpoint(
-    "../checkpoints/hardy-moon-81/epoch=6-step=12458-val/loss=0.77-trn/loss=0.80.ckpt",
+    "../checkpoints/scarlet-serenity-114/epoch=11-step=46907-val/loss=0.30-trn/loss=0.29.ckpt",
     map_location=device,
 )
 
@@ -42,10 +42,14 @@ model = model.to(device)
 a = model.format_mask[None,...].to(model.device)
 
 # Generate a sequence
-sequence = model.generate(a, max_len=model.tokenizer.total_len, temperature=0.99,top_p=0.9)
+sequence = model.generate(a,
+                           max_len=model.tokenizer.total_len, 
+                          temperature=1.0,
+                          top_p=1,
+                          top_k=0,
+                        )
 
 
-#%%
 token_idx = sequence[0].cpu().numpy()
 
 # argmax

@@ -466,7 +466,7 @@ if __name__ == "__main__":
             ],
     logger=wandb_logger,
     gradient_clip_val=1.0,
-    # accumulate_grad_batches=4,
+    accumulate_grad_batches=4,
     )
 
     trainer.fit(model,
