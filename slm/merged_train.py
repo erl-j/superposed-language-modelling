@@ -465,7 +465,7 @@ if __name__ == "__main__":
         max_notes=tokenizer_config["max_notes"],
     )
   
-    BATCH_SIZE = 40
+    BATCH_SIZE = 30
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds,
@@ -490,11 +490,12 @@ if __name__ == "__main__":
         n_layers=6,
         vocab = tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
-        learning_rate=2e-4,
+        learning_rate=1e-4,
         tokenizer_config=tokenizer_config,
         sliding_mask=True,
         normalize_by_masking_ratio=False,
         learning_rate_gamma=0.99,
+        note_decoder_layers=2,
     )
 
     wandb_logger = WandbLogger(log_model="all", project="slm")
@@ -508,7 +509,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
     accelerator="gpu",
-    devices=[6],
+    devices=[5],
     precision=32,
     max_epochs=None,
     log_every_n_steps=1,

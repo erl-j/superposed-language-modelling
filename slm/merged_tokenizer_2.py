@@ -3,7 +3,6 @@ import pydash
 import numpy as np
 import torch
 import pretty_midi
-
 # has features over old one.
 # supports velocity bins
 # drums are now a separate instrument
@@ -183,9 +182,42 @@ class MergedTokenizer2():
                         format_mask[note_idx * self.attributes_per_note + attr_idx, self.token2idx[token]] = 1
         return format_mask
     
-    def constraint_mask(self,tags=None, tempos=None, instruments=None, pitches=None):
+    def constraint_mask(self,tags=None, tempos=None, instruments=None, pitches=None, scale="" ,min_notes=1):
 
         constraint_mask = np.ones((len(self.note_attribute_order), len(self.vocab)), dtype=int)
+
+        def get_scale(scale, range):
+            root = scale.split(" ")[0]
+            mode = scale.split(" ")[1]
+
+            scales = {
+                "major": [0, 2, 4, 5, 7, 9, 11],
+                "pentatonic": [0, 2, 4, 7, 9],
+                "blues": [0, 3, 5, 6, 7, 10],
+            }
+
+            if root not in ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]:
+                raise ValueError("Root not found")
+
+            if mode not in scales:
+                raise ValueError(f"Mode not found, options are {scales.keys()}")
+
+            root_midi = pretty_midi.note_name_to_number(root + "0")
+
+            while root_midi < range[0]:
+                root_midi += 12
+
+            midi_notes = []
+
+            octave = 0
+            while True:
+                for interval in scales[mode]:
+                    new_note = octave * 12 + root_midi + interval
+                    if new_note >= range[1]:
+                        return midi_notes
+                    else:
+                        midi_notes.append(new_note)
+                octave += 1
 
         for attribute_index, attribute in enumerate(self.note_attribute_order):
 
@@ -210,9 +242,49 @@ class MergedTokenizer2():
                     for instrument in instruments:
                         constraint_mask[attribute_index,self.vocab.index("instrument:" + instrument)] = 1
                     # allow undefined instrument
+                        
+            if attribute == "pitch":
+                if scale != "":
+                    midi_notes = get_scale(scale, self.config["pitch_range"])
+                    print(midi_notes)
+                    scale_mask = np.zeros(len(self.vocab))
+                    scale_mask[self.vocab.index("pitch:-")] = 1
+                    for note in midi_notes:
+                        scale_mask[self.vocab.index("pitch:" + str(note))] = 1
+                    # allow all drum pitches
+                    for note in self.drum_pitches:
+                        scale_mask[self.vocab.index("pitch:" + str(note) + " (Drums)")] = 1
+                    constraint_mask[attribute_index,:] = scale_mask
+
+                        
         
         # repeat max notes times in the first dimension
         constraint_mask = np.tile(constraint_mask, (self.config["max_notes"], 1))
+
+
+        undefined_mask = np.zeros((len(self.note_attribute_order), len(self.vocab)), dtype=int)
+        for token in self.vocab:
+            if token.endswith("-"):
+                undefined_mask[:,self.token2idx[token]] = 1
+
+        # up to min notes, remove undefined attributes
+        for i in range(min_notes):
+            constraint_mask[i * len(self.note_attribute_order):(i+1) * len(self.note_attribute_order),:] *= (1-undefined_mask)
+
+
+        constraint_mask = constraint_mask.reshape(
+            (self.config["max_notes"], len(self.note_attribute_order), len(self.vocab))
+        )
+
+        # shuffle in the first dimension
+        if self.config["shuffle_notes"]:
+            # shuffle notes         
+            np.random.shuffle(constraint_mask)  
+
+        constraint_mask = constraint_mask.reshape(
+            (self.config["max_notes"] * len(self.note_attribute_order), len(self.vocab))
+        )
+
         return torch.tensor(constraint_mask)
         
 
