@@ -30,7 +30,7 @@ device = "cuda:7"
 # )
 
 model = DecoderOnlyModel.load_from_checkpoint(
-    "../checkpoints/azure-frog-129/epoch=66-step=174123-val copy/loss=0.29-trn/loss=0.21.ckpt",
+    "../checkpoints/azure-frog-129/epoch=75-step=196304-val/loss=0.29-trn/loss=0.30.ckpt",
     map_location=device,
 )
 
@@ -57,7 +57,7 @@ val_ds = MidiDataset(
 
 #%%
 
-x = val_ds[2]
+x = val_ds[4]
 
 # plot the piano roll
 x_sm = model.tokenizer.decode(x)
@@ -80,7 +80,7 @@ y = model.generate(
     max_len=model.tokenizer.total_len,
     temperature=1.0,
     top_p=1.0,
-    top_k=1,
+    top_k=0,
 )
 
 y_idx = y[0].cpu().numpy().argmax(axis=1)
@@ -96,13 +96,6 @@ plt.show()
 
 # save 
 y_sm.dump_midi("../artefacts/infilling.mid")
-
-
-
-
-
-
-
 
 #%%
 # Generate a sequence
