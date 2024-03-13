@@ -30,12 +30,79 @@ device = "cuda:7"
 # )
 
 model = DecoderOnlyModel.load_from_checkpoint(
-    "../checkpoints/azure-frog-129/epoch=29-step=77024-val/loss=0.31-trn/loss=0.26.ckpt",
+    "../checkpoints/azure-frog-129/epoch=66-step=174123-val copy/loss=0.29-trn/loss=0.21.ckpt",
     map_location=device,
 )
 
 # Move the model to the device
 model = model.to(device)
+
+
+#%%
+
+from data import MidiDataset
+
+N_BARS = 4
+
+# Load the dataset
+val_ds = MidiDataset(
+    cache_path="../artefacts/val_midi_records.pt",
+    path_filter_fn=lambda x: f"n_bars={N_BARS}" in x,
+    genre_list=["rock", "pop"],
+    tokenizer=model.tokenizer,
+    min_notes=8 * N_BARS,
+    max_notes=model.tokenizer.config["max_notes"],
+)
+
+
+#%%
+
+x = val_ds[2]
+
+# plot the piano roll
+x_sm = model.tokenizer.decode(x)
+
+pr = piano_roll(x_sm)
+plt.figure(figsize=(10, 10))
+sns.heatmap(pr, cmap="magma")
+plt.show()
+
+print(f"Number of notes: {x_sm.note_num()}")
+      
+# beat range
+beat_range=(8,12)
+
+# make infilling mask
+mask = model.tokenizer.infilling_mask(x,beat_range,max_notes=x_sm.note_num())[None,...].to(model.device).float()
+
+y = model.generate(
+    mask,
+    max_len=model.tokenizer.total_len,
+    temperature=1.0,
+    top_p=1.0,
+    top_k=1,
+)
+
+y_idx = y[0].cpu().numpy().argmax(axis=1)
+
+y_sm = model.tokenizer.decode(y_idx)
+
+print(f"Number of notes: {y_sm.note_num()}")
+
+pr2 = piano_roll(y_sm)
+plt.figure(figsize=(10, 10))
+sns.heatmap(pr2, cmap="magma")
+plt.show()
+
+# save 
+y_sm.dump_midi("../artefacts/infilling.mid")
+
+
+
+
+
+
+
 
 #%%
 # Generate a sequence
@@ -45,15 +112,18 @@ a = model.format_mask[None,...].to(model.device)
 
 c = model.tokenizer.constraint_mask(
     # tags=["classical"],
-    instruments=["Piano","Drums"],
-    tempos = ["126"],
+    instruments=["Bass","Drums","Piano"],
+    # tempos = ["126"],
     scale = "C major",
     min_notes=30,
+    max_notes=280,
 )[None,...].to(model.device)
 a = c*a
 plt.figure(figsize=(10, 60))
 sns.heatmap(a[0][:15].cpu().numpy().T, cmap="magma", yticklabels=model.tokenizer.vocab)
 plt.show()
+
+
 
 #%%
 

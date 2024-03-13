@@ -182,7 +182,169 @@ class MergedTokenizer2():
                         format_mask[note_idx * self.attributes_per_note + attr_idx, self.token2idx[token]] = 1
         return format_mask
     
-    def constraint_mask(self,tags=None, tempos=None, instruments=None, pitches=None, scale="" ,min_notes=1):
+    def infilling_mask(self, x, beat_range=None, pitches=None, max_notes=None):
+        '''
+        beat_range: tuple of ints, (min_beat, max_beat) : list of strings. If None, defaults to entire beat range.
+        pitches : list of strings. If None, defaults to all pitches, including drums.
+        '''
+
+        if max_notes is None:
+            max_notes = self.config["max_notes"]
+
+        if pitches is None:
+            pitches = [token for token in self.vocab if token.startswith("pitch:")]
+        
+        pitches_set = set(pitches)
+
+        if beat_range is None:
+            beat_range = (0, self.config["max_beats"])
+
+
+        # get tokens
+        tokens = self.indices_to_tokens(x)
+
+        # fold into note dictionaries
+        notes = [tokens[i:i+self.attributes_per_note] for i in range(0, len(tokens), self.attributes_per_note)]
+        # turn into dictionary
+        notes = [ {note_attr: [note[i]] for i, note_attr in enumerate(self.note_attribute_order)} for note in notes]
+        keep_notes = []
+        modify_notes = []
+
+        start = beat_range[0]
+        end = beat_range[1]
+        
+        for note_idx, note in enumerate(notes):
+            # if any attribute is undefined, keep note
+            if any(any([token.endswith("-") for token in note[note_attr]]) for note_attr in self.note_attribute_order):
+                continue
+            # get onset beat, offset beat, pitch
+            onset = int(note["onset/beat"][0].split(":")[1])
+            if "none (Drums)" in note["offset/beat"][0]:
+                offset = onset
+            else:
+                offset = int(note["offset/beat"][0].split(":")[1])
+
+            pitch = note["pitch"][0]
+
+            if pitch not in pitches_set:
+                keep_notes.append(note)
+            else:
+                if onset < start:
+                    if offset < start:
+                        # keep
+                        keep_notes.append(note)
+                    elif start < offset <= end:
+                        # open offset
+                        # set onset/tick to any non undefined value
+                        note["offset/tick"] = ["offset/tick:" + str(tick) for tick in range(self.config["ticks_per_beat"])]
+                        # set onset/beat to any non undefined value larger than start and smaller than end
+                        note["offset/beat"] = ["offset/beat:" + str(beat) for beat in range(start, end+1)]
+                        modify_notes.append(note)
+                    elif end < offset:
+                        # keep or split
+                        keep_notes.append(note)
+                elif start <= onset < end:
+                    if offset < start:
+                        raise ValueError("Invalid note")
+                    elif start < offset < end:
+                        # remove
+                        print("Removing note")
+                        pass
+                    elif end <= offset:
+                        # open onset
+                        # set onset/tick to any non undefined value
+                        note["onset/tick"] = ["onset/tick:" + str(tick) for tick in range(self.config["ticks_per_beat"])]
+                        # set onset/beat to any non undefined value larger than start and smaller than end
+                        note["onset/beat"] = ["onset/beat:" + str(beat) for beat in range(start, end)]
+                        modify_notes.append(note)
+
+                elif end < onset:
+                    if offset < start:
+                        raise ValueError("Invalid note")
+                    elif start < offset < end:
+                        raise ValueError("Invalid note")
+                    elif end <= offset:
+                        # keep
+                        keep_notes.append(note)
+
+        # convert note_objects to mask
+        modify_mask = np.zeros((len(modify_notes) * len(self.note_attribute_order), len(self.vocab)), dtype=int)
+
+        for note_idx, note in enumerate(modify_notes):
+            for attr_idx, note_attr in enumerate(self.note_attribute_order):
+                for token in note[note_attr]:
+                    modify_mask[note_idx * self.attributes_per_note + attr_idx, self.token2idx[token]] = 1
+        # add missing notes
+                    
+        keep_mask = np.zeros((len(keep_notes) * len(self.note_attribute_order), len(self.vocab)), dtype=int)
+        for note_idx, note in enumerate(keep_notes):
+            for attr_idx, note_attr in enumerate(self.note_attribute_order):
+                for token in note[note_attr]:
+                    keep_mask[note_idx * self.attributes_per_note + attr_idx, self.token2idx[token]] = 1
+
+        restriction_mask = self.get_format_mask()[:len(self.note_attribute_order)]
+
+        onset_beat_tokens = [f"onset/beat:{str(beat)}" for beat in range(start, end)] + ["onset/beat:-"]
+        onset_beat_mask = np.zeros((len(self.vocab)), dtype=int)
+        for token in onset_beat_tokens:
+            onset_beat_mask[self.token2idx[token]] = 1
+
+        offset_beat_tokens = [f"offset/beat:{str(beat)}" for beat in range(start, end+1)] + ["offset/beat:-"]
+        offset_beat_mask = np.zeros((len(self.vocab)), dtype=int)
+        for token in offset_beat_tokens:
+            offset_beat_mask[self.token2idx[token]] = 1
+
+        pitch_tokens = list(pitches_set) + ["pitch:-"]
+        pitch_mask = np.zeros((len(self.vocab)), dtype=int)
+        for token in pitch_tokens:
+            pitch_mask[self.token2idx[token]] = 1
+
+        restriction_mask[self.note_attribute_order.index("onset/beat"),:] *= onset_beat_mask
+        restriction_mask[self.note_attribute_order.index("offset/beat"),:] *= offset_beat_mask
+        restriction_mask[self.note_attribute_order.index("pitch"),:] *= pitch_mask
+
+        # tile restriction mask
+        missing_notes = max_notes - len(keep_notes) - len(modify_notes)
+
+        assert missing_notes >= 0
+
+        restriction_mask = np.tile(restriction_mask, (missing_notes, 1))
+
+
+        # undefined mask
+        undefined_mask = np.zeros((len(self.note_attribute_order), len(self.vocab)), dtype=int)
+        for attr_idx, note_attr in enumerate(self.note_attribute_order):
+            undefined_mask[attr_idx, self.token2idx[f"{note_attr}:-"]] = 1
+
+        # tile up to max notes
+        undefined_notes_to_add = self.config["max_notes"] - max_notes
+
+        undefined_mask = np.tile(undefined_mask, (undefined_notes_to_add, 1))
+
+        mask = np.concatenate([modify_mask, keep_mask, restriction_mask, undefined_mask], axis=0)
+
+        print(f"Keep notes: {keep_mask.shape[0]}")
+        print(f"Modify notes: {modify_mask.shape[0]}")
+        print(f"Missing notes: {restriction_mask.shape[0]}")
+
+
+        # reshape
+        mask = mask.reshape((self.config["max_notes"], len(self.note_attribute_order), len(self.vocab)))
+
+        # shuffle in the first dimension
+        if self.config["shuffle_notes"]:
+            # shuffle notes
+            np.random.shuffle(mask)
+        
+        mask = mask.reshape((self.config["max_notes"] * len(self.note_attribute_order), len(self.vocab)))
+
+        # multiply by format mask
+        mask = mask * self.get_format_mask()
+
+        return torch.tensor(mask)
+                
+    
+    def constraint_mask(self,tags=None, tempos=None, instruments=None, pitches=None, scale="" ,min_notes=1, max_notes=None):
 
         constraint_mask = np.ones((len(self.note_attribute_order), len(self.vocab)), dtype=int)
 
@@ -246,7 +408,6 @@ class MergedTokenizer2():
             if attribute == "pitch":
                 if scale != "":
                     midi_notes = get_scale(scale, self.config["pitch_range"])
-                    print(midi_notes)
                     scale_mask = np.zeros(len(self.vocab))
                     scale_mask[self.vocab.index("pitch:-")] = 1
                     for note in midi_notes:
@@ -255,8 +416,6 @@ class MergedTokenizer2():
                     for note in self.drum_pitches:
                         scale_mask[self.vocab.index("pitch:" + str(note) + " (Drums)")] = 1
                     constraint_mask[attribute_index,:] = scale_mask
-
-                        
         
         # repeat max notes times in the first dimension
         constraint_mask = np.tile(constraint_mask, (self.config["max_notes"], 1))
@@ -271,6 +430,9 @@ class MergedTokenizer2():
         for i in range(min_notes):
             constraint_mask[i * len(self.note_attribute_order):(i+1) * len(self.note_attribute_order),:] *= (1-undefined_mask)
 
+        # after max notes, make all attributes undefined
+        for i in range(max_notes, self.config["max_notes"]):
+            constraint_mask[i * len(self.note_attribute_order):(i+1) * len(self.note_attribute_order),:] = undefined_mask
 
         constraint_mask = constraint_mask.reshape(
             (self.config["max_notes"], len(self.note_attribute_order), len(self.vocab))
@@ -286,7 +448,6 @@ class MergedTokenizer2():
         )
 
         return torch.tensor(constraint_mask)
-        
 
     def sm_to_tokens(self, sm, tag):
 
@@ -480,11 +641,6 @@ class MergedTokenizer2():
             else:
                 track = symusic.Track(program=program, name=pretty_midi.program_to_instrument_name(program), is_drum=False)
             for note in notes:
-                for k,v in note.items():
-                    print(k)
-                    print(v)
-                    print(type(v))
-
                 track.notes.append(symusic.Note(pitch=note["pitch"], time=note["onset"], duration=note["offset"]-note["onset"], velocity=note["velocity"]))
             sm.tracks.append(track)
         return sm
