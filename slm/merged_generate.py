@@ -9,28 +9,13 @@ from util import piano_roll
 
 device = "cuda:7"
 
-# Load the model
 # model = DecoderOnlyModel.load_from_checkpoint(
-#     "../checkpoints/glamorous-water-14/epoch=14-step=220322-val/loss=0.35.ckpt"
-# )
-
-# model = DecoderOnlyModel.load_from_checkpoint(
-#     "../checkpoints/astral-dew-72/epoch=33-step=62817-val/loss=0.60-trn/loss=0.60.ckpt",
-#     map_location=device,
-# )
-
-# model = DecoderOnlyModel.load_from_checkpoint(
-#     "../checkpoints/scarlet-serenity-114/epoch=14-step=63352-val/loss=0.29-trn/loss=0.32.ckpt",
-#     map_location=device,
-# )
-
-# model = DecoderOnlyModel.load_from_checkpoint(
-#     "../checkpoints/azure-frog-129/epoch=20-step=52701-val/loss=0.32-trn/loss=0.32.ckpt",
+#     "../checkpoints/azure-frog-129/epoch=75-step=196304-val/loss=0.29-trn/loss=0.30.ckpt",
 #     map_location=device,
 # )
 
 model = DecoderOnlyModel.load_from_checkpoint(
-    "../checkpoints/azure-frog-129/epoch=75-step=196304-val/loss=0.29-trn/loss=0.30.ckpt",
+    "../checkpoints/azure-frog-129/epoch=96-step=250872-val/loss=0.29-trn/loss=0.35.ckpt",
     map_location=device,
 )
 
@@ -44,11 +29,53 @@ from data import MidiDataset
 
 N_BARS = 4
 
+genre_list = [
+    "other",
+    "pop",
+    "rock",
+    "italian%2cfrench%2cspanish",
+    "classical",
+    "romantic",
+    "renaissance",
+    "alternative-indie",
+    "metal",
+    "traditional",
+    "country",
+    "baroque",
+    "punk",
+    "modern",
+    "jazz",
+    "dance-eletric",
+    "rnb-soul",
+    "medley",
+    "blues",
+    "hip-hop-rap",
+    "hits of the 2000s",
+    "instrumental",
+    "midi karaoke",
+    "folk",
+    "newage",
+    "latino",
+    "hits of the 1980s",
+    "hits of 2011 2020",
+    "musical%2cfilm%2ctv",
+    "reggae-ska",
+    "hits of the 1970s",
+    "christian-gospel",
+    "world",
+    "early_20th_century",
+    "hits of the 1990s",
+    "grunge",
+    "australian artists",
+    "funk",
+    "best of british",
+]
+
 # Load the dataset
 val_ds = MidiDataset(
     cache_path="../artefacts/val_midi_records.pt",
     path_filter_fn=lambda x: f"n_bars={N_BARS}" in x,
-    genre_list=["rock", "pop"],
+    genre_list=genre_list,
     tokenizer=model.tokenizer,
     min_notes=8 * N_BARS,
     max_notes=model.tokenizer.config["max_notes"],
@@ -57,15 +84,12 @@ val_ds = MidiDataset(
 
 #%%
 
-x = val_ds[4]
+x = val_ds[15]
 
 # plot the piano roll
 x_sm = model.tokenizer.decode(x)
 
 pr = piano_roll(x_sm)
-plt.figure(figsize=(10, 10))
-sns.heatmap(pr, cmap="magma")
-plt.show()
 
 print(f"Number of notes: {x_sm.note_num()}")
       
@@ -73,13 +97,15 @@ print(f"Number of notes: {x_sm.note_num()}")
 beat_range=(8,12)
 
 # make infilling mask
-mask = model.tokenizer.infilling_mask(x,beat_range,max_notes=x_sm.note_num())[None,...].to(model.device).float()
+mask = model.tokenizer.infilling_mask(x,beat_range,
+                                     max_notes=x_sm.note_num()
+                                      )[None,...].to(model.device).float()
 
 y = model.generate(
     mask,
     max_len=model.tokenizer.total_len,
     temperature=1.0,
-    top_p=1.0,
+    top_p=0.95,
     top_k=0,
 )
 
@@ -90,8 +116,21 @@ y_sm = model.tokenizer.decode(y_idx)
 print(f"Number of notes: {y_sm.note_num()}")
 
 pr2 = piano_roll(y_sm)
+# use a grid
+
+#%%
+
+plt.figure(figsize=(10, 10))
+sns.heatmap(pr, cmap="magma")
+plt.vlines(beat_range[0]*4, 0, pr.shape[0], color="white")
+plt.vlines(beat_range[1]*4, 0, pr.shape[0], color="white")
+plt.show()
+
+# add h lines for the beat range
 plt.figure(figsize=(10, 10))
 sns.heatmap(pr2, cmap="magma")
+plt.vlines(beat_range[0]*4, 0, pr2.shape[0], color="white")
+plt.vlines(beat_range[1]*4, 0, pr2.shape[0], color="white")
 plt.show()
 
 # save 

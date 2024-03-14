@@ -212,60 +212,57 @@ class MergedTokenizer2():
 
         start = beat_range[0]
         end = beat_range[1]
+
+        start_tick = start * self.config["ticks_per_beat"]
+        end_tick = end * self.config["ticks_per_beat"] 
         
         for note_idx, note in enumerate(notes):
             # if any attribute is undefined, keep note
             if any(any([token.endswith("-") for token in note[note_attr]]) for note_attr in self.note_attribute_order):
                 continue
+
             # get onset beat, offset beat, pitch
-            onset = int(note["onset/beat"][0].split(":")[1])
+            onset_tick = int(note["onset/beat"][0].split(":")[1])* self.config["ticks_per_beat"] + int(note["onset/tick"][0].split(":")[1])
+
             if "none (Drums)" in note["offset/beat"][0]:
-                offset = onset
+                offset_tick = onset_tick + 1
             else:
-                offset = int(note["offset/beat"][0].split(":")[1])
+                offset_tick = int(note["offset/beat"][0].split(":")[1])* self.config["ticks_per_beat"] + int(note["offset/tick"][0].split(":")[1])
 
             pitch = note["pitch"][0]
+
+            # assert offset >= onset
+            assert onset_tick < offset_tick
 
             if pitch not in pitches_set:
                 keep_notes.append(note)
             else:
-                if onset < start:
-                    if offset < start:
-                        # keep
-                        keep_notes.append(note)
-                    elif start < offset <= end:
-                        # open offset
-                        # set onset/tick to any non undefined value
-                        note["offset/tick"] = ["offset/tick:" + str(tick) for tick in range(self.config["ticks_per_beat"])]
-                        # set onset/beat to any non undefined value larger than start and smaller than end
-                        note["offset/beat"] = ["offset/beat:" + str(beat) for beat in range(start, end+1)]
-                        modify_notes.append(note)
-                    elif end < offset:
-                        # keep or split
-                        keep_notes.append(note)
-                elif start <= onset < end:
-                    if offset < start:
-                        raise ValueError("Invalid note")
-                    elif start < offset < end:
-                        # remove
-                        print("Removing note")
-                        pass
-                    elif end <= offset:
-                        # open onset
-                        # set onset/tick to any non undefined value
-                        note["onset/tick"] = ["onset/tick:" + str(tick) for tick in range(self.config["ticks_per_beat"])]
-                        # set onset/beat to any non undefined value larger than start and smaller than end
-                        note["onset/beat"] = ["onset/beat:" + str(beat) for beat in range(start, end)]
-                        modify_notes.append(note)
+                # if note is entirely outside of beat range, keep note
+                if onset_tick >= end_tick or offset_tick <= start_tick:
+                    keep_notes.append(note)
 
-                elif end < onset:
-                    if offset < start:
-                        raise ValueError("Invalid note")
-                    elif start < offset < end:
-                        raise ValueError("Invalid note")
-                    elif end <= offset:
-                        # keep
-                        keep_notes.append(note)
+                # if note is entirely inside beat range, ignore note
+                elif onset_tick >= start_tick and offset_tick <= end_tick:
+                    pass
+
+                # if note goes over beat range, keep note
+                elif onset_tick < start_tick and offset_tick > end_tick:
+                    keep_notes.append(note)
+
+                # if note is partially inside beat range, modify note
+                # note starts before beat range and ends inside beat range
+                elif onset_tick < start_tick and start_tick < offset_tick <= end_tick:
+                    # open offset
+                    note["offset/beat"] = ["offset/beat:" + str(beat) for beat in range(start, end+1)]
+                    note["offset/tick"] = ["offset/tick:" + str(tick) for tick in range(self.config["ticks_per_beat"])] 
+                    modify_notes.append(note)
+                
+                # overlapping end
+                elif start_tick <= onset_tick < end_tick and offset_tick > end_tick:
+                    # open onset
+                    note["onset/beat"] = ["onset/beat:" + str(beat) for beat in range(start, end)]
+                    note["onset/tick"] = ["onset/tick:" + str(tick) for tick in range(self.config["ticks_per_beat"])] 
+                    modify_notes.append(note)
 
         # convert note_objects to mask
         modify_mask = np.zeros((len(modify_notes) * len(self.note_attribute_order), len(self.vocab)), dtype=int)
@@ -289,7 +286,7 @@ class MergedTokenizer2():
         for token in onset_beat_tokens:
             onset_beat_mask[self.token2idx[token]] = 1
 
-        offset_beat_tokens = [f"offset/beat:{str(beat)}" for beat in range(start, end+1)] + ["offset/beat:-"]
+        offset_beat_tokens = [f"offset/beat:{str(beat)}" for beat in range(start, end+1)] + ["offset/beat:-"] + ["offset/beat:none (Drums)"]
         offset_beat_mask = np.zeros((len(self.vocab)), dtype=int)
         for token in offset_beat_tokens:
             offset_beat_mask[self.token2idx[token]] = 1
@@ -298,6 +295,8 @@ class MergedTokenizer2():
         pitch_mask = np.zeros((len(self.vocab)), dtype=int)
         for token in pitch_tokens:
             pitch_mask[self.token2idx[token]] = 1
+
+        # todo, add tempo and tag mask
 
         restriction_mask[self.note_attribute_order.index("onset/beat"),:] *= onset_beat_mask
         restriction_mask[self.note_attribute_order.index("offset/beat"),:] *= offset_beat_mask
@@ -321,7 +320,9 @@ class MergedTokenizer2():
 
         undefined_mask = np.tile(undefined_mask, (undefined_notes_to_add, 1))
 
-        mask = np.concatenate([modify_mask, keep_mask, restriction_mask, undefined_mask], axis=0)
+        mask = np.concatenate(
+            [keep_mask, undefined_mask, modify_mask, restriction_mask], axis=0
+        )
 
         print(f"Keep notes: {keep_mask.shape[0]}")
         print(f"Modify notes: {modify_mask.shape[0]}")
@@ -331,7 +332,7 @@ class MergedTokenizer2():
         # reshape
         mask = mask.reshape((self.config["max_notes"], len(self.note_attribute_order), len(self.vocab)))
 
-        # shuffle in the first dimension
+        # # shuffle in the first dimension
         if self.config["shuffle_notes"]:
             # shuffle notes
             np.random.shuffle(mask)

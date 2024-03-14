@@ -487,7 +487,7 @@ if __name__ == "__main__":
         hidden_size=768,
         n_heads=16,
         feed_forward_size=2*768,
-        n_layers=9,
+        n_layers=7,
         vocab = tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
         learning_rate=1e-4,
@@ -509,7 +509,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
     accelerator="gpu",
-    devices=[2],
+    devices=[3],
     precision=32,
     max_epochs=None,
     log_every_n_steps=1,
@@ -527,7 +527,7 @@ if __name__ == "__main__":
             train_time_interval = datetime.timedelta(minutes=30),)],
     logger=wandb_logger,
     gradient_clip_val=1.0,
-    # accumulate_grad_batches=8,
+    accumulate_grad_batches=4,
     )
 
     trainer.fit(
