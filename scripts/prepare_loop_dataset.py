@@ -10,7 +10,11 @@ midi_pattern="../loop-detection/loops/annot_joblib/**/*.mid"
 genre_file="../midi_data/metamidi_dataset/MMD_scraped_genre.jsonl"
 
 
-for split in ["trn", "val", "tst"]:
+for split in [
+    # "val",
+    # "tst",
+    "trn",
+]:
     split_md5s=f"./split/{split}_md5s.txt"
 
     midi_paths = glob.glob(midi_pattern, recursive=True)
@@ -56,6 +60,27 @@ for split in ["trn", "val", "tst"]:
     # load midi files with symusic
     midi_records = [{**x, "midi": symusic.Score(x["path"])} for x in tqdm(midi_records)]
 
+    print("Filtering midi records by unique pr")
+
+    print(f"Number of midi records: {len(midi_records)} before filtering by unique pr")
+
+    # get piano rolls
+    def get_pr(sm):
+        return sm.resample(4, min_dur=0).pianoroll(modes=["frame"], encodeVelocity=True)
+    
+    # filter midi_records by unique pr
+    new_midi_records = []
+    prs = set()
+    for x in tqdm(midi_records):
+        pr = get_pr(x["midi"])
+        pr_key = hash(pr.tobytes())
+        if pr_key not in prs:
+            prs.add(pr_key)
+            new_midi_records.append(x)
+    midi_records = new_midi_records
+
+    print(f"Number of midi records: {len(midi_records)} after filtering by unique pr")
+
     midi_records = [list(v) for k, v in itertools.groupby(midi_records, key=lambda x: x["md5"])]
 
-    torch.save(midi_records, f"./artefacts/{split}_midi_records.pt")
+    torch.save(midi_records, f"./artefacts/{split}_midi_records_unique_pr.pt")

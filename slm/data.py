@@ -13,7 +13,7 @@ def get_num_notes(sm):
     return sum([len(track.notes) for track in sm.tracks if not track.name.startswith("Layer")])
 
 class MidiDataset(torch.utils.data.Dataset):
-    def __init__(self, cache_path, genre_list, path_filter_fn, tokenizer, transposition_range=[-7, 7], min_notes=1, max_notes=1e6):
+    def __init__(self, cache_path, genre_list, path_filter_fn, tokenizer, transposition_range=[-7, 7], min_notes=1, max_notes=1e6, group_by_source=False):
         self.tokenizer = tokenizer
         self.records = torch.load(cache_path)
         for i in range(len(self.records)):
@@ -23,12 +23,29 @@ class MidiDataset(torch.utils.data.Dataset):
             self.records[i] = [x for x in self.records[i] if min_notes <= get_num_notes(x["midi"]) <= max_notes]
         self.records = [x for x in self.records if len(x) > 0]
         self.transposition_range = transposition_range        
+        self.group_by_source = group_by_source
+        if not self.group_by_source:
+            midi_hash = {}
+            new_records = []
+            for record in self.records:
+                for r in record:
+                    midi = r["midi"]
+                    # hash 
+                    midi_hash_key = hash(midi)
+                    if midi_hash_key not in midi_hash:
+                        midi_hash[midi_hash_key] = []
+                        new_records.append(r)                        
+            self.records = new_records
+            
 
     def __len__(self):
         return len(self.records)
     
     def __getitem__(self, idx):
-        record = random.choice(self.records[idx])
+        if self.group_by_source:
+            record = random.choice(self.records[idx])
+        else:
+            record = self.records[idx]
         midi = record["midi"]
         if self.transposition_range is not None:
             transposition = random.randint(*self.transposition_range)

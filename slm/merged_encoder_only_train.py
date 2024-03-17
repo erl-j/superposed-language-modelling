@@ -16,7 +16,7 @@ import einops
 from tqdm import tqdm
 from util import top_k_top_p_filtering
 
-class DecoderOnlyModel(pl.LightningModule):
+class EncoderOnlyModel(pl.LightningModule):
     def __init__(
         self,
         hidden_size,
@@ -27,11 +27,9 @@ class DecoderOnlyModel(pl.LightningModule):
         max_seq_len,
         learning_rate,
         tokenizer_config,
-        sliding_mask=False,
         one_hot_input=False,
         normalize_by_masking_ratio=False,
         learning_rate_gamma=0.9,
-        note_decoder_layers=2,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -57,209 +55,115 @@ class DecoderOnlyModel(pl.LightningModule):
             num_layers=n_layers,
         )
 
-        self.note_decoder = torch.nn.TransformerDecoder(
-            decoder_layer=torch.nn.TransformerDecoderLayer(
-            d_model=hidden_size,
-            nhead=n_heads,
-            batch_first=True,
-            dim_feedforward=feed_forward_size,
-            dropout=0.1,
-            ),
-            num_layers=note_decoder_layers,
-        )
-
         self.decoder_output_layer = nn.Linear(hidden_size, vocab_size)
-
-        def get_mask(seq_len):
-            m = torch.ones(seq_len*2, seq_len*2, dtype=torch.bool) * float("-inf")
-            # give upper left triangle
-            m[:seq_len, :seq_len] = 0
-            for i in range(0, seq_len):
-                if sliding_mask:
-                    m[i+seq_len, i+1:i+seq_len+1] = 0
-                else:
-                    m[i+seq_len, 0:i+seq_len+1] = 0
-            return m
         
-        self.mask = get_mask(self.tokenizer.config["max_notes"])
-       
-        # save fig of mask
-        # plt.imshow(get_mask(10))
-        # plt.savefig("artefacts/mask.png")
         self.seq_len = max_seq_len
 
         self.n_attributes = len(self.tokenizer.note_attribute_order)
-
-        self.attribute_embedding = nn.Embedding(self.n_attributes, hidden_size)
-
-        self.attribute_mask = torch.nn.Transformer.generate_square_subsequent_mask(len(self.tokenizer.note_attribute_order))
 
         self.normalize_by_masking_ratio = normalize_by_masking_ratio
 
         self.learning_rate_gamma = learning_rate_gamma
 
-    def note_forward(self, con, tgt):
-
-        batch, time_attr, ft = con.shape
-
-        con = con * self.format_mask[None, ...].to(self.device)
-        tgt = tgt * self.format_mask[None, ...].to(self.device)
-
-        con = einops.rearrange(con, "b (t a) ft -> b t a ft", a=self.n_attributes)
-        tgt = einops.rearrange(tgt, "b (t a) ft -> b t a ft", a=self.n_attributes)
-
-        n_notes = con.shape[1]
-
-        con_and_tgt = torch.cat([con, tgt], dim=1)
-        # embed
-        ze = self.embedding_layer(con_and_tgt)
-        ze = ze.sum(dim=2)
-        pos = self.positional_encoding[:, :ze.shape[1], :].to(self.device)
-        ze = ze + pos
-        # pass through transformer
-        zl = self.transformer(ze, mask=self.mask.to(self.device))
-        # get output part
-        note_z = zl[:, n_notes-1:-1, :]
-
-        return note_z
-    
-    def attribute_forward(self, con, tgt, note_z):
-
-        con = con * self.format_mask[None, ...].to(self.device)
-        tgt = tgt * self.format_mask[None, ...].to(self.device)
-
-        con_flat = con
-
-        # reshape
-        con = einops.rearrange(con, "b (t a) ft -> b t a ft", a=self.n_attributes)
-        tgt = einops.rearrange(tgt, "b (t a) ft -> b t a ft", a=self.n_attributes)
-
-        n_notes = con.shape[1]
-
-        # note embeddings
-        note_z = einops.rearrange(note_z, "b t ft -> (b t) 1 ft")
-
-        attr_tgt = einops.rearrange(tgt, "b t a ft -> (b t) a ft", a=self.n_attributes)
-
-        attr_z = self.embedding_layer(attr_tgt)
-
-        # pad in_tgt with zero at start of attribute axis
-        attr_z = F.pad(attr_z, (0, 0, 1, 0))
-        # remove last frame
-        attr_z = attr_z[:, :-1, :]
-
-        # add attribute embedding
-        attr_z = attr_z + self.attribute_embedding.weight[None, :, :]
-
-        # run through decoder
-        zd = self.note_decoder(
-            attr_z,
-            note_z,
-            tgt_is_causal=True,
-            tgt_mask=self.attribute_mask.to(self.device),
-        )
-
-        zd = einops.rearrange(
-            zd, "(b t) a ft -> b (t a) ft", t=n_notes, ft=zd.shape[-1]
-        )
-
-        decoder_logits = self.decoder_output_layer(zd)
-
-        decoder_logits = decoder_logits - (1 - con_flat) * 1e5
-
-        return decoder_logits
-
-    def forward(self, con, tgt):
+    def forward(self, x):
 
         # TODO: No padding currently, make sure it's not needed
         # get shape
-        batch, time_attr, ft = con.shape
+        batch, time_attr, ft = x.shape
 
-        con = con * self.format_mask[None, ...].to(self.device)
-        tgt = tgt * self.format_mask[None, ...].to(self.device)
+        x = x * self.format_mask[None, ...].to(self.device)
 
-        con_flat = con
+        x = einops.rearrange(x, "b (t a) ft -> b t a ft", a=self.n_attributes)
 
-        # reshape
-        con = einops.rearrange(con, "b (t a) ft -> b t a ft", a=self.n_attributes)
-        tgt = einops.rearrange(tgt, "b (t a) ft -> b t a ft", a=self.n_attributes)
-
-        n_notes = con.shape[1]
-
-
-        con_and_tgt = torch.cat([con, tgt], dim=1)
-        # embed
-        ze = self.embedding_layer(con_and_tgt)
+        ze = self.embedding_layer(x)
         ze = ze.sum(dim=2)
         pos = self.positional_encoding[:, :ze.shape[1], :].to(self.device)
         ze = ze + pos
         # pass through transformer
-        zl = self.transformer(ze, mask=self.mask.to(self.device))
+        zl = self.transformer(ze)
         # get output part
-        note_z = zl[:, n_notes-1:-1, :]
 
         # note embeddings
-        note_z = einops.rearrange(note_z, "b t ft -> (b t) 1 ft")
+        note_z = einops.rearrange(zl, "b t ft -> b t 1 ft")
 
-        attr_tgt= einops.rearrange(tgt, "b t a ft -> (b t) a ft", a=self.n_attributes)
+        note_z = note_z.repeat(1, 1, self.n_attributes, 1)
 
-        attr_z = self.embedding_layer(attr_tgt)
+        decoder_logits = self.decoder_output_layer(note_z)
 
-        # pad in_tgt with zero at start of attribute axis
-        attr_z = F.pad(attr_z, (0, 0, 1, 0))
-        # remove last frame
-        attr_z = attr_z[:, :-1, :]
+        decoder_logits = decoder_logits - (1-x)*1e5
 
-        # add attribute embedding
-        attr_z = attr_z + self.attribute_embedding.weight[None, :, :]
-
-
-        # run through decoder
-        zd = self.note_decoder(attr_z, note_z, tgt_is_causal=True, tgt_mask=self.attribute_mask.to(self.device))
-
-        zd = einops.rearrange(zd, "(b t) a ft -> b (t a) ft", t=n_notes, ft=zd.shape[-1])
-
-        decoder_logits = self.decoder_output_layer(zd)
-      
-        decoder_logits = decoder_logits - (1-con_flat)*1e5
+        decoder_logits = einops.rearrange(decoder_logits, "b t a v -> b (t a) v", a=self.n_attributes)
         # crop to decoder length
         return decoder_logits
     
 
-    def generate(
-        self, con, temperature=1.0, max_len=1000, top_p=1, top_k=0
-    ):
-        """
-        Does not use KV caching so it's slow
-        """
-        # make copies
-        seq = con.clone()
+    def generate(self, x, sampling_steps, temperature, schedule_fn):
+        x = x
+        # multiply by format mask
+        x = x * self.format_mask[None, ...].to(x.device)
+        batch, time_attr, ft = x.shape
+        # linspace from schedule
+        schedule = (
+            torch.linspace(0, 1, sampling_steps, dtype=torch.float32, device=x.device)
+        )
+        schedule = schedule_fn(schedule)
+        total_tokens = time_attr
+        # count number of known tokens
+        masked_tokens = (x.sum(-1) > 1).sum().int()
+        # find masking ratio
+        masking_ratio = masked_tokens / total_tokens
 
-        batch, time, ft = seq.shape
-        
-        self.eval()
-        with torch.no_grad():
-            for note_idx in tqdm(range(self.tokenizer.config["max_notes"])):
-                    note_z = self.note_forward(con, seq)
-                    for attribute_idx in range(self.n_attributes):
-                        decoder_logits = self.attribute_forward(con, seq, note_z)
+        # find step in schedule
+        step = torch.argmin((1 - schedule - masking_ratio).abs())
 
-                        decoder_logits = einops.rearrange(decoder_logits, "b s v -> (b s) v", b=batch)
+        print(f"step: {step}")
+        for i in range(step + 1, sampling_steps):
+            print(f"step: {i}")
 
-                        decoder_logits = top_k_top_p_filtering(decoder_logits, top_k=top_k, top_p=top_p)
+            logits = self(x.float())
 
-                        decoder_logits = einops.rearrange(decoder_logits, "(b s) v -> b s v", b=batch)
+            # invert probs
+            # flatten
+            flat_logits = einops.rearrange(logits, "b ta v -> (b ta) v")
 
-                        decoder_probs = F.softmax(decoder_logits / temperature, dim=-1)
-                        # top k
+            flat_probs = F.softmax(flat_logits / temperature, dim=-1)
 
-                        
-                        sampled_token = torch.multinomial(decoder_probs[0], num_samples=1)[None,...]
-                        # one hot
-                        sampled_token = torch.nn.functional.one_hot(sampled_token, num_classes=len(self.vocab))
-                        # add sampled token to sequence
-                        seq[:, note_idx*self.n_attributes + attribute_idx, :] = sampled_token[:, note_idx*self.n_attributes + attribute_idx, :]
-        return seq
+            sampled = torch.multinomial(flat_probs, 1).squeeze(-1)
+
+            print(f"sampled: {sampled.shape}")
+
+            flat_x = einops.rearrange(x, "b ta v -> (b ta) v")
+
+            masked_indices = torch.where(flat_x.sum(-1) > 1)[0]
+            #
+            n_masked = masked_indices.shape[0]
+            print(f"n_masked: {n_masked}")
+            target_masking_ratio = 1 - schedule[i].item()
+
+            target_n_masked = int(total_tokens * target_masking_ratio)
+            # tokens to unmask
+
+            n_tokens_to_unmask = n_masked - target_n_masked
+
+            print(f"n_tokens_to_unmask: {n_tokens_to_unmask}")
+
+            # get indices of tokens to unmask
+            # get indices of masked tokens
+            # shuffle masked indices
+            masked_indices = masked_indices[torch.randperm(n_masked)]
+            indices_to_unmask = masked_indices[:n_tokens_to_unmask]
+
+            # replace with sampled values
+            flat_x[indices_to_unmask] = torch.nn.functional.one_hot(
+                sampled[indices_to_unmask], num_classes=flat_x.shape[-1]
+            ).float()
+
+            # plot
+
+            x = einops.rearrange(
+                flat_x, "(b ta) v -> b ta v", b=batch, ta=time_attr
+            )
+        return x
 
     def step(self, batch, batch_idx):
         if self.one_hot_input:
@@ -277,7 +181,7 @@ class DecoderOnlyModel(pl.LightningModule):
         encoder_input = torch.clamp(x + mask, 0, 1)
 
         decoder_input = x
-        decoder_output_logits = self(encoder_input, decoder_input)
+        decoder_output_logits = self(encoder_input)
 
         decoder_output_tokens = decoder_input
         decoder_output_logits = decoder_output_logits
@@ -461,7 +365,7 @@ if __name__ == "__main__":
         max_notes=tokenizer_config["max_notes"],
     )
   
-    BATCH_SIZE = 22
+    BATCH_SIZE = 64
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds,
@@ -479,19 +383,17 @@ if __name__ == "__main__":
         pin_memory=True,
     )
     
-    model = DecoderOnlyModel(
+    model = EncoderOnlyModel(
         hidden_size=768,
-        n_heads=16,
-        feed_forward_size=2*768,
-        n_layers=9,
+        n_heads=12,
+        feed_forward_size=4*768,
+        n_layers=12,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
-        learning_rate=1e-4,
+        learning_rate=5e-5,
         tokenizer_config=tokenizer_config,
-        sliding_mask=True,
         normalize_by_masking_ratio=False,
-        learning_rate_gamma=0.995,
-        note_decoder_layers=1,
+        learning_rate_gamma=0.99,
     )
 
     # model = DecoderOnlyModel.load_from_checkpoint(
@@ -528,7 +430,7 @@ if __name__ == "__main__":
             filename="{epoch}-{step}-{val/loss_epoch:.2f}",
             )],
     logger=wandb_logger,
-    gradient_clip_val=1.0,
+    # gradient_clip_val=1.0,
     # accumulate_grad_batches=4,
     )
 
@@ -540,5 +442,5 @@ if __name__ == "__main__":
         # ckpt_path="checkpoints/amber-bird-150/epoch=10-step=8943-val/loss_epoch=0.35.ckpt",
         # ckpt_path="checkpoints/unique-smoke-143/epoch=57-step=188140-val/loss=0.29-trn/loss=0.35.ckpt",
         # ckpt_path="checkpoints/hardy-firebrand-147/epoch=60-step=188792-val/loss_epoch=0.28.ckpt",
-        ckpt_path="checkpoints/golden-breeze-170/epoch=127-step=232409-val/loss_epoch=0.28.ckpt",
+        # ckpt_path="checkpoints/golden-breeze-170/epoch=127-step=232409-val/loss_epoch=0.28.ckpt",
     )

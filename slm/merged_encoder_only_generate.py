@@ -2,7 +2,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-from merged_train import DecoderOnlyModel
+from merged_encoder_only_train import EncoderOnlyModel
 from util import piano_roll
 
 #%%
@@ -14,8 +14,8 @@ device = "cuda:7"
 #     map_location=device,
 # )
 
-model = DecoderOnlyModel.load_from_checkpoint(
-    "../checkpoints/azure-frog-129/epoch=135-step=352027-val/loss=0.28-trn/loss=0.29.ckpt",
+model = EncoderOnlyModel.load_from_checkpoint(
+    "../checkpoints/silver-river-218/epoch=12-step=11726-val/loss_epoch=0.63.ckpt",
     map_location=device,
 )
 
@@ -106,10 +106,11 @@ mask = model.tokenizer.infilling_mask(x,beat_range,
 
 y = model.generate(
     mask,
-    max_len=model.tokenizer.total_len,
-    temperature=1.0,
-    top_p=1.0,
-    top_k=0,
+    temperature=0.8,
+    sampling_steps=300*9,
+    schedule_fn=lambda x: x,
+    # top_p=1.0,
+    # top_k=0,
 )
 
 y_idx = y[0].cpu().numpy().argmax(axis=1)
@@ -151,9 +152,10 @@ mask = model.tokenizer.shuffle_notes_mask(x)[None, ...].to(model.device).float()
 y = model.generate(
     mask,
     max_len=model.tokenizer.total_len,
+    schedule_fn=lambda x: x,
     temperature=1.0,
-    top_p=1,
-    top_k=10,
+    # top_p=1,
+    # top_k=10,
 )
 
 x_sm = model.tokenizer.decode(x)

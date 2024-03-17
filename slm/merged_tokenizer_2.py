@@ -182,6 +182,58 @@ class MergedTokenizer2():
                         format_mask[note_idx * self.attributes_per_note + attr_idx, self.token2idx[token]] = 1
         return format_mask
     
+    # def fix_undefined(self, x):
+
+    #     x = x.reshape((self.config["max_notes"], len(self.note_attribute_order)))
+
+    #     # undefined mask
+    #     undefined_tokens = [attr + ":-" for attr in self.note_attribute_order]
+    #     undefined_token_idxs = [self.token2idx[token] for token in undefined_tokens]
+    #     undefned_token_idx = np.array(undefined_token_idxs)
+
+    #     # if any attribute is undefined, set all attributes to undefined
+    #     for note_idx in range(self.config["max_notes"]):
+    #         if (x[note_idx, :] == undefned_token_idx).any(axis=0):
+    #             x[note_idx, :] = undefned_token_idx
+        
+    #     return torch.tensor(x.reshape((self.config["max_notes"] * len(self.note_attribute_order))))
+        
+    
+
+    def shuffle_notes_mask(self, x, same_onset_times=False):
+
+        note_mask = np.zeros((len(self.note_attribute_order), len(self.vocab)), dtype=int)
+
+        onset_beat_tokens = [token for token in self.vocab if token.startswith("onset/beat")]
+        onset_tick_tokens = [token for token in self.vocab if token.startswith("onset/tick")]
+        offset_beat_tokens = [token for token in self.vocab if token.startswith("offset/beat")]
+        offset_tick_tokens = [token for token in self.vocab if token.startswith("offset/tick")]
+
+        # get token idxs
+        onset_beat_idxs = [self.token2idx[token] for token in onset_beat_tokens]
+        onset_tick_idxs = [self.token2idx[token] for token in onset_tick_tokens]
+        offset_beat_idxs = [self.token2idx[token] for token in offset_beat_tokens]
+        offset_tick_idxs = [self.token2idx[token] for token in offset_tick_tokens]
+
+        note_mask[self.note_attribute_order.index("onset/beat"), onset_beat_idxs] = 1
+        note_mask[self.note_attribute_order.index("onset/tick"), onset_tick_idxs] = 1
+        note_mask[self.note_attribute_order.index("offset/beat"), offset_beat_idxs] = 1
+        note_mask[self.note_attribute_order.index("offset/tick"), offset_tick_idxs] = 1
+
+        # repeat max notes times in the first dimension
+        note_mask = np.tile(note_mask, (self.config["max_notes"], 1))
+
+        # one hot encode x
+        x_1h = np.zeros((len(self.note_attribute_order)*self.config["max_notes"], len(self.vocab)), dtype=int)
+        x_1h[np.arange(len(x_1h)), x] = 1
+
+        # add to x and clamp
+        x_1h = x_1h + note_mask
+        x_1h = np.clip(x_1h, 0, 1)
+        return torch.tensor(x_1h)
+
+
+    
     def infilling_mask(self, x, beat_range=None, pitches=None, max_notes=None):
         '''
         beat_range: tuple of ints, (min_beat, max_beat) : list of strings. If None, defaults to entire beat range.
