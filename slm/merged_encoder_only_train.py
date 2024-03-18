@@ -30,6 +30,7 @@ class EncoderOnlyModel(pl.LightningModule):
         one_hot_input=False,
         normalize_by_masking_ratio=False,
         learning_rate_gamma=0.9,
+        x_bias = -1e5
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -55,6 +56,8 @@ class EncoderOnlyModel(pl.LightningModule):
             num_layers=n_layers,
         )
 
+        self.x_bias = x_bias
+
         self.decoder_output_layer = nn.Linear(hidden_size, vocab_size)
         
         self.seq_len = max_seq_len
@@ -71,7 +74,8 @@ class EncoderOnlyModel(pl.LightningModule):
         # get shape
         batch, time_attr, ft = x.shape
 
-        x = x * self.format_mask[None, ...].to(self.device)
+        format_mask = self.format_mask[None, ...].to(x.device)
+        x = x * format_mask
 
         x = einops.rearrange(x, "b (t a) ft -> b t a ft", a=self.n_attributes)
 
@@ -90,79 +94,80 @@ class EncoderOnlyModel(pl.LightningModule):
 
         decoder_logits = self.decoder_output_layer(note_z)
 
-        decoder_logits = decoder_logits - (1-x)*1e5
+        decoder_logits = decoder_logits + self.x_bias * (1-x)
 
         decoder_logits = einops.rearrange(decoder_logits, "b t a v -> b (t a) v", a=self.n_attributes)
+        # decoder_logits = decoder_logits - (1 - format_mask) * 1e5
+
         # crop to decoder length
         return decoder_logits
     
 
-    def generate(self, x, sampling_steps, temperature, schedule_fn):
-        x = x
-        # multiply by format mask
-        x = x * self.format_mask[None, ...].to(x.device)
-        batch, time_attr, ft = x.shape
-        # linspace from schedule
-        schedule = (
-            torch.linspace(0, 1, sampling_steps, dtype=torch.float32, device=x.device)
-        )
-        schedule = schedule_fn(schedule)
-        total_tokens = time_attr
-        # count number of known tokens
-        masked_tokens = (x.sum(-1) > 1).sum().int()
-        # find masking ratio
-        masking_ratio = masked_tokens / total_tokens
-
-        # find step in schedule
-        step = torch.argmin((1 - schedule - masking_ratio).abs())
-
-        print(f"step: {step}")
-        for i in range(step + 1, sampling_steps):
-            print(f"step: {i}")
-
-            logits = self(x.float())
-
-            # invert probs
-            # flatten
-            flat_logits = einops.rearrange(logits, "b ta v -> (b ta) v")
-
-            flat_probs = F.softmax(flat_logits / temperature, dim=-1)
-
-            sampled = torch.multinomial(flat_probs, 1).squeeze(-1)
-
-            print(f"sampled: {sampled.shape}")
-
-            flat_x = einops.rearrange(x, "b ta v -> (b ta) v")
-
-            masked_indices = torch.where(flat_x.sum(-1) > 1)[0]
-            #
-            n_masked = masked_indices.shape[0]
-            print(f"n_masked: {n_masked}")
-            target_masking_ratio = 1 - schedule[i].item()
-
-            target_n_masked = int(total_tokens * target_masking_ratio)
-            # tokens to unmask
-
-            n_tokens_to_unmask = n_masked - target_n_masked
-
-            print(f"n_tokens_to_unmask: {n_tokens_to_unmask}")
-
-            # get indices of tokens to unmask
-            # get indices of masked tokens
-            # shuffle masked indices
-            masked_indices = masked_indices[torch.randperm(n_masked)]
-            indices_to_unmask = masked_indices[:n_tokens_to_unmask]
-
-            # replace with sampled values
-            flat_x[indices_to_unmask] = torch.nn.functional.one_hot(
-                sampled[indices_to_unmask], num_classes=flat_x.shape[-1]
-            ).float()
-
-            # plot
-
-            x = einops.rearrange(
-                flat_x, "(b ta) v -> b ta v", b=batch, ta=time_attr
+    def generate(self, x, sampling_steps, temperature, top_p=1, top_k=0, schedule_fn=lambda x: x):
+        self.eval()
+        with torch.no_grad():
+            x = x
+            # multiply by format mask
+            x = x * self.format_mask[None, ...].to(x.device)
+            batch, time_attr, ft = x.shape
+            # linspace from schedule
+            schedule = (
+                torch.linspace(0, 1, sampling_steps, dtype=torch.float32, device=x.device)
             )
+            schedule = schedule_fn(schedule)
+            total_tokens = time_attr
+            # count number of known tokens
+            masked_tokens = (x.sum(-1) > 1).sum().int()
+            # find masking ratio
+            masking_ratio = masked_tokens / total_tokens
+
+            # find step in schedule
+            step = torch.argmin((1 - schedule - masking_ratio).abs())
+
+            for i in tqdm(range(step + 1, sampling_steps)):
+
+                logits = self(x.float())
+
+                # invert probs
+                # flatten
+                flat_logits = einops.rearrange(logits, "b ta v -> (b ta) v")
+
+                flat_logits = top_k_top_p_filtering(flat_logits, top_k=top_k, top_p=top_p)
+
+                flat_probs = F.softmax(flat_logits / temperature, dim=-1)
+
+                sampled = torch.multinomial(flat_probs, 1).squeeze(-1)
+
+
+                flat_x = einops.rearrange(x, "b ta v -> (b ta) v")
+
+                masked_indices = torch.where(flat_x.sum(-1) > 1)[0]
+                #
+                n_masked = masked_indices.shape[0]
+                target_masking_ratio = 1 - schedule[i].item()
+
+                target_n_masked = int(total_tokens * target_masking_ratio)
+                # tokens to unmask
+
+                n_tokens_to_unmask = n_masked - target_n_masked
+
+
+                # get indices of tokens to unmask
+                # get indices of masked tokens
+                # shuffle masked indices
+                masked_indices = masked_indices[torch.randperm(n_masked)]
+                indices_to_unmask = masked_indices[:n_tokens_to_unmask]
+
+                # replace with sampled values
+                flat_x[indices_to_unmask] = torch.nn.functional.one_hot(
+                    sampled[indices_to_unmask], num_classes=flat_x.shape[-1]
+                ).float()
+
+                # plot
+
+                x = einops.rearrange(
+                    flat_x, "(b ta) v -> b ta v", b=batch, ta=time_attr
+                )
         return x
 
     def step(self, batch, batch_idx):
@@ -176,6 +181,17 @@ class EncoderOnlyModel(pl.LightningModule):
         # create masking ratios
         masking_ratios = torch.rand(batch_size, device=self.device)
         mask = torch.rand_like(x, device=self.device)<masking_ratios[:,None,None]
+
+        # attr_mask 
+        masking_ratios_bis = torch.rand(batch_size, device=self.device)
+        attr_mask = (
+            torch.rand((x.shape[0], x.shape[1]), device=self.device)
+            < masking_ratios_bis[:, None]
+        )
+        attr_mask = attr_mask[:,:,None]
+
+        mask = mask * attr_mask
+
         # mask encoder input
         # encoder input is mask or token tensor with undefined
         encoder_input = torch.clamp(x + mask, 0, 1)
@@ -365,7 +381,7 @@ if __name__ == "__main__":
         max_notes=tokenizer_config["max_notes"],
     )
   
-    BATCH_SIZE = 64
+    BATCH_SIZE = 128
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds,
@@ -384,19 +400,20 @@ if __name__ == "__main__":
     )
     
     model = EncoderOnlyModel(
-        hidden_size=768,
-        n_heads=12,
-        feed_forward_size=4*768,
-        n_layers=12,
+        hidden_size=512,
+        n_heads=8,
+        feed_forward_size=4*512,
+        n_layers=8,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
-        learning_rate=5e-5,
+        learning_rate=1e-4,
         tokenizer_config=tokenizer_config,
         normalize_by_masking_ratio=False,
         learning_rate_gamma=0.99,
+        x_bias=-1e9,
     )
 
-    # model = DecoderOnlyModel.load_from_checkpoint(
+    # model = EncoderOnlyOnlyModel.load_from_checkpoint(
     #     checkpoint_path="checkpoints/breezy-tree-179/epoch=22-step=27209-val/loss_epoch=0.32.ckpt",
     #     learning_rate_gamma=0.99,
     #     normalize_by_masking_ratio=False,
@@ -415,7 +432,7 @@ if __name__ == "__main__":
     accelerator="gpu",
     devices=[2,3,5,6],
     # precision="16-mixed",
-    max_epochs=None,
+    max_epochs=10_000,
     log_every_n_steps=1,
     # val_check_interval=10,
     callbacks=[progress_bar_callback,
@@ -438,9 +455,5 @@ if __name__ == "__main__":
         model,
         trn_dl,
         val_dl,
-        # ckpt_path="checkpoints/breezy-tree-179/epoch=22-step=27209-val/loss_epoch=0.32.ckpt"
-        # ckpt_path="checkpoints/amber-bird-150/epoch=10-step=8943-val/loss_epoch=0.35.ckpt",
-        # ckpt_path="checkpoints/unique-smoke-143/epoch=57-step=188140-val/loss=0.29-trn/loss=0.35.ckpt",
-        # ckpt_path="checkpoints/hardy-firebrand-147/epoch=60-step=188792-val/loss_epoch=0.28.ckpt",
-        # ckpt_path="checkpoints/golden-breeze-170/epoch=127-step=232409-val/loss_epoch=0.28.ckpt",
+        # ckpt_path="checkpoints/silver-river-218/epoch=12-step=11726-val/loss_epoch=0.63.ckpt",
     )

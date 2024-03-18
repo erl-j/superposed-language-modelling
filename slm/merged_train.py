@@ -540,5 +540,5 @@ if __name__ == "__main__":
         # ckpt_path="checkpoints/amber-bird-150/epoch=10-step=8943-val/loss_epoch=0.35.ckpt",
         # ckpt_path="checkpoints/unique-smoke-143/epoch=57-step=188140-val/loss=0.29-trn/loss=0.35.ckpt",
         # ckpt_path="checkpoints/hardy-firebrand-147/epoch=60-step=188792-val/loss_epoch=0.28.ckpt",
-        ckpt_path="checkpoints/golden-breeze-170/epoch=127-step=232409-val/loss_epoch=0.28.ckpt",
+        # ckpt_path="checkpoints/golden-breeze-170/epoch=127-step=232409-val/loss_epoch=0.28.ckpt",
     )

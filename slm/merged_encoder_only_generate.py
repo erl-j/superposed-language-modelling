@@ -15,7 +15,7 @@ device = "cuda:7"
 # )
 
 model = EncoderOnlyModel.load_from_checkpoint(
-    "../checkpoints/silver-river-218/epoch=12-step=11726-val/loss_epoch=0.63.ckpt",
+    "../checkpoints/apricot-brook-230/epoch=16-step=15334-val/loss_epoch=0.18.ckpt",
     map_location=device,
 )
 
@@ -84,7 +84,7 @@ val_ds = MidiDataset(
 
 #%%
 
-x = val_ds[17]
+x = val_ds[10]
 
 # plot the piano roll
 x_sm = model.tokenizer.decode(x)
@@ -100,17 +100,16 @@ pitch_range = [f"pitch:{i}" for i in range(50,model.tokenizer.config["pitch_rang
 
 # make infilling mask
 mask = model.tokenizer.infilling_mask(x,beat_range,
-                                     max_notes=x_sm.note_num(),
+                                    #  max_notes=x_sm.note_num(),
                                     # pitches=pitch_range,
                                       )[None,...].to(model.device).float()
 
 y = model.generate(
     mask,
-    temperature=0.8,
+    temperature=1.0,
     sampling_steps=300*9,
     schedule_fn=lambda x: x,
-    # top_p=1.0,
-    # top_k=0,
+    top_k=10,
 )
 
 y_idx = y[0].cpu().numpy().argmax(axis=1)
@@ -145,17 +144,17 @@ y_sm.dump_midi("../artefacts/infill_result.mid")
 
 plt.figure(figsize=(10, 10))
 
-x = val_ds[5]
+x = val_ds[10]
 
 mask = model.tokenizer.shuffle_notes_mask(x)[None, ...].to(model.device).float()
 
 y = model.generate(
     mask,
-    max_len=model.tokenizer.total_len,
+    sampling_steps=300*9,
     schedule_fn=lambda x: x,
-    temperature=1.0,
+    temperature=1,
     # top_p=1,
-    # top_k=10,
+    top_k=10,
 )
 
 x_sm = model.tokenizer.decode(x)
@@ -200,10 +199,10 @@ a = model.format_mask[None,...].to(model.device)
 # print(model.tokenizer.tempo_bins)
 
 c = model.tokenizer.constraint_mask(
-    # tags=["metal"],
-    # instruments=["Bass","Guitar","Drums"],
+    tags=["pop"],
+    instruments=["Bass","Guitar","Drums"],
     tempos = ["138"],
-    # scale = "G major",
+    scale = "G major",
     min_notes=20,
     max_notes=280,
 )[None,...].to(model.device)
@@ -212,10 +211,10 @@ a = c*a
 
 # Generate a sequence
 sequence = model.generate(a,
-                        max_len=model.tokenizer.total_len, 
-                        temperature=0.95,
-                        top_p=1.0,
-                          top_k=0,
+                        sampling_steps=300*9,
+                        schedule_fn=lambda x: x, 
+                        temperature=1.0,
+                        top_k=0,
                         )
 
 
