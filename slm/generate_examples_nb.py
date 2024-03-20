@@ -33,14 +33,13 @@ TMP_DIR = ROOT_DIR + "artefacts/tmp"
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-#%%
 def preview(sm, tmp_dir):
     # SAMPLE_RATE = 44_100
     os.makedirs(tmp_dir, exist_ok=True)
     midi_path = tmp_dir + "/tmp.mid"
     audio_path = tmp_dir + "/output.wav"
     sm.dump_midi(midi_path)
-    pr = piano_roll(x_sm)
+    pr = piano_roll(sm)
     plt.figure(figsize=(10, 10))
     sns.heatmap(pr, cmap="magma")
     plt.show()
@@ -49,165 +48,377 @@ def preview(sm, tmp_dir):
     ipd.display(ipd.Audio(audio_path))
 
 #%%
-for i in ds[50]:
+    
+# import random
 
-    # plot the piano roll
-    x_sm = model.tokenizer.decode(x)
+# for i in random.sample(range(len(ds)), 3):
+#     print(f"Example {i}")
 
-    preview(x_sm, TMP_DIR)
+#     x = ds[i]
 
-#%%
+#     # plot the piano roll
+#     x_sm = model.tokenizer.decode(x)
 
-
-
-print(f"Number of notes: {x_sm.note_num()}")
-      
-# beat range
-# beat_range=(8,12)
-beat_range=(0,16)
-pitch_range = [f"pitch:{i}" for i in range(50,model.tokenizer.config["pitch_range"][1])]
-
-# make infilling mask
-mask = model.tokenizer.infilling_mask(x,
-                                      beat_range,
-                                    #   max_notes = 270,
-                                     max_notes=x_sm.note_num(),
-                                    pitches=pitch_range,
-                                      )[None,...].to(model.device).float()
-
-y = model.generate(
-    mask,
-    temperature=1.0,
-    sampling_steps=300*9,
-    schedule_fn=lambda x: x,
-    top_p=1,
-    top_k=20,
-)
-
-y_idx = y[0].cpu().numpy().argmax(axis=1)
-
-y_sm = model.tokenizer.decode(y_idx)
-
-print(f"Number of notes: {y_sm.note_num()}")
-
-pr2 = piano_roll(y_sm)
-# use a grid
-
-
-x_sm.dump_midi("../artefacts/infill_original.mid")
-
-plt.figure(figsize=(10, 10))
-sns.heatmap(pr, cmap="magma")
-plt.vlines(beat_range[0] * 4, 0, pr.shape[0], color="white")
-plt.vlines(beat_range[1] * 4, 0, pr.shape[0], color="white")
-plt.show()
-
-# add h lines for the beat range
-plt.figure(figsize=(10, 10))
-sns.heatmap(pr2, cmap="magma")
-plt.vlines(beat_range[0] * 4, 0, pr2.shape[0], color="white")
-plt.vlines(beat_range[1] * 4, 0, pr2.shape[0], color="white")
-plt.show()
-
-# save
-y_sm.dump_midi("../artefacts/infill_result.mid")
+#     preview(x_sm, TMP_DIR)
 
 #%%
 
-plt.figure(figsize=(10, 10))
+RESAMPLE_IDX = 17009
 
-x = val_ds[30]
-
-mask = model.tokenizer.shuffle_notes_mask(x)[None, ...].to(model.device).float()
-
-y = model.generate(
-    mask,
-    sampling_steps=300*9,
-    schedule_fn=lambda x: x,
-    temperature=1,
-    # top_p=1,
-    top_k=0,
-)
-
+x = ds[RESAMPLE_IDX]
 x_sm = model.tokenizer.decode(x)
 
-# print tempo
-print(x_sm.tempos[0])
+x_sm.dump_midi(OUTPUT_DIR + "/resample_original.mid")
 
-# print number of notes
-print(x_sm.note_num())
+#%%
 
-pr = piano_roll(x_sm)
+mask = model.tokenizer.replace_mask(x, ["pitch"]).to(model.device).float()
 
-x_sm.dump_midi("../artefacts/shuffle_original.mid")
+y = model.generate(
+    mask,
+    temperature=0.85,
+)[0].cpu().numpy().argmax(axis=-1)
 
-y_sm = model.tokenizer.decode(y[0].cpu().numpy().argmax(axis=1))
+y_sm = model.tokenizer.decode(y)
 
-pr2 = piano_roll(y_sm)
+preview(y_sm, TMP_DIR)
 
-# print number of notes
-print(y_sm.note_num())
+y_sm.dump_midi(OUTPUT_DIR + "/slm_replace_pitch.mid")
 
-plt.figure(figsize=(10, 10))
-sns.heatmap(pr, cmap="magma")
-plt.show()
+#%% 
 
-# add h lines for the beat range
-plt.figure(figsize=(10, 10))
-sns.heatmap(pr2, cmap="magma")
-plt.show()
+# replace pitch with pitch set constraint
 
-# save
-y_sm.dump_midi("../artefacts/shuffle_result.mid")
+# bug with drums?
+
+mask = model.tokenizer.replace_mask(x, ["pitch"]).to(model.device).float()
+
+mask2 = model.tokenizer.constraint_mask(
+    scale="G pentatonic",
+    min_notes=0,
+)[None, ...].to(model.device).float()
+
+mask = mask * mask2
+
+y = (
+    model.generate(
+        mask,
+        temperature=1.0,
+        schedule_fn=lambda x: x,
+        top_p=1,
+        top_k=0,
+    )[0]
+    .cpu()
+    .numpy()
+    .argmax(axis=-1)
+)
+
+y_sm = model.tokenizer.decode(y)
+
+preview(y_sm, TMP_DIR)
+
+y_sm.dump_midi(OUTPUT_DIR + "/slm_replace_pitch_pentatonic.mid")
 
 
 #%%
 
+mask = model.tokenizer.replace_mask(x, ["instrument"]).to(model.device).float()
+
+y = (
+    model.generate(
+        mask,
+        temperature=0.9,
+        schedule_fn=lambda x: x,
+        top_p=1,
+        top_k=0,
+    )[0]
+    .cpu()
+    .numpy()
+    .argmax(axis=-1)
+)
+
+y_sm = model.tokenizer.decode(y)
+
+preview(y_sm, TMP_DIR)
+
+y_sm.dump_midi(OUTPUT_DIR + "/slm_replace_instrument.mid")
 
 #%%
-# Generate a sequence
-a = model.format_mask[None,...].to(model.device)
 
-# print(model.tokenizer.tempo_bins)
+mask = model.tokenizer.replace_mask(x, ["instrument"]).to(model.device).float()
 
+mask2 = (
+    model.tokenizer.constraint_mask(
+        instruments=["Bass","Guitar","Drums"],
+        min_notes=0,
+    )[None, ...]
+    .to(model.device)
+    .float()
+)
+
+mask = mask * mask2
+
+y = (
+    model.generate(
+        mask,
+        temperature=1.0,
+        schedule_fn=lambda x: x,
+        top_p=1,
+        top_k=0,
+    )[0]
+    .cpu()
+    .numpy()
+    .argmax(axis=-1)
+)
+
+y_sm = model.tokenizer.decode(y)
+
+preview(y_sm, TMP_DIR)
+
+
+y_sm.dump_midi(OUTPUT_DIR + "/slm_replace_instrument_w_constraint.mid")
+#%%
+
+mask = model.tokenizer.replace_mask(x, ["onset/beat","onset/tick","offset/beat","offset/tick"]).to(model.device).float()
+
+y = (
+    model.generate(
+        mask,
+        temperature=0.9,
+        schedule_fn=lambda x: x,
+        top_p=1,
+        top_k=0,
+    )[0]
+    .cpu()
+    .numpy()
+    .argmax(axis=-1)
+)
+
+y_sm = model.tokenizer.decode(y)
+
+preview(y_sm, TMP_DIR)
+
+y_sm.dump_midi(OUTPUT_DIR + "/slm_replace_onset_offset.mid")
+
+#%%
+
+mask = (
+    model.tokenizer.replace_mask(
+        x, ["velocity"]
+    )
+    .to(model.device)
+    .float()
+)
+
+y = (
+    model.generate(
+        mask,
+        temperature=1.0,
+        schedule_fn=lambda x: x,
+        top_p=1,
+        top_k=0,
+    )[0]
+    .cpu()
+    .numpy()
+    .argmax(axis=-1)
+)
+
+y_sm = model.tokenizer.decode(y)
+
+preview(y_sm, TMP_DIR)
+
+y_sm.dump_midi(OUTPUT_DIR + "/slm_replace_velocity.mid")
+
+
+#%%
+
+a = model.format_mask[None, ...].to(model.device)
 c = model.tokenizer.constraint_mask(
     # tags=["dance-eletric"],
     # tags=["other"],
     # instruments=["Ensemble"],
     # tempos = ["126"],
-    scale = "G major",
-    min_notes=120,
-    max_notes=180,
-)[None,...].to(model.device)
-a = c*a
-
+    scale="D pentatonic",
+    min_notes=50,
+    max_notes=250,
+)[None, ...].to(model.device)
+a = c * a
 
 # Generate a sequence
-sequence = model.generate(a,
-                        sampling_steps=300*9,
-                        schedule_fn=lambda x: x, 
-                        temperature=0.9,
-                        top_p = 1.0,
-                        # top_k=30,
-                        )
-
-
-token_idx = sequence[0].argmax(axis=1)
+y = model.generate(
+    a
+    schedule_fn=lambda x: x,
+    temperature=1.0,
+    top_p=1.0,
+    top_k=0,
+)[0].argmax(axis=1)
 
 # decode
-sm = model.tokenizer.decode(token_idx)
+y_sm = model.tokenizer.decode(y)
 
-# print number of notes
-print(sm.note_num())
+print(f"Number of notes: {y_sm.note_num()}")
 
-pr = piano_roll(sm)
+preview(y_sm, TMP_DIR)
 
-plt.figure(figsize=(10, 10))
-sns.heatmap(pr, cmap="magma")
-plt.show()
+y_sm.dump_midi(OUTPUT_DIR + "/pitch_set_constraint_c.mid")
 
-# save the sequence
-sm.dump_midi("../artefacts/generated.mid")
+
+#%%
+
+x_sm = model.tokenizer.decode(x)
+
+print(f"Number of notes: {x_sm.note_num()}")
+# beat range
+# beat_range=(8,12)
+beat_range=(0,16)
+pitch_range = [f"pitch:{i}" for i in range(50,model.tokenizer.config["pitch_range"][1])]
+# make infilling mask
+mask = (
+    model.tokenizer.infilling_mask(
+        x,
+        beat_range,
+        min_notes=x_sm.note_num(),
+        max_notes=x_sm.note_num(),
+        pitches=pitch_range,
+    )[None, ...]
+    .to(model.device)
+    .float()
+)
+
+y = model.generate(
+    mask,
+    temperature=1.0,
+    sampling_steps=300*9,
+    top_p=0.98
+)[0].cpu().numpy().argmax(axis=-1)
+y_sm = model.tokenizer.decode(y)
+
+# print n notes
+print(f"Number of notes: {y_sm.note_num()}")
+
+preview(y_sm, TMP_DIR)
+y_sm.dump_midi(OUTPUT_DIR + "/infilling_high.mid")
+
+#%%
+
+x_sm = model.tokenizer.decode(x)
+
+# beat range
+# beat_range=(8,12)
+beat_range = (0, 16)
+pitch_range = [
+    f"pitch:{i}" for i in range(model.tokenizer.config["pitch_range"][0], 51)
+]
+# make infilling mask
+mask = (
+    model.tokenizer.infilling_mask(
+        x,
+        beat_range,
+        min_notes=x_sm.note_num(),
+        max_notes=x_sm.note_num(),
+        pitches=pitch_range,
+    )[None, ...]
+    .to(model.device)
+    .float()
+)
+
+y = (
+    model.generate(
+        mask,
+        temperature=1.0,
+        schedule_fn=lambda x: x,
+        top_p=0.98,
+        top_k=0,
+    )[0]
+    .cpu()
+    .numpy()
+    .argmax(axis=-1)
+)
+y_sm = model.tokenizer.decode(y)
+
+
+preview(y_sm, TMP_DIR)
+y_sm.dump_midi(OUTPUT_DIR + "//infilling_low.mid")
+
+
+#%%
+
+
+x_sm = model.tokenizer.decode(x)
+
+beat_range = (4, 12)
+pitch_range = [
+    f"pitch:{i}" for i in range(40,60)
+]
+
+# make infilling mask
+mask = (
+    model.tokenizer.infilling_mask(
+        x,
+        beat_range=beat_range,
+        min_notes=x_sm.note_num(),
+        max_notes=x_sm.note_num(),
+    )[None, ...]
+    .to(model.device)
+    .float()
+)
+
+y = (
+    model.generate(
+        mask,
+        temperature=1.0,
+        schedule_fn=lambda x: x,
+        top_p=0.95,
+        top_k=0,
+    )[0]
+    .cpu()
+    .numpy()
+    .argmax(axis=-1)
+)
+y_sm = model.tokenizer.decode(y)
+
+
+preview(y_sm, TMP_DIR)
+y_sm.dump_midi(OUTPUT_DIR + "//infilling_middle.mid")
+
+
+#%%
+
+x_sm = model.tokenizer.decode(x)
+
+# beat range
+# beat_range=(8,12)
+beat_range = (4, 12)
+
+# make infilling mask
+mask = (
+    model.tokenizer.infilling_mask(
+        x,
+        beat_range=beat_range,
+        min_notes=x_sm.note_num(),
+        max_notes=x_sm.note_num(),
+    )[None, ...]
+    .to(model.device)
+    .float()
+)
+
+y = (
+    model.generate(
+        mask,
+        temperature=1.0,
+        schedule_fn=lambda x: x,
+        top_p=0.98,
+        top_k=0,
+    )[0]
+    .cpu()
+    .numpy()
+    .argmax(axis=-1)
+)
+y_sm = model.tokenizer.decode(y)
+
+
+preview(y_sm, TMP_DIR)
+y_sm.dump_midi(OUTPUT_DIR + "//infilling_box.mid")
 
 #%%
 

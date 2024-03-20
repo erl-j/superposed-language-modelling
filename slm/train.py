@@ -106,7 +106,9 @@ class EncoderOnlyModel(pl.LightningModule):
         return decoder_logits
     
 
-    def generate(self, x, sampling_steps, temperature, top_p=1, top_k=0, schedule_fn=lambda x: x):
+    def generate(self, x, sampling_steps=None, temperature=1, top_p=1, top_k=0, schedule_fn=lambda x: x):
+        if sampling_steps is None:
+            sampling_steps = self.tokenizer.config["max_notes"]*len(self.tokenizer.note_attribute_order)
         self.eval()
         with torch.no_grad():
             x = x
@@ -153,7 +155,6 @@ class EncoderOnlyModel(pl.LightningModule):
                 # tokens to unmask
 
                 n_tokens_to_unmask = n_masked - target_n_masked
-
 
                 # get indices of tokens to unmask
                 # get indices of masked tokens
