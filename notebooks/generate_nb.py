@@ -2,25 +2,28 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-from merged_train import DecoderOnlyModel
+from slm.train import EncoderOnlyModel
 from util import piano_roll
+
+device = "cuda:7"
 
 #%%
 
-device = "cuda:7"
 
 # model = DecoderOnlyModel.load_from_checkpoint(
 #     "../checkpoints/golden-breeze-170/epoch=127-step=232409-val/loss_epoch=0.28.ckpt",
 #     map_location=device,
 # )
 
-model = DecoderOnlyModel.load_from_checkpoint(
-    "../checkpoints/azure-frog-129/epoch=135-step=352027-val/loss=0.28-trn/loss=0.29.ckpt",
+model = EncoderOnlyModel.load_from_checkpoint(
+    "./checkpoints/eager-darkness-234/epoch=65-step=76230-val/loss_epoch=0.15.ckpt",
     map_location=device,
 )
 
-# Move the model to the device
-model = model.to(device)
+print(model.transformer.layers[1].norm_first)
+# print model layers
+print(model)
+#%%
 
 
 #%%
@@ -84,7 +87,7 @@ val_ds = MidiDataset(
 
 #%%
 
-x = val_ds[17]
+x = val_ds[20]
 
 # plot the piano roll
 x_sm = model.tokenizer.decode(x)
@@ -94,22 +97,25 @@ pr = piano_roll(x_sm)
 print(f"Number of notes: {x_sm.note_num()}")
       
 # beat range
-beat_range=(8,12)
-
+# beat_range=(8,12)
+beat_range=(0,16)
 pitch_range = [f"pitch:{i}" for i in range(50,model.tokenizer.config["pitch_range"][1])]
 
 # make infilling mask
-mask = model.tokenizer.infilling_mask(x,beat_range,
+mask = model.tokenizer.infilling_mask(x,
+                                      beat_range,
+                                    #   max_notes = 270,
                                      max_notes=x_sm.note_num(),
-                                    # pitches=pitch_range,
+                                    pitches=pitch_range,
                                       )[None,...].to(model.device).float()
 
 y = model.generate(
     mask,
-    max_len=model.tokenizer.total_len,
     temperature=1.0,
-    top_p=1.0,
-    top_k=0,
+    sampling_steps=300*9,
+    schedule_fn=lambda x: x,
+    top_p=1,
+    top_k=20,
 )
 
 y_idx = y[0].cpu().numpy().argmax(axis=1)
@@ -144,16 +150,17 @@ y_sm.dump_midi("../artefacts/infill_result.mid")
 
 plt.figure(figsize=(10, 10))
 
-x = val_ds[5]
+x = val_ds[30]
 
 mask = model.tokenizer.shuffle_notes_mask(x)[None, ...].to(model.device).float()
 
 y = model.generate(
     mask,
-    max_len=model.tokenizer.total_len,
-    temperature=1.0,
-    top_p=1,
-    top_k=10,
+    sampling_steps=300*9,
+    schedule_fn=lambda x: x,
+    temperature=1,
+    # top_p=1,
+    top_k=0,
 )
 
 x_sm = model.tokenizer.decode(x)
@@ -198,22 +205,24 @@ a = model.format_mask[None,...].to(model.device)
 # print(model.tokenizer.tempo_bins)
 
 c = model.tokenizer.constraint_mask(
-    # tags=["metal"],
-    # instruments=["Bass","Guitar","Drums"],
-    tempos = ["138"],
-    # scale = "G major",
-    min_notes=20,
-    max_notes=280,
+    # tags=["dance-eletric"],
+    # tags=["other"],
+    # instruments=["Ensemble"],
+    # tempos = ["126"],
+    scale = "G major",
+    min_notes=120,
+    max_notes=180,
 )[None,...].to(model.device)
 a = c*a
 
 
 # Generate a sequence
 sequence = model.generate(a,
-                        max_len=model.tokenizer.total_len, 
-                        temperature=0.95,
-                        top_p=1.0,
-                          top_k=0,
+                        sampling_steps=300*9,
+                        schedule_fn=lambda x: x, 
+                        temperature=0.9,
+                        top_p = 1.0,
+                        # top_k=30,
                         )
 
 

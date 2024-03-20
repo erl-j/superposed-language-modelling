@@ -2,100 +2,62 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-from merged_encoder_only_train import EncoderOnlyModel
-from util import piano_roll
 from data import MidiDataset
+from train import EncoderOnlyModel
+from util import piano_roll
 import os
-
-#%%
+import IPython.display as ipd
 
 device = "cuda:7"
 
+ROOT_DIR = "../"
+
 model = EncoderOnlyModel.load_from_checkpoint(
-    "../checkpoints/eager-darkness-234/epoch=65-step=76230-val/loss_epoch=0.15.ckpt",
+    ROOT_DIR+ "checkpoints/eager-darkness-234/epoch=65-step=76230-val/loss_epoch=0.15.ckpt",
     map_location=device,
 )
-#%%
 
-N_BARS = 4
-
-genre_list = [
-    "other",
-    "pop",
-    "rock",
-    "italian%2cfrench%2cspanish",
-    "classical",
-    "romantic",
-    "renaissance",
-    "alternative-indie",
-    "metal",
-    "traditional",
-    "country",
-    "baroque",
-    "punk",
-    "modern",
-    "jazz",
-    "dance-eletric",
-    "rnb-soul",
-    "medley",
-    "blues",
-    "hip-hop-rap",
-    "hits of the 2000s",
-    "instrumental",
-    "midi karaoke",
-    "folk",
-    "newage",
-    "latino",
-    "hits of the 1980s",
-    "hits of 2011 2020",
-    "musical%2cfilm%2ctv",
-    "reggae-ska",
-    "hits of the 1970s",
-    "christian-gospel",
-    "world",
-    "early_20th_century",
-    "hits of the 1990s",
-    "grunge",
-    "australian artists",
-    "funk",
-    "best of british",
-]
-
+MODEL_BARS = 4
 # Load the dataset
-val_ds = MidiDataset(
-    cache_path="./artefacts/val_midi_records.pt",
-    path_filter_fn=lambda x: f"n_bars={N_BARS}" in x,
-    genre_list=genre_list,
+ds = MidiDataset(
+    cache_path=ROOT_DIR+"artefacts/tst_midi_records.pt",
+    path_filter_fn=lambda x: f"n_bars={MODEL_BARS}" in x,
+    genre_list=model.tokenizer.config["tags"],
     tokenizer=model.tokenizer,
-    min_notes=8 * N_BARS,
+    min_notes=8 * MODEL_BARS,
     max_notes=model.tokenizer.config["max_notes"],
 )
 
-#%%
-OUTPUT_DIR = "./artefacts/examples"
+OUTPUT_DIR = ROOT_DIR + "artefacts/examples"
+TMP_DIR = ROOT_DIR + "artefacts/tmp"
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-x = val_ds[20]
-x_sm = model.tokenizer.decode(x)
-pr = piano_roll(x_sm)
-# dump original
-x_sm.dump_midi(os.path.join(OUTPUT_DIR, "original.mid"))
+#%%
+def preview(sm, tmp_dir):
+    # SAMPLE_RATE = 44_100
+    os.makedirs(tmp_dir, exist_ok=True)
+    midi_path = tmp_dir + "/tmp.mid"
+    audio_path = tmp_dir + "/output.wav"
+    sm.dump_midi(midi_path)
+    pr = piano_roll(x_sm)
+    plt.figure(figsize=(10, 10))
+    sns.heatmap(pr, cmap="magma")
+    plt.show()
 
-# Resample pitches
+    os.system(f"fluidsynth {midi_path} -F {audio_path}")
+    ipd.display(ipd.Audio(audio_path))
 
+#%%
+for i in ds[50]:
 
-# Resample onsets / offsets
+    # plot the piano roll
+    x_sm = model.tokenizer.decode(x)
 
-# Resample velocities
-
-# Resample drums
-
+    preview(x_sm, TMP_DIR)
 
 #%%
 
-
-# plot the piano roll
 
 
 print(f"Number of notes: {x_sm.note_num()}")

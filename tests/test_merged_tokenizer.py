@@ -1,6 +1,6 @@
 import sys
 import pytest
-from slm import merged_tokenizer_2
+from slm import merged_tokenizer
 import symusic
 
 def test_midi_load():
@@ -33,7 +33,7 @@ def test_cycle_consistency():
     }
 
 
-    tk = merged_tokenizer_2.MergedTokenizer(tokenizer_config)
+    tk = merged_tokenizer.MergedTokenizer(tokenizer_config)
 
     # print(tk.vocab)
     x = symusic.Score(

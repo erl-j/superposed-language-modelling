@@ -3,6 +3,7 @@ wandb/
 checkpoints/
 # Byte-compiled / optimized / DLL files
 __pycache__/
+*__pycache__/
 *.py[cod]
 *$py.class
 # all DS_Store files, recursively

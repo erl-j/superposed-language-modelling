@@ -33,6 +33,9 @@ def piano_roll(sm):
 
     pr = sm.pianoroll(modes=["frame"]).sum(axis=0).sum(axis=0)
 
+    # flip y axis
+    pr = pr[::-1]
+
     return pr
 
 def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float("Inf")):

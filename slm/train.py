@@ -9,12 +9,14 @@ import wandb
 from data import MidiDataset
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, RichProgressBar
 from pytorch_lightning.loggers import WandbLogger
-from tokenizer import Tokenizer
+from merged_tokenizer import MergedTokenizer
 from torch import nn
 from augmentation import transpose_sm
+import einops
+from tqdm import tqdm
+from util import top_k_top_p_filtering
 
-
-class DecoderOnlyModel(pl.LightningModule):
+class EncoderOnlyModel(pl.LightningModule):
     def __init__(
         self,
         hidden_size,
@@ -25,8 +27,12 @@ class DecoderOnlyModel(pl.LightningModule):
         max_seq_len,
         learning_rate,
         tokenizer_config,
-        sliding_mask=False,
         one_hot_input=False,
+        normalize_by_masking_ratio=False,
+        learning_rate_gamma=0.9,
+        norm_first=False,
+        x_bias = -1e5,
+        embedding_bias = False,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -34,129 +40,228 @@ class DecoderOnlyModel(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         vocab_size = len(vocab)
-        self.tokenizer = Tokenizer(tokenizer_config)
-        self.format_mask = self.tokenizer.get_format_mask()
+        self.tokenizer = MergedTokenizer(tokenizer_config)
+        self.format_mask = torch.Tensor(self.tokenizer.get_format_mask())
         self.vocab = vocab
         # intialize positional encoding. one per step in sequence
         self.positional_encoding  = nn.Parameter(torch.zeros(1, max_seq_len*2, hidden_size), requires_grad=True)
-        self.embedding_layer = nn.Linear(vocab_size, hidden_size, bias=False)
+        self.embedding_layer = nn.Linear(vocab_size, hidden_size, bias=embedding_bias)
         self.one_hot_input = one_hot_input
         self.transformer = torch.nn.TransformerEncoder(
             encoder_layer=torch.nn.TransformerEncoderLayer(
             d_model=hidden_size,
             nhead=n_heads,
             dim_feedforward=feed_forward_size,
+            norm_first= norm_first,
             dropout=0.1,
             batch_first=True,
             ),
             num_layers=n_layers,
         )
-        self.decoder_output_layer = nn.Linear(hidden_size, vocab_size)
 
-        def get_mask(seq_len):
-            m = torch.ones(seq_len*2, seq_len*2, dtype=torch.bool) * float("-inf")
-            # give upper left triangle
-            m[:seq_len, :seq_len] = 0
-            for i in range(0, seq_len):
-                if sliding_mask:
-                    m[i+seq_len, i+1:i+seq_len+1] = 0
-                else:
-                    m[i+seq_len, 0:i+seq_len+1] = 0
-            return m
+        self.x_bias = x_bias
+
+        self.decoder_output_layer = nn.Linear(hidden_size, vocab_size)
         
-        self.mask = get_mask(max_seq_len)
-       
-        # save fig of mask
-        # plt.imshow(get_mask(4))
-        # plt.savefig("artefacts/mask.png")
         self.seq_len = max_seq_len
 
-    
-    def forward(self, cnst, seq):
-        cnst = cnst*self.format_mask[None,...].to(self.device)
-        decoder_len = seq.shape[1]
-        # pad decoder tokens with zeros
-        seq = F.pad(seq, (0, 0, 0, self.seq_len-seq.shape[1]))
-        # concatenate cnst_and_seq and seq
-        cnst_and_seq = torch.cat([cnst, seq], dim=1)
-        # assert cnst_and_seq.shape[1] == self.seq_len*2
-        ze = self.embedding_layer(cnst_and_seq)
-        pos = self.positional_encoding[:, :2*self.seq_len, :].to(self.device)
-        # repeat
-        # add positional encoding
+        self.n_attributes = len(self.tokenizer.note_attribute_order)
+
+        self.normalize_by_masking_ratio = normalize_by_masking_ratio
+
+        self.learning_rate_gamma = learning_rate_gamma
+
+    def forward(self, x):
+
+        # TODO: No padding currently, make sure it's not needed
+        # get shape
+        batch, time_attr, ft = x.shape
+
+        format_mask = self.format_mask[None, ...].to(x.device)
+        x = x * format_mask
+
+        x = einops.rearrange(x, "b (t a) ft -> b t a ft", a=self.n_attributes)
+
+        ze = self.embedding_layer(x)
+        ze = ze.sum(dim=2)
+        pos = self.positional_encoding[:, :ze.shape[1], :].to(self.device)
         ze = ze + pos
         # pass through transformer
-        zl = self.transformer(ze, mask=self.mask.to(self.device))
-        zd = zl[:, self.seq_len:, :]
-        # assert zd.shape[1] == self.seq_len
-        decoder_logits = self.decoder_output_layer(zd)
-        # assert decoder_logits.shape[1] == self.seq_len
-        # # to ensure the encoder constraint is respected
-        # # multiply decoder_logits by right shifted encoder fts
-        # # overlap between encoder and decoder
-        # remove -inf from decoder logits
-        decoder_logits[:,:-1]= decoder_logits[:,:-1] + (1-cnst[:,1:,:])*-1e9
+        zl = self.transformer(ze)
+        # get output part
+
+        # note embeddings
+        note_z = einops.rearrange(zl, "b t ft -> b t 1 ft")
+
+        note_z = note_z.repeat(1, 1, self.n_attributes, 1)
+
+        decoder_logits = self.decoder_output_layer(note_z)
+
+        decoder_logits = decoder_logits + self.x_bias * (1-x)
+
+        decoder_logits = einops.rearrange(decoder_logits, "b t a v -> b (t a) v", a=self.n_attributes)
+        # decoder_logits = decoder_logits - (1 - format_mask) * 1e5
+
         # crop to decoder length
-        decoder_logits = decoder_logits[:, :decoder_len, :]
         return decoder_logits
     
 
-    def generate(
-        self, encoder_ft, temperature=1.0, max_len=1000, top_p=0.9, top_k=0
-    ):
-        """
-        Does not use KV caching so it's slow
-        """
-        # make copies
-        encoder_ft = encoder_ft.clone()
-        decoder_ft = encoder_ft.clone()[:, :1, :]
-        
-        while decoder_ft.shape[1] < max_len:
-            decoder_logits = self.forward(encoder_ft, decoder_ft)[:, -1, :]
-            decoder_probs = F.softmax(decoder_logits / temperature, dim=-1)
-            # top k
-            if top_k > 0:
-                # mask
-                decoder_probs[decoder_probs < torch.topk(decoder_probs, top_k)[0][..., -1:]] = 0
-                # renormalize
-                decoder_probs = decoder_probs / decoder_probs.sum(dim=-1, keepdim=True)
-          
-            sampled_token = torch.multinomial(decoder_probs, num_samples=1)
-            # one hot
-            sampled_token = torch.zeros_like(decoder_probs).scatter_(1, sampled_token, 1)
-            decoder_ft = torch.cat(
-                [decoder_ft, sampled_token[:,None,:]], dim=1
+    def generate(self, x, sampling_steps, temperature, top_p=1, top_k=0, schedule_fn=lambda x: x):
+        self.eval()
+        with torch.no_grad():
+            x = x
+            # multiply by format mask
+            x = x * self.format_mask[None, ...].to(x.device)
+            batch, time_attr, ft = x.shape
+            # linspace from schedule
+            schedule = (
+                torch.linspace(0, 1, sampling_steps, dtype=torch.float32, device=x.device)
             )
-        return decoder_ft
+            schedule = schedule_fn(schedule)
+            total_tokens = time_attr
+            # count number of known tokens
+            masked_tokens = (x.sum(-1) > 1).sum().int()
+            # find masking ratio
+            masking_ratio = masked_tokens / total_tokens
+
+            # find step in schedule
+            step = torch.argmin((1 - schedule - masking_ratio).abs())
+
+            for i in tqdm(range(step + 1, sampling_steps)):
+
+                logits = self(x.float())
+
+                # invert probs
+                # flatten
+                flat_logits = einops.rearrange(logits, "b ta v -> (b ta) v")
+
+                flat_logits = top_k_top_p_filtering(flat_logits, top_k=top_k, top_p=top_p)
+
+                flat_probs = F.softmax(flat_logits / temperature, dim=-1)
+
+                sampled = torch.multinomial(flat_probs, 1).squeeze(-1)
+
+
+                flat_x = einops.rearrange(x, "b ta v -> (b ta) v")
+
+                masked_indices = torch.where(flat_x.sum(-1) > 1)[0]
+                #
+                n_masked = masked_indices.shape[0]
+                target_masking_ratio = 1 - schedule[i].item()
+
+                target_n_masked = int(total_tokens * target_masking_ratio)
+                # tokens to unmask
+
+                n_tokens_to_unmask = n_masked - target_n_masked
+
+
+                # get indices of tokens to unmask
+                # get indices of masked tokens
+                # shuffle masked indices
+                masked_indices = masked_indices[torch.randperm(n_masked)]
+                indices_to_unmask = masked_indices[:n_tokens_to_unmask]
+
+                # replace with sampled values
+                flat_x[indices_to_unmask] = torch.nn.functional.one_hot(
+                    sampled[indices_to_unmask], num_classes=flat_x.shape[-1]
+                ).float()
+
+                # plot
+
+                x = einops.rearrange(
+                    flat_x, "(b ta) v -> b ta v", b=batch, ta=time_attr
+                )
+        return x
+    
+    def performance_curve(self, batch):
+        if self.one_hot_input:
+            x = batch
+        else:
+            x = torch.nn.functional.one_hot(batch, num_classes=len(self.vocab)).float()
+        batch_size = x.shape[0]
+        self.eval()
+        with torch.no_grad():
+            masking_ratio = 1
+            superposition_ratios = torch.linspace(0, 1, 100)
+            metrics = []
+
+            # attr_mask 
+            # masking_ratios = torch.rand(batch_size, device=self.device)
+            masking_ratios = torch.ones(batch_size, device=self.device) * masking_ratio
+            attr_mask = (
+                torch.rand((x.shape[0], x.shape[1]), device=self.device)
+                < masking_ratios[:, None]
+            )
+            attr_mask = attr_mask[:,:,None]
+            for superposition_ratio in tqdm(superposition_ratios):
+                # create masking ratios
+                superposition_ratio = torch.ones(batch_size, device=self.device) * superposition_ratio
+                superposition_mask = torch.rand_like(x, device=self.device)<superposition_ratio[:,None,None]
+
+                combined_mask = superposition_mask * attr_mask
+
+                encoder_input = torch.clamp(x + combined_mask, 0, 1)
+
+                logits = self(encoder_input)
+
+                tgt_index = torch.argmax(
+                    x, dim=-1
+                )
+
+                ce = F.cross_entropy(
+                    logits.reshape(-1, logits.shape[-1]),
+                    tgt_index.reshape(-1),
+                )
+                metrics.append(ce.item())
+        return metrics
 
     def step(self, batch, batch_idx):
         if self.one_hot_input:
             x = batch
         else:
             x = torch.nn.functional.one_hot(batch, num_classes=len(self.vocab)).float()
-
+        
         batch_size = x.shape[0]
+
         # create masking ratios
         masking_ratios = torch.rand(batch_size, device=self.device)
         mask = torch.rand_like(x, device=self.device)<masking_ratios[:,None,None]
+
+        # attr_mask 
+        masking_ratios_bis = torch.rand(batch_size, device=self.device)
+        attr_mask = (
+            torch.rand((x.shape[0], x.shape[1]), device=self.device)
+            < masking_ratios_bis[:, None]
+        )
+        attr_mask = attr_mask[:,:,None]
+
+        mask = mask * attr_mask
+
         # mask encoder input
         # encoder input is mask or token tensor with undefined
         encoder_input = torch.clamp(x + mask, 0, 1)
 
         decoder_input = x
-        decoder_output_logits = self(encoder_input, decoder_input)
+        decoder_output_logits = self(encoder_input)
 
-        decoder_output_tokens = decoder_input[:, 1:]
-        decoder_output_logits = decoder_output_logits[:, :-1]
+        decoder_output_tokens = decoder_input
+        decoder_output_logits = decoder_output_logits
 
         decoder_output_tokens_index = torch.argmax(decoder_output_tokens, dim=-1)
 
         ce = F.cross_entropy(
             decoder_output_logits.reshape(-1, decoder_output_logits.shape[-1]),
             decoder_output_tokens_index.reshape(-1),
+            reduction = "none",
         )
+        # reshape to batch, loss
+        ce = ce.reshape(batch_size, -1)
+
+        norm_ce = (ce.mean(dim=-1) / masking_ratios).mean()
+
         metrics = {}
-        metrics["cross_entropy"] = ce
+        metrics["cross_entropy"] = ce.mean()
+        metrics["cross_entropy_normalized"] = norm_ce
         # TODO: check that this code is correct
         with torch.no_grad():
             # get probability of the correct token
@@ -184,42 +289,52 @@ class DecoderOnlyModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         metrics = self.step(batch, batch_idx)
         for metric in metrics:
-            self.log(f"trn/{metric}", metrics[metric], prog_bar=True)
-        loss = metrics["cross_entropy"]
-        self.log("trn/loss", loss, prog_bar=True, on_step=True, on_epoch=True)
+            self.log(f"trn/{metric}", metrics[metric], on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+        if self.normalize_by_masking_ratio:
+            loss = metrics["cross_entropy_normalized"]
+        else:
+            loss = metrics["cross_entropy"]
+        self.log("trn/loss", loss, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
+        # log wandb name
+        self.log("gpu", loss.device.index)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        if False and batch_idx == 0:
-            if self.one_hot_input:
-                x = batch
-            else:
-                x = torch.nn.functional.one_hot(batch, num_classes=len(self.vocab)).float()
-            encoder_input = x
-            decoder_input = x
-            generated = self.generate(
-                encoder_input*0+1, decoder_input[:,:4], temperature=1.0, max_len=50
-            )
-            generated = torch.argmax(generated, dim=-1)
-            generated = generated.cpu().numpy()
-            generated = generated[0]
-            # decode with vocab
-            generated = [self.vocab[i] for i in generated]
-             # write to file
-            print(generated)
-            with open("artefacts/generated.txt", "w") as f:
-                f.write("\n".join(generated))
-
         with torch.no_grad():
             metrics = self.step(batch, batch_idx)
         for metric in metrics:
-            self.log(f"val/{metric}", metrics[metric], prog_bar=True, on_step=True, on_epoch=True)
-        loss = metrics["cross_entropy"]
-        self.log("val/loss", loss, prog_bar=True, on_step=True, on_epoch=True)
+            self.log(f"val/{metric}", metrics[metric], prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
+        if self.normalize_by_masking_ratio:
+            loss = metrics["cross_entropy_normalized"]
+        else:
+            loss = metrics["cross_entropy"]
+        self.log("val/loss", loss, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
         return loss
+    
+    # def on_before_optimizer_step(self, optimizer):
+    #     # Compute the 2-norm for each layer
+    #     # If using mixed precision, the gradients are already unscaled here
+    #     norms = pl.pytorch.utilities.grad_norm(self.layer, norm_type=2)
+    #     self.log_dict(norms)
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
+        # learning rate decay
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
+
+        # add 1 epoch linear warmup
+        # scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, 
+        #                                               lambda epoch: max(0.1, self.learning_rate_gamma ** epoch))
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, gamma=self.learning_rate_gamma, step_size=1)
+        # scheduler = pl_bolts.optimizers.lr_scheduler.LinearWarmupCosineAnnealingLR(
+        #     optimizer,
+        #     warmup_epochs=1,
+        #     max_epochs=100,
+        #     warmup_start_lr=0.0,
+        #     eta_min=1e-6,
+        #     last_epoch=-1,
+        # )
+        return [optimizer], [scheduler]
+
 
 if __name__ == "__main__":
 
@@ -271,39 +386,47 @@ if __name__ == "__main__":
         "ticks_per_beat":24,
         "pitch_range":[0, 128],
         "max_beats":4*N_BARS,
-        "max_notes":100 * N_BARS,
+        "max_notes":75 * N_BARS,
         "min_tempo":50,
         "max_tempo":200,
         "n_tempo_bins": 16,
+        "n_velocity_bins": 32,
         "time_signatures": None,
         "tags": genre_list,
         "shuffle_notes": True,
         "use_offset": True,
-        "merge_pitch_and_beat":True,
-        "use_program": True,
+        "merge_pitch_and_beat":False,
+        "use_program": False,
+        "use_instrument": True,
         "ignored_track_names":[f"Layers{i}" for i in range(0, 8)],
+        "separate_drum_pitch": True,
+        "use_drum_duration": False,
     }
 
-    tokenizer = Tokenizer(
+    tokenizer = MergedTokenizer(
         tokenizer_config
     )
 
     trn_ds = MidiDataset(
-        cache_path="./artefacts/trn_midi_records.pt",
+        cache_path="./artefacts/trn_midi_records_unique_pr.pt",
         path_filter_fn = lambda x: f"n_bars={N_BARS}" in x,
         genre_list=genre_list,
         tokenizer=tokenizer,
         transposition_range=[-4, 4],
+        min_notes = 8*N_BARS,
+        max_notes = tokenizer_config["max_notes"],
     )
 
     val_ds = MidiDataset(
-        cache_path="./artefacts/val_midi_records.pt",
-        path_filter_fn = lambda x: f"n_bars={N_BARS}" in x,
+        cache_path="./artefacts/val_midi_records_unique_pr.pt",
+        path_filter_fn=lambda x: f"n_bars={N_BARS}" in x,
         genre_list=genre_list,
         tokenizer=tokenizer,
+        min_notes=8 * N_BARS,
+        max_notes=tokenizer_config["max_notes"],
     )
   
-    BATCH_SIZE = 2
+    BATCH_SIZE = 100
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds,
@@ -321,17 +444,20 @@ if __name__ == "__main__":
         pin_memory=True,
     )
     
-    
-    model = DecoderOnlyModel(
+    model = EncoderOnlyModel(
         hidden_size=768,
-        n_heads=8,
+        n_heads=12,
         feed_forward_size=4*768,
-        n_layers=10,
-        vocab = tokenizer.vocab,
+        n_layers=8,
+        vocab=tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
         learning_rate=1e-4,
         tokenizer_config=tokenizer_config,
-        sliding_mask=True,
+        normalize_by_masking_ratio=False,
+        learning_rate_gamma=0.99,
+        norm_first=False,
+        x_bias=-1e9,
+        embedding_bias=False,
     )
 
     wandb_logger = WandbLogger(log_model="all", project="slm")
@@ -343,26 +469,34 @@ if __name__ == "__main__":
 
     progress_bar_callback = RichProgressBar(refresh_rate=1)
 
-    trainer = pl.Trainer(accelerator="gpu",
-    devices=[3],
-    precision=32,
-    max_epochs=None,
+    trainer = pl.Trainer(
+    accelerator="gpu",
+    devices=[2,3,5,6],
+    # precision="16-mixed",
+    max_epochs=10_000,
     log_every_n_steps=1,
     # val_check_interval=10,
-    callbacks=[progress_bar_callback,
+    callbacks=[
+        # batch size finder
+        progress_bar_callback,
+            # learning rate monitor
+            pl.callbacks.LearningRateMonitor(logging_interval="step"),
             pl.callbacks.ModelCheckpoint(
             dirpath=f"./checkpoints/{name}/",
-            monitor="val/loss",
+            monitor="val/loss_epoch",
             mode="min",
             save_top_k=3,
             save_last=True,
-            filename="{epoch}-{step}-{val/loss:.2f}-{trn/loss:.2f}",
-            train_time_interval = datetime.timedelta(minutes=30),)],
+            filename="{epoch}-{step}-{val/loss_epoch:.2f}",
+            )],
     logger=wandb_logger,
-    accumulate_grad_batches=4
+    gradient_clip_val=1.0,
+    # accumulate_grad_batches=4,
     )
 
-    trainer.fit(model,
-     trn_dl,
-     val_dl,
+    trainer.fit(
+        model,
+        trn_dl,
+        val_dl,
+        ckpt_path="checkpoints/eager-darkness-234/epoch=65-step=76230-val/loss_epoch=0.15.ckpt",
     )

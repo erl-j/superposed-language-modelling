@@ -2,7 +2,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-from merged_encoder_only_train import EncoderOnlyModel
+from slm.train import EncoderOnlyModel
 from util import piano_roll
 from data import MidiDataset
 import torch
