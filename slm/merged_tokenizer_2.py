@@ -530,7 +530,7 @@ class MergedTokenizer2():
                             if "separate_drum_pitch" in self.config and self.config["separate_drum_pitch"] and track.is_drum:
                                 if note.pitch < self.drum_pitches[0] or note.pitch > self.drum_pitches[-1]:
                                     # if pitch is out of drum range
-                                    # set to closed hi-hat 
+                                    # set to cuica
                                     note_encoding.append("pitch:42 (Drums)")
                                 else:
                                     note_encoding.append("pitch:" + str(note.pitch) + " (Drums)")

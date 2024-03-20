@@ -4,31 +4,18 @@ import numpy as np
 import seaborn as sns
 from merged_encoder_only_train import EncoderOnlyModel
 from util import piano_roll
-
-device = "cuda:7"
+from data import MidiDataset
+import os
 
 #%%
 
-
-# model = DecoderOnlyModel.load_from_checkpoint(
-#     "../checkpoints/golden-breeze-170/epoch=127-step=232409-val/loss_epoch=0.28.ckpt",
-#     map_location=device,
-# )
+device = "cuda:7"
 
 model = EncoderOnlyModel.load_from_checkpoint(
     "../checkpoints/eager-darkness-234/epoch=65-step=76230-val/loss_epoch=0.15.ckpt",
     map_location=device,
 )
-
-print(model.transformer.layers[1].norm_first)
-# print model layers
-print(model)
 #%%
-
-
-#%%
-
-from data import MidiDataset
 
 N_BARS = 4
 
@@ -76,7 +63,7 @@ genre_list = [
 
 # Load the dataset
 val_ds = MidiDataset(
-    cache_path="../artefacts/val_midi_records.pt",
+    cache_path="./artefacts/val_midi_records.pt",
     path_filter_fn=lambda x: f"n_bars={N_BARS}" in x,
     genre_list=genre_list,
     tokenizer=model.tokenizer,
@@ -84,15 +71,32 @@ val_ds = MidiDataset(
     max_notes=model.tokenizer.config["max_notes"],
 )
 
+#%%
+OUTPUT_DIR = "./artefacts/examples"
+
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+x = val_ds[20]
+x_sm = model.tokenizer.decode(x)
+pr = piano_roll(x_sm)
+# dump original
+x_sm.dump_midi(os.path.join(OUTPUT_DIR, "original.mid"))
+
+# Resample pitches
+
+
+# Resample onsets / offsets
+
+# Resample velocities
+
+# Resample drums
+
 
 #%%
 
-x = val_ds[20]
 
 # plot the piano roll
-x_sm = model.tokenizer.decode(x)
 
-pr = piano_roll(x_sm)
 
 print(f"Number of notes: {x_sm.note_num()}")
       

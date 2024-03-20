@@ -46,6 +46,7 @@ class DecoderOnlyModel(pl.LightningModule):
         self.positional_encoding  = nn.Parameter(torch.zeros(1, max_seq_len*2, hidden_size), requires_grad=True)
         self.embedding_layer = nn.Linear(vocab_size, hidden_size, bias=False)
         self.one_hot_input = one_hot_input
+        # TODO: ADD NORMALIZATION
         self.transformer = torch.nn.TransformerEncoder(
             encoder_layer=torch.nn.TransformerEncoderLayer(
             d_model=hidden_size,

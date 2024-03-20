@@ -1,4 +1,28 @@
 import numpy as np
+import torch
+import torch.nn.functional as F
+
+def loop_sm(sm, loop_bars, n_loops):
+    '''
+    4/4 only
+    '''
+    sm = sm.copy()
+    # get resolution
+    tpq = sm.ticks_per_quarter
+
+    # get duration of a bar in ticks
+    loop_duration = tpq * 4 * loop_bars
+    
+    for track in sm.tracks:
+        new_notes = []
+        for loop_idx in range(1,n_loops):
+            for note in track.notes:
+                note = note.copy()
+                note.start = note.start + loop_duration*(loop_idx)
+                new_notes.append(note)
+        track.notes.extend(new_notes)
+    return sm
+
 def piano_roll(sm):
     sm = sm.copy()
     sm = sm.resample(tpq=4, min_dur=0)
@@ -9,12 +33,7 @@ def piano_roll(sm):
 
     pr = sm.pianoroll(modes=["frame"]).sum(axis=0).sum(axis=0)
 
-
     return pr
-
-import torch
-
-import torch.nn.functional as F
 
 def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float("Inf")):
     # from https://gist.github.com/bsantraigi/5752667525d88d375207f099bd78818b

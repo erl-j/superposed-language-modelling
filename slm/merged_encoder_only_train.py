@@ -30,7 +30,9 @@ class EncoderOnlyModel(pl.LightningModule):
         one_hot_input=False,
         normalize_by_masking_ratio=False,
         learning_rate_gamma=0.9,
-        x_bias = -1e5
+        norm_first=False,
+        x_bias = -1e5,
+        embedding_bias = False,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -43,13 +45,14 @@ class EncoderOnlyModel(pl.LightningModule):
         self.vocab = vocab
         # intialize positional encoding. one per step in sequence
         self.positional_encoding  = nn.Parameter(torch.zeros(1, max_seq_len*2, hidden_size), requires_grad=True)
-        self.embedding_layer = nn.Linear(vocab_size, hidden_size, bias=False)
+        self.embedding_layer = nn.Linear(vocab_size, hidden_size, bias=embedding_bias)
         self.one_hot_input = one_hot_input
         self.transformer = torch.nn.TransformerEncoder(
             encoder_layer=torch.nn.TransformerEncoderLayer(
             d_model=hidden_size,
             nhead=n_heads,
             dim_feedforward=feed_forward_size,
+            norm_first= norm_first,
             dropout=0.1,
             batch_first=True,
             ),
@@ -169,6 +172,48 @@ class EncoderOnlyModel(pl.LightningModule):
                     flat_x, "(b ta) v -> b ta v", b=batch, ta=time_attr
                 )
         return x
+    
+    def performance_curve(self, batch):
+        if self.one_hot_input:
+            x = batch
+        else:
+            x = torch.nn.functional.one_hot(batch, num_classes=len(self.vocab)).float()
+        batch_size = x.shape[0]
+        self.eval()
+        with torch.no_grad():
+            masking_ratio = 1
+            superposition_ratios = torch.linspace(0, 1, 100)
+            metrics = []
+
+            # attr_mask 
+            # masking_ratios = torch.rand(batch_size, device=self.device)
+            masking_ratios = torch.ones(batch_size, device=self.device) * masking_ratio
+            attr_mask = (
+                torch.rand((x.shape[0], x.shape[1]), device=self.device)
+                < masking_ratios[:, None]
+            )
+            attr_mask = attr_mask[:,:,None]
+            for superposition_ratio in tqdm(superposition_ratios):
+                # create masking ratios
+                superposition_ratio = torch.ones(batch_size, device=self.device) * superposition_ratio
+                superposition_mask = torch.rand_like(x, device=self.device)<superposition_ratio[:,None,None]
+
+                combined_mask = superposition_mask * attr_mask
+
+                encoder_input = torch.clamp(x + combined_mask, 0, 1)
+
+                logits = self(encoder_input)
+
+                tgt_index = torch.argmax(
+                    x, dim=-1
+                )
+
+                ce = F.cross_entropy(
+                    logits.reshape(-1, logits.shape[-1]),
+                    tgt_index.reshape(-1),
+                )
+                metrics.append(ce.item())
+        return metrics
 
     def step(self, batch, batch_idx):
         if self.one_hot_input:
@@ -381,7 +426,7 @@ if __name__ == "__main__":
         max_notes=tokenizer_config["max_notes"],
     )
   
-    BATCH_SIZE = 128
+    BATCH_SIZE = 100
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds,
@@ -400,9 +445,9 @@ if __name__ == "__main__":
     )
     
     model = EncoderOnlyModel(
-        hidden_size=512,
-        n_heads=8,
-        feed_forward_size=4*512,
+        hidden_size=768,
+        n_heads=12,
+        feed_forward_size=4*768,
         n_layers=8,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
@@ -410,14 +455,10 @@ if __name__ == "__main__":
         tokenizer_config=tokenizer_config,
         normalize_by_masking_ratio=False,
         learning_rate_gamma=0.99,
+        norm_first=False,
         x_bias=-1e9,
+        embedding_bias=False,
     )
-
-    # model = EncoderOnlyOnlyModel.load_from_checkpoint(
-    #     checkpoint_path="checkpoints/breezy-tree-179/epoch=22-step=27209-val/loss_epoch=0.32.ckpt",
-    #     learning_rate_gamma=0.99,
-    #     normalize_by_masking_ratio=False,
-    # )
 
     wandb_logger = WandbLogger(log_model="all", project="slm")
     # get name
@@ -435,7 +476,9 @@ if __name__ == "__main__":
     max_epochs=10_000,
     log_every_n_steps=1,
     # val_check_interval=10,
-    callbacks=[progress_bar_callback,
+    callbacks=[
+        # batch size finder
+        progress_bar_callback,
             # learning rate monitor
             pl.callbacks.LearningRateMonitor(logging_interval="step"),
             pl.callbacks.ModelCheckpoint(
@@ -447,7 +490,7 @@ if __name__ == "__main__":
             filename="{epoch}-{step}-{val/loss_epoch:.2f}",
             )],
     logger=wandb_logger,
-    # gradient_clip_val=1.0,
+    gradient_clip_val=1.0,
     # accumulate_grad_batches=4,
     )
 
@@ -455,5 +498,5 @@ if __name__ == "__main__":
         model,
         trn_dl,
         val_dl,
-        # ckpt_path="checkpoints/silver-river-218/epoch=12-step=11726-val/loss_epoch=0.63.ckpt",
+        ckpt_path="checkpoints/eager-darkness-234/epoch=65-step=76230-val/loss_epoch=0.15.ckpt",
     )
