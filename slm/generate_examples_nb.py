@@ -379,7 +379,7 @@ y_sm = model.tokenizer.decode(y)
 
 
 preview(y_sm, TMP_DIR)
-y_sm.dump_midi(OUTPUT_DIR + "//infilling_middle.mid")
+y_sm.dump_midi(OUTPUT_DIR + "/infilling_box.mid")
 
 
 #%%
@@ -389,6 +389,7 @@ x_sm = model.tokenizer.decode(x)
 # beat range
 # beat_range=(8,12)
 beat_range = (4, 12)
+
 
 # make infilling mask
 mask = (
@@ -418,7 +419,7 @@ y_sm = model.tokenizer.decode(y)
 
 
 preview(y_sm, TMP_DIR)
-y_sm.dump_midi(OUTPUT_DIR + "//infilling_box.mid")
+y_sm.dump_midi(OUTPUT_DIR + "/infilling_middle.mid")
 
 #%%
 
@@ -428,21 +429,50 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # get the embedding
-embedding = model.embedding_layer.weight.detach().cpu().numpy()
+embedding = model.embedding_layer.weight.detach().cpu().numpy().T
 
 # get vocab
 vocab = model.tokenizer.vocab
 
-# compute the similarity matrix
-similarity = embedding.T @ embedding
+embedding_norm = np.linalg.norm(embedding, axis=1, keepdims=True)
+
+# normalize the embedding
+embedding = embedding / embedding_norm
+
+# compute the cosine similarity
+similarity = embedding @ embedding.T
 
 # plot the similarity matrix
 # make large figure
-plt.figure(figsize=(10, 10))
+plt.figure(figsize=(50, 50))
 # set small font
 sns.set(font_scale=0.5)
-sns.heatmap(similarity, cmap="magma", xticklabels=vocab, yticklabels=vocab)
+sns.heatmap(similarity, cmap="magma", xticklabels=vocab, yticklabels=vocab, mask = np.eye(len(vocab)))
 plt.show()
+
+#%%
+
+# per attribute similarity
+for attr in model.tokenizer.note_attribute_order:
+
+    tokens = [token for token in vocab if attr+":" in token]
+    indices = [model.tokenizer.token2idx[token] for token in tokens]
+    # get the indices of the attribute
+    # get the embedding
+    emb = embedding[indices,:]
+
+    # compute the cosine similarity
+    similarity = emb @ emb.T
+
+    
+
+
+    # plot the similarity matrix
+    plt.figure(figsize=(10, 10))
+    sns.heatmap(similarity, cmap="magma", xticklabels=tokens, yticklabels=tokens, mask = np.eye(len(tokens)))
+    plt.title(attr)
+    plt.show()
+
 
 #%%
 
