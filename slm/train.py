@@ -32,7 +32,7 @@ class EncoderOnlyModel(pl.LightningModule):
         learning_rate_gamma=0.9,
         norm_first=False,
         x_bias = -1e5,
-        fixed_x_bias = False,
+        fix_x_bias = False,
         embedding_bias = False,
         standard_mlm_forward=False,
         standard_mlm_masking=False,
@@ -66,6 +66,7 @@ class EncoderOnlyModel(pl.LightningModule):
         )
 
         self.x_bias = x_bias
+        self.fix_x_bias = fix_x_bias
 
         self.decoder_output_layer = nn.Linear(hidden_size, vocab_size)
         
@@ -159,7 +160,7 @@ class EncoderOnlyModel(pl.LightningModule):
         decoder_logits = self.decoder_output_layer(note_z)
 
         # force logits to respect constraint
-        if self.fixed_x_bias:
+        if self.fix_x_bias:
             decoder_logits[x<0.5] = self.x_bias
         else:
             decoder_logits = decoder_logits + self.x_bias * (1-x)
@@ -525,7 +526,7 @@ if __name__ == "__main__":
         learning_rate_gamma=0.99,
         norm_first=True,
         x_bias=-1e9,
-        fixed_bias=True,
+        fix_x_bias=True,
         embedding_bias=False,
         standard_mlm_forward=False,
         standard_mlm_masking=False,
