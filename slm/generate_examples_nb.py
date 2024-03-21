@@ -13,10 +13,11 @@ device = "cuda:7"
 ROOT_DIR = "../"
 
 # ckpt = "checkpoints/exalted-cloud-246/epoch=89-step=103950-val/loss_epoch=0.14.ckpt"
-ckpt = "checkpoints/desert-capybara-249/epoch=68-step=99567-val/loss_epoch=0.14.ckpt"
+ckpt = "checkpoints/desert-capybara-249/epoch=82-step=119769-val/loss_epoch=0.14.ckpt"
 model = EncoderOnlyModel.load_from_checkpoint(
     ROOT_DIR + ckpt,
     map_location=device,
+    avg_positional_encoding=True,
 )
 
 #%%
@@ -58,6 +59,15 @@ def preview(sm, tmp_dir):
     os.system(f"fluidsynth {midi_path} -F {audio_path}")
     ipd.display(ipd.Audio(audio_path))
 
+RESAMPLE_IDX = 17009
+
+x = ds[RESAMPLE_IDX]
+x_sm = model.tokenizer.decode(x)
+
+preview(x_sm, TMP_DIR)
+
+x_sm.dump_midi(OUTPUT_DIR + "/resample_original.mid")
+
 #%%
     
 # import random
@@ -74,14 +84,7 @@ def preview(sm, tmp_dir):
 
 #%%
 
-RESAMPLE_IDX = 17009
 
-x = ds[RESAMPLE_IDX]
-x_sm = model.tokenizer.decode(x)
-
-preview(x_sm, TMP_DIR)
-
-x_sm.dump_midi(OUTPUT_DIR + "/resample_original.mid")
 
 #%%
 
@@ -89,7 +92,7 @@ mask = model.tokenizer.replace_mask(x, ["pitch"]).to(model.device).float()
 
 y = model.generate(
     mask,
-    temperature=1.0,
+    temperature=0.95,
     top_p=1,
 )[0].cpu().numpy().argmax(axis=-1)
 
@@ -120,7 +123,7 @@ mask = mask * mask2
 y = (
     model.generate(
         mask,
-        temperature=1.0,
+        temperature=0.99,
         schedule_fn=lambda x: x,
         top_p=1,
         top_k=0,

@@ -33,8 +33,9 @@ class EncoderOnlyModel(pl.LightningModule):
         norm_first=False,
         x_bias = -1e5,
         embedding_bias = False,
-        standard_mlm_forward = False,
-        standard_mlm_masking = False
+        standard_mlm_forward=False,
+        standard_mlm_masking=False,
+        use_positional_encoding = True
 
     ):
         """
@@ -77,31 +78,32 @@ class EncoderOnlyModel(pl.LightningModule):
         self.standard_mlm_forward = standard_mlm_forward
         self.standard_mlm_masking = standard_mlm_masking
 
-        if self.standard_mlm:
-            self.attribute_mask_tokens = nn.Parameter(torch.ones(1, self.n_attributes, vocab_size), requires_grad=True)
+        if self.standard_mlm_forward:
+            self.attribute_mask_tokens = nn.Parameter(torch.ones(1, self.n_attributes, hidden_size), requires_grad=True)
 
-    def standard_mlm_forward(self, x):
-        # get shape
-        batch, time_attr, ft = x.shape
-
+        self.avg_positional_encoding = use_positional_encoding
+    def mlm_forward(self, x):
         format_mask = self.format_mask[None, ...].to(x.device)
         x = x * format_mask
 
         # figure out if token is masked, i.e more than one token is masked
 
-        x = einops.rearrange(x, "b (t a) ft -> b t a ft")
+        x = einops.rearrange(x, "b (t a) v -> b t a v", a=self.n_attributes)
 
         is_masked = x.sum(-1) > 1
 
         ze = self.embedding_layer(x)
         
         # replace masked attribute embeddings with attribute mask tokens
-        ze  = ~is_masked[:,:,None] * ze + is_masked[:,:,None] * self.attribute_mask_tokens[None, ...].to(self.device)
+        ze  = ~is_masked[...,None] * ze + is_masked[...,None] * self.attribute_mask_tokens[None, ...].to(self.device)
 
         # sum across attributes
         ze = ze.sum(dim=2)
-        pos = self.positional_encoding[:, : ze.shape[1], :].to(self.device)
+        pos = self.positional_encoding[:, : self.tokenizer.config["max_notes"], :].to(self.device)
+        if self.avg_positional_encoding:
+            pos = pos.mean(dim=1, keepdim=True)
         ze = ze + pos
+
         # pass through transformer
         zl = self.transformer(ze)
         # get output part
@@ -113,30 +115,31 @@ class EncoderOnlyModel(pl.LightningModule):
 
         decoder_logits = self.decoder_output_layer(note_z)
 
-        decoder_logits = decoder_logits + self.x_bias * (1 - x)
-
         decoder_logits = einops.rearrange(
-            decoder_logits, "b t a v -> b (t a) v", a=self.n_attributes
+            decoder_logits, "b t a v -> b (t a) v"
         )
+
+        # multiply by format mask
+        decoder_logits = decoder_logits * format_mask
 
         # crop to decoder length
         return decoder_logits
 
 
     def forward(self, x):
-        if self.standard_mlm:
-            return self.standard_mlm_forward(x)
-        # get shape
-        batch, time_attr, ft = x.shape
+        if self.standard_mlm_forward:
+            return self.mlm_forward(x)
 
         format_mask = self.format_mask[None, ...].to(x.device)
         x = x * format_mask
 
-        x = einops.rearrange(x, "b (t a) ft -> b t a ft", a=self.n_attributes)
+        x = einops.rearrange(x, "b (t a) v -> b t a v", a=self.n_attributes)
 
         ze = self.embedding_layer(x)
         ze = ze.sum(dim=2)
-        pos = self.positional_encoding[:, :ze.shape[1], :].to(self.device)
+        pos = self.positional_encoding[:, :self.tokenizer.config["max_notes"], :].to(self.device)
+        if self.avg_positional_encoding:
+            pos = pos.mean(dim=1, keepdim=True)
         ze = ze + pos
         # pass through transformer
         zl = self.transformer(ze)
@@ -149,6 +152,7 @@ class EncoderOnlyModel(pl.LightningModule):
 
         decoder_logits = self.decoder_output_layer(note_z)
 
+        # force logits to respect constraint
         decoder_logits = decoder_logits + self.x_bias * (1-x)
 
         decoder_logits = einops.rearrange(decoder_logits, "b t a v -> b (t a) v", a=self.n_attributes)
@@ -225,7 +229,7 @@ class EncoderOnlyModel(pl.LightningModule):
                 )
         return x
     
-    def performance_curve(self, batch):
+    def performance_curve(self, batch, base_masking_ratio):
         if self.one_hot_input:
             x = batch
         else:
@@ -233,13 +237,13 @@ class EncoderOnlyModel(pl.LightningModule):
         batch_size = x.shape[0]
         self.eval()
         with torch.no_grad():
-            masking_ratio = 1
+            base_masking_ratio = base_masking_ratio
             superposition_ratios = torch.linspace(0, 1, 100)
             metrics = []
 
             # attr_mask 
             # masking_ratios = torch.rand(batch_size, device=self.device)
-            masking_ratios = torch.ones(batch_size, device=self.device) * masking_ratio
+            masking_ratios = torch.ones(batch_size, device=self.device) * base_masking_ratio
             attr_mask = (
                 torch.rand((x.shape[0], x.shape[1]), device=self.device)
                 < masking_ratios[:, None]
@@ -479,8 +483,9 @@ if __name__ == "__main__":
         min_notes=8 * N_BARS,
         max_notes=tokenizer_config["max_notes"],
     )
-  
-    BATCH_SIZE = 80
+    
+    # desert capy uses batch size 80
+    BATCH_SIZE = 128
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds,
@@ -499,10 +504,10 @@ if __name__ == "__main__":
     )
     
     model = EncoderOnlyModel(
-        hidden_size=768,
-        n_heads=12,
-        feed_forward_size=4*768,
-        n_layers=12,
+        hidden_size=512,
+        n_heads=8,
+        feed_forward_size=4*512,
+        n_layers=8,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
         learning_rate=1e-4,
@@ -513,7 +518,7 @@ if __name__ == "__main__":
         x_bias=-1e9,
         embedding_bias=False,
         standard_mlm_forward=True,
-        standard_mlm_masking=False
+        standard_mlm_masking=True
     )
 
     wandb_logger = WandbLogger(log_model="all", project="slm")
@@ -527,7 +532,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
     accelerator="gpu",
-    devices=[2,3,5,6],
+    devices=[1],
     # precision="16-mixed",
     max_epochs=10_000,
     log_every_n_steps=1,
@@ -554,5 +559,4 @@ if __name__ == "__main__":
         model,
         trn_dl,
         val_dl,
-        ckpt_path="checkpoints/daily-elevator-239/epoch=14-step=21645-val/loss_epoch=0.16.ckpt",
     )
