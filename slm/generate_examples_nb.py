@@ -13,7 +13,7 @@ device = "cuda:7"
 ROOT_DIR = "../"
 
 model = EncoderOnlyModel.load_from_checkpoint(
-    ROOT_DIR+ "checkpoints/eager-darkness-234/epoch=65-step=76230-val/loss_epoch=0.15.ckpt",
+    ROOT_DIR+ "checkpoints/exalted-cloud-246/epoch=89-step=103950-val/loss_epoch=0.14.ckpt",
     map_location=device,
 )
 
@@ -28,7 +28,7 @@ ds = MidiDataset(
     max_notes=model.tokenizer.config["max_notes"],
 )
 
-OUTPUT_DIR = ROOT_DIR + "artefacts/examples"
+OUTPUT_DIR = ROOT_DIR + "artefacts/examples_2"
 TMP_DIR = ROOT_DIR + "artefacts/tmp"
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -78,6 +78,9 @@ y = model.generate(
     mask,
     temperature=0.85,
 )[0].cpu().numpy().argmax(axis=-1)
+
+# convert to tokens
+tokens = model.tokenizer.indices_to_tokens(y)
 
 y_sm = model.tokenizer.decode(y)
 
@@ -184,7 +187,7 @@ mask = model.tokenizer.replace_mask(x, ["onset/beat","onset/tick","offset/beat",
 y = (
     model.generate(
         mask,
-        temperature=0.9,
+        temperature=1.0,
         schedule_fn=lambda x: x,
         top_p=1,
         top_k=0,
@@ -246,7 +249,7 @@ a = c * a
 
 # Generate a sequence
 y = model.generate(
-    a
+    a,
     schedule_fn=lambda x: x,
     temperature=1.0,
     top_p=1.0,
@@ -463,9 +466,6 @@ for attr in model.tokenizer.note_attribute_order:
 
     # compute the cosine similarity
     similarity = emb @ emb.T
-
-    
-
 
     # plot the similarity matrix
     plt.figure(figsize=(10, 10))

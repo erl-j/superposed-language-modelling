@@ -206,7 +206,7 @@ class MergedTokenizer():
         for attribute in attributes_to_replace:
             attribute_1h = np.zeros((len(self.vocab)))
             for token in self.vocab:
-                if token.startswith(attribute):
+                if token.startswith(attribute+":"):
                     attribute_1h[self.token2idx[token]] = 1
             attribute_idx = self.note_attribute_order.index(attribute)
             # replace all tokens of attribute with attribute_1h
@@ -493,8 +493,9 @@ class MergedTokenizer():
                     for note in midi_notes:
                         scale_mask[self.vocab.index("pitch:" + str(note))] = 1
                     # allow all drum pitches
-                    for note in self.drum_pitches:
-                        scale_mask[self.vocab.index("pitch:" + str(note) + " (Drums)")] = 1
+                    for token_idx in range(len(self.vocab)):
+                        if self.vocab[token_idx].startswith("pitch:") and self.vocab[token_idx].endswith(" (Drums)"):
+                            scale_mask[token_idx] = 1
                     constraint_mask[attribute_index,:] = scale_mask
         
         # repeat max notes times in the first dimension
@@ -606,23 +607,7 @@ class MergedTokenizer():
         
     def tokens_to_sm(self, tokens):
       
-        # meta = tokens[:self.meta_len]
         notes = tokens
-        # print(self.meta_len)
-        # notes = tokens[self.meta_len:]
-        # for i, meta_attr in enumerate(self.meta_attribute_order):
-        #     if meta_attr == "tempo":
-        #         assert meta[i].split(":")[0] == "tempo"
-        #         qpm = int(tokens[i].split(":")[1])
-        #         sm.tempos.append(symusic.Tempo(qpm=qpm, time=0))
-        #     elif meta_attr == "time_signature":
-        #         assert meta[i].split(":")[0] == "time_signature"
-        #         ts = tokens[i].split(":")[1]
-        #         ts = ts.split("/")
-        #         sm.time_signatures.append(symusic.TimeSignature(numerator=int(ts[0]), denominator=int(ts[1])))
-        #     elif meta_attr == "tag":
-        #         assert meta[i].split(":")[0] == "tag"
-        #         tag = meta[i].split(":")[1]
 
         # make sublists of note tokens
         notes = [notes[i:i+self.attributes_per_note] for i in range(0, len(notes), self.attributes_per_note)]
@@ -671,14 +656,14 @@ class MergedTokenizer():
                 elif note_attr == "offset/beat":
                     assert note[i].split(":")[0] == "offset/beat"
                     if note[i].split(":")[1] == "none (Drums)":
-                        offset = 0
+                        offset = -1
                     else:
                         offset = int(note[i].split(":")[1])
                 elif note_attr == "offset/tick":
                     assert note[i].split(":")[0] == "offset/tick"
                     if note[i].split(":")[1] == "none (Drums)":
                         # make a quarter beat
-                        offset_tick = self.config["ticks_per_beat"] // 4
+                        offset_tick = -1
                     else:
                         offset_tick = int(note[i].split(":")[1])
                 elif note_attr == "velocity":
@@ -694,10 +679,17 @@ class MergedTokenizer():
                 elif note_attr == "tag":
                     assert note[i].split(":")[0] == "tag"
                     tag = note[i].split(":")[1]
+            onset_tick = onset * self.config["ticks_per_beat"] + onset_tick
+            if offset == -1:
+                offset_tick  = onset_tick + self.config["ticks_per_beat"] // 8
+                offset_tick = min(offset_tick, self.config["max_beats"] * self.config["ticks_per_beat"])
+            else:
+                offset_tick = offset * self.config["ticks_per_beat"] + offset_tick
+
             note_recs.append({
                 "pitch": pitch,
-                "onset": onset * self.config["ticks_per_beat"] + onset_tick,
-                "offset": offset * self.config["ticks_per_beat"] + offset_tick if self.config["use_offset"] else None,
+                "onset": onset_tick,
+                "offset":  offset_tick,
                 "velocity": velocity,
                 "program": program,
                 "tempo": tempo,

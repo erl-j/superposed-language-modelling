@@ -427,7 +427,7 @@ if __name__ == "__main__":
         max_notes=tokenizer_config["max_notes"],
     )
   
-    BATCH_SIZE = 100
+    BATCH_SIZE = 80
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds,
@@ -449,14 +449,14 @@ if __name__ == "__main__":
         hidden_size=768,
         n_heads=12,
         feed_forward_size=4*768,
-        n_layers=8,
+        n_layers=12,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
         learning_rate=1e-4,
         tokenizer_config=tokenizer_config,
         normalize_by_masking_ratio=False,
         learning_rate_gamma=0.99,
-        norm_first=False,
+        norm_first=True,
         x_bias=-1e9,
         embedding_bias=False,
     )
@@ -499,5 +499,5 @@ if __name__ == "__main__":
         model,
         trn_dl,
         val_dl,
-        ckpt_path="checkpoints/eager-darkness-234/epoch=65-step=76230-val/loss_epoch=0.15.ckpt",
+        ckpt_path="checkpoints/daily-elevator-239/epoch=14-step=21645-val/loss_epoch=0.16.ckpt",
     )
