@@ -33,6 +33,9 @@ class EncoderOnlyModel(pl.LightningModule):
         norm_first=False,
         x_bias = -1e5,
         embedding_bias = False,
+        standard_mlm_forward = False,
+        standard_mlm_masking = False
+
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -71,9 +74,58 @@ class EncoderOnlyModel(pl.LightningModule):
 
         self.learning_rate_gamma = learning_rate_gamma
 
-    def forward(self, x):
+        self.standard_mlm_forward = standard_mlm_forward
+        self.standard_mlm_masking = standard_mlm_masking
 
-        # TODO: No padding currently, make sure it's not needed
+        if self.standard_mlm:
+            self.attribute_mask_tokens = nn.Parameter(torch.ones(1, self.n_attributes, vocab_size), requires_grad=True)
+
+    def standard_mlm_forward(self, x):
+        # get shape
+        batch, time_attr, ft = x.shape
+
+        format_mask = self.format_mask[None, ...].to(x.device)
+        x = x * format_mask
+
+        # figure out if token is masked, i.e more than one token is masked
+
+        x = einops.rearrange(x, "b (t a) ft -> b t a ft")
+
+        is_masked = x.sum(-1) > 1
+
+        ze = self.embedding_layer(x)
+        
+        # replace masked attribute embeddings with attribute mask tokens
+        ze  = ~is_masked[:,:,None] * ze + is_masked[:,:,None] * self.attribute_mask_tokens[None, ...].to(self.device)
+
+        # sum across attributes
+        ze = ze.sum(dim=2)
+        pos = self.positional_encoding[:, : ze.shape[1], :].to(self.device)
+        ze = ze + pos
+        # pass through transformer
+        zl = self.transformer(ze)
+        # get output part
+
+        # note embeddings
+        note_z = einops.rearrange(zl, "b t ft -> b t 1 ft")
+
+        note_z = note_z.repeat(1, 1, self.n_attributes, 1)
+
+        decoder_logits = self.decoder_output_layer(note_z)
+
+        decoder_logits = decoder_logits + self.x_bias * (1 - x)
+
+        decoder_logits = einops.rearrange(
+            decoder_logits, "b t a v -> b (t a) v", a=self.n_attributes
+        )
+
+        # crop to decoder length
+        return decoder_logits
+
+
+    def forward(self, x):
+        if self.standard_mlm:
+            return self.standard_mlm_forward(x)
         # get shape
         batch, time_attr, ft = x.shape
 
@@ -100,7 +152,6 @@ class EncoderOnlyModel(pl.LightningModule):
         decoder_logits = decoder_logits + self.x_bias * (1-x)
 
         decoder_logits = einops.rearrange(decoder_logits, "b t a v -> b (t a) v", a=self.n_attributes)
-        # decoder_logits = decoder_logits - (1 - format_mask) * 1e5
 
         # crop to decoder length
         return decoder_logits
@@ -228,13 +279,15 @@ class EncoderOnlyModel(pl.LightningModule):
         masking_ratios = torch.rand(batch_size, device=self.device)
         mask = torch.rand_like(x, device=self.device)<masking_ratios[:,None,None]
 
-        # attr_mask 
-        masking_ratios_bis = torch.rand(batch_size, device=self.device)
-        attr_mask = (
-            torch.rand((x.shape[0], x.shape[1]), device=self.device)
-            < masking_ratios_bis[:, None]
-        )
-        attr_mask = attr_mask[:,:,None]
+        if not self.standard_mlm_masking:
+            masking_ratios_bis = torch.rand(batch_size, device=self.device)
+            attr_mask = (
+                torch.rand((x.shape[0], x.shape[1]), device=self.device)
+                < masking_ratios_bis[:, None]
+            )
+            attr_mask = attr_mask[:,:,None]
+        else:
+            attr_mask = torch.ones_like(x, device=self.device)
 
         mask = mask * attr_mask
 
@@ -459,6 +512,8 @@ if __name__ == "__main__":
         norm_first=True,
         x_bias=-1e9,
         embedding_bias=False,
+        standard_mlm_forward=True,
+        standard_mlm_masking=False
     )
 
     wandb_logger = WandbLogger(log_model="all", project="slm")

@@ -11,7 +11,7 @@ import torch
 device = "cuda:7"
 
 model = EncoderOnlyModel.load_from_checkpoint(
-    "../checkpoints/eager-darkness-234/epoch=53-step=62370-val/loss_epoch=0.15.ckpt",
+    "../checkpoints/desert-capybara-249/epoch=68-step=99567-val/loss_epoch=0.14.ckpt",
     map_location=device,
 )
 

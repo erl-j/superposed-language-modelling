@@ -12,10 +12,21 @@ device = "cuda:7"
 
 ROOT_DIR = "../"
 
+# ckpt = "checkpoints/exalted-cloud-246/epoch=89-step=103950-val/loss_epoch=0.14.ckpt"
+ckpt = "checkpoints/desert-capybara-249/epoch=68-step=99567-val/loss_epoch=0.14.ckpt"
 model = EncoderOnlyModel.load_from_checkpoint(
-    ROOT_DIR+ "checkpoints/exalted-cloud-246/epoch=89-step=103950-val/loss_epoch=0.14.ckpt",
+    ROOT_DIR + ckpt,
     map_location=device,
 )
+
+#%%
+
+# write vocab to file
+with open(ROOT_DIR + "artefacts/vocab.txt", "w") as f:
+    for attr in model.tokenizer.vocab:
+        f.write(attr.split(":")[1] + "\n")
+
+#%%
 
 MODEL_BARS = 4
 # Load the dataset
@@ -28,7 +39,7 @@ ds = MidiDataset(
     max_notes=model.tokenizer.config["max_notes"],
 )
 
-OUTPUT_DIR = ROOT_DIR + "artefacts/examples_2"
+OUTPUT_DIR = ROOT_DIR + "artefacts/examples_3"
 TMP_DIR = ROOT_DIR + "artefacts/tmp"
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -68,6 +79,8 @@ RESAMPLE_IDX = 17009
 x = ds[RESAMPLE_IDX]
 x_sm = model.tokenizer.decode(x)
 
+preview(x_sm, TMP_DIR)
+
 x_sm.dump_midi(OUTPUT_DIR + "/resample_original.mid")
 
 #%%
@@ -76,7 +89,8 @@ mask = model.tokenizer.replace_mask(x, ["pitch"]).to(model.device).float()
 
 y = model.generate(
     mask,
-    temperature=0.85,
+    temperature=1.0,
+    top_p=1,
 )[0].cpu().numpy().argmax(axis=-1)
 
 # convert to tokens
@@ -130,7 +144,7 @@ mask = model.tokenizer.replace_mask(x, ["instrument"]).to(model.device).float()
 y = (
     model.generate(
         mask,
-        temperature=0.9,
+        temperature=1.5,
         schedule_fn=lambda x: x,
         top_p=1,
         top_k=0,
@@ -237,13 +251,13 @@ y_sm.dump_midi(OUTPUT_DIR + "/slm_replace_velocity.mid")
 
 a = model.format_mask[None, ...].to(model.device)
 c = model.tokenizer.constraint_mask(
-    # tags=["dance-eletric"],
+    # tags=["pop"],
     # tags=["other"],
     # instruments=["Ensemble"],
-    # tempos = ["126"],
-    scale="D pentatonic",
+    tempos = ["126"],
+    scale="G pentatonic",
     min_notes=50,
-    max_notes=250,
+    max_notes=150,
 )[None, ...].to(model.device)
 a = c * a
 
@@ -341,7 +355,7 @@ y_sm = model.tokenizer.decode(y)
 
 
 preview(y_sm, TMP_DIR)
-y_sm.dump_midi(OUTPUT_DIR + "//infilling_low.mid")
+y_sm.dump_midi(OUTPUT_DIR + "/infilling_low.mid")
 
 
 #%%
