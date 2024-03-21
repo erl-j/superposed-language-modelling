@@ -199,6 +199,7 @@ class MergedTokenizer():
     #     return torch.tensor(x.reshape((self.config["max_notes"] * len(self.note_attribute_order))))
         
     def replace_mask(self,x, attributes_to_replace):
+        x = x.clone()
 
         # convert to onehot
         x_1h = np.eye(len(self.vocab))[x]
@@ -229,6 +230,7 @@ class MergedTokenizer():
 
 
     def shuffle_notes_mask(self, x, same_onset_times=False):
+        x = x.clone()
 
         note_mask = np.zeros((len(self.note_attribute_order), len(self.vocab)), dtype=int)
 
@@ -267,6 +269,8 @@ class MergedTokenizer():
         beat_range: tuple of ints, (min_beat, max_beat) : list of strings. If None, defaults to entire beat range.
         pitches : list of strings. If None, defaults to all pitches, including drums.
         '''
+
+        x = x.clone()
 
         if max_notes is None:
             max_notes = self.config["max_notes"]

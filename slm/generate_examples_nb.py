@@ -92,7 +92,7 @@ mask = model.tokenizer.replace_mask(x, ["pitch"]).to(model.device).float()
 
 y = model.generate(
     mask,
-    temperature=0.95,
+    temperature=1.0,
     top_p=1,
 )[0].cpu().numpy().argmax(axis=-1)
 
@@ -268,7 +268,7 @@ a = c * a
 y = model.generate(
     a,
     schedule_fn=lambda x: x,
-    temperature=1.0,
+    temperature=0.99,
     top_p=1.0,
     top_k=0,
 )[0].argmax(axis=1)

@@ -32,10 +32,12 @@ class EncoderOnlyModel(pl.LightningModule):
         learning_rate_gamma=0.9,
         norm_first=False,
         x_bias = -1e5,
+        fixed_x_bias = False,
         embedding_bias = False,
         standard_mlm_forward=False,
         standard_mlm_masking=False,
-        use_positional_encoding = True
+        avg_positional_encoding = False,
+        use_positional_encoding = True,
 
     ):
         """
@@ -81,7 +83,9 @@ class EncoderOnlyModel(pl.LightningModule):
         if self.standard_mlm_forward:
             self.attribute_mask_tokens = nn.Parameter(torch.ones(1, self.n_attributes, hidden_size), requires_grad=True)
 
-        self.avg_positional_encoding = use_positional_encoding
+        self.avg_positional_encoding = avg_positional_encoding
+        self.use_positional_encoding = use_positional_encoding
+
     def mlm_forward(self, x):
         format_mask = self.format_mask[None, ...].to(x.device)
         x = x * format_mask
@@ -99,10 +103,11 @@ class EncoderOnlyModel(pl.LightningModule):
 
         # sum across attributes
         ze = ze.sum(dim=2)
-        pos = self.positional_encoding[:, : self.tokenizer.config["max_notes"], :].to(self.device)
-        if self.avg_positional_encoding:
-            pos = pos.mean(dim=1, keepdim=True)
-        ze = ze + pos
+        if self.use_positional_encoding:
+            pos = self.positional_encoding[:, : self.tokenizer.config["max_notes"], :].to(self.device)
+            if self.avg_positional_encoding:
+                pos = pos.mean(dim=1, keepdim=True)
+            ze = ze + pos
 
         # pass through transformer
         zl = self.transformer(ze)
@@ -137,10 +142,11 @@ class EncoderOnlyModel(pl.LightningModule):
 
         ze = self.embedding_layer(x)
         ze = ze.sum(dim=2)
-        pos = self.positional_encoding[:, :self.tokenizer.config["max_notes"], :].to(self.device)
-        if self.avg_positional_encoding:
-            pos = pos.mean(dim=1, keepdim=True)
-        ze = ze + pos
+        if self.use_positional_encoding:
+            pos = self.positional_encoding[:, : self.tokenizer.config["max_notes"], :].to(self.device)
+            if self.avg_positional_encoding:
+                pos = pos.mean(dim=1, keepdim=True)
+            ze = ze + pos
         # pass through transformer
         zl = self.transformer(ze)
         # get output part
@@ -153,7 +159,10 @@ class EncoderOnlyModel(pl.LightningModule):
         decoder_logits = self.decoder_output_layer(note_z)
 
         # force logits to respect constraint
-        decoder_logits = decoder_logits + self.x_bias * (1-x)
+        if self.fixed_x_bias:
+            decoder_logits[x<0.5] = self.x_bias
+        else:
+            decoder_logits = decoder_logits + self.x_bias * (1-x)
 
         decoder_logits = einops.rearrange(decoder_logits, "b t a v -> b (t a) v", a=self.n_attributes)
 
@@ -485,7 +494,7 @@ if __name__ == "__main__":
     )
     
     # desert capy uses batch size 80
-    BATCH_SIZE = 128
+    BATCH_SIZE = 80
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds,
@@ -504,10 +513,10 @@ if __name__ == "__main__":
     )
     
     model = EncoderOnlyModel(
-        hidden_size=512,
-        n_heads=8,
-        feed_forward_size=4*512,
-        n_layers=8,
+        hidden_size=768,
+        n_heads=12,
+        feed_forward_size=4 * 768,
+        n_layers=12,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
         learning_rate=1e-4,
@@ -516,9 +525,12 @@ if __name__ == "__main__":
         learning_rate_gamma=0.99,
         norm_first=True,
         x_bias=-1e9,
+        fixed_bias=True,
         embedding_bias=False,
-        standard_mlm_forward=True,
-        standard_mlm_masking=True
+        standard_mlm_forward=False,
+        standard_mlm_masking=False,
+        avg_positional_encoding=False,
+        use_positional_encoding=False,
     )
 
     wandb_logger = WandbLogger(log_model="all", project="slm")
@@ -531,8 +543,9 @@ if __name__ == "__main__":
     progress_bar_callback = RichProgressBar(refresh_rate=1)
 
     trainer = pl.Trainer(
+    strategy='ddp_find_unused_parameters_true',
     accelerator="gpu",
-    devices=[1],
+    devices=[2,3,5,6],
     # precision="16-mixed",
     max_epochs=10_000,
     log_every_n_steps=1,
@@ -559,4 +572,5 @@ if __name__ == "__main__":
         model,
         trn_dl,
         val_dl,
+        ckpt_path="checkpoints/desert-capybara-249/epoch=82-step=119769-val/loss_epoch=0.14.ckpt",
     )
