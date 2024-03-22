@@ -13,7 +13,7 @@ device = "cuda:7"
 ROOT_DIR = "../"
 
 # ckpt = "checkpoints/exalted-cloud-246/epoch=89-step=103950-val/loss_epoch=0.14.ckpt"
-ckpt = "checkpoints/clear-terrain-265/epoch=101-step=147186-val/loss_epoch=0.14.ckpt"
+ckpt = "checkpoints/clear-terrain-265/epoch=111-step=161616-val/loss_epoch=0.14.ckpt"
 model = EncoderOnlyModel.load_from_checkpoint(
     ROOT_DIR + ckpt,
     map_location=device,
@@ -254,11 +254,11 @@ y_sm.dump_midi(OUTPUT_DIR + "/slm_replace_velocity.mid")
 
 a = model.format_mask[None, ...].to(model.device)
 c = model.tokenizer.constraint_mask(
-    # tags=["pop"],
+    tags=["metal"],
     # tags=["other"],
-    # instruments=["Ensemble"],
+    instruments=["Bass","Drums","Guitar"],
     tempos = ["126"],
-    scale="G pentatonic",
+    # scale="G pentatonic",
     min_notes=50,
     max_notes=150,
 )[None, ...].to(model.device)
@@ -268,7 +268,7 @@ a = c * a
 y = model.generate(
     a,
     schedule_fn=lambda x: x,
-    temperature=1.0,
+    temperature=0.999,
     top_p=1.0,
     top_k=0,
 )[0].argmax(axis=1)
@@ -291,7 +291,7 @@ print(f"Number of notes: {x_sm.note_num()}")
 # beat range
 # beat_range=(8,12)
 beat_range=(0,16)
-pitch_range = [f"pitch:{i}" for i in range(50,model.tokenizer.config["pitch_range"][1])]
+pitch_range = [f"pitch:{i}" for i in range(55,model.tokenizer.config["pitch_range"][1])]
 # make infilling mask
 mask = (
     model.tokenizer.infilling_mask(
@@ -307,7 +307,7 @@ mask = (
 
 y = model.generate(
     mask,
-    temperature=1.0,
+    temperature=0.999,
     sampling_steps=300*9,
     top_p=1.0
 )[0].cpu().numpy().argmax(axis=-1)
@@ -327,7 +327,7 @@ x_sm = model.tokenizer.decode(x)
 # beat_range=(8,12)
 beat_range = (0, 16)
 pitch_range = [
-    f"pitch:{i}" for i in range(model.tokenizer.config["pitch_range"][0], 51)
+    f"pitch:{i}" for i in range(model.tokenizer.config["pitch_range"][0], 55)
 ]
 # make infilling mask
 mask = (
@@ -345,7 +345,7 @@ mask = (
 y = (
     model.generate(
         mask,
-        temperature=0.98,
+        temperature=0.999,
         schedule_fn=lambda x: x,
         top_p=1.0,
         top_k=0,
@@ -386,7 +386,7 @@ mask = (
 y = (
     model.generate(
         mask,
-        temperature=1.0,
+        temperature=0.99,
         schedule_fn=lambda x: x,
         top_p=1.0,
         top_k=0,

@@ -13,7 +13,7 @@ def get_num_notes(sm):
     return sum([len(track.notes) for track in sm.tracks if not track.name.startswith("Layer")])
 
 class MidiDataset(torch.utils.data.Dataset):
-    def __init__(self, cache_path, genre_list, path_filter_fn, tokenizer, transposition_range=[-7, 7], min_notes=1, max_notes=1e6, group_by_source=False):
+    def __init__(self, cache_path, genre_list, path_filter_fn, tokenizer, transposition_range=None, min_notes=1, max_notes=1e6, group_by_source=False):
         self.tokenizer = tokenizer
         self.records = torch.load(cache_path)
         for i in range(len(self.records)):

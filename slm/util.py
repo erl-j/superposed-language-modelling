@@ -1,6 +1,54 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
+import pretty_midi
+
+def get_scale(scale, range):
+    root = scale.split(" ")[0]
+    mode = scale.split(" ")[1]
+
+    scales = {
+        "major": [0, 2, 4, 5, 7, 9, 11],
+        "pentatonic": [0, 2, 4, 7, 9],
+        "blues": [0, 3, 5, 6, 7, 10],
+    }
+
+    if root not in [
+        "C",
+        "C#",
+        "D",
+        "D#",
+        "E",
+        "F",
+        "F#",
+        "G",
+        "G#",
+        "A",
+        "A#",
+        "B",
+    ]:
+        raise ValueError("Root not found")
+
+    if mode not in scales:
+        raise ValueError(f"Mode not found, options are {scales.keys()}")
+
+    root_midi = pretty_midi.note_name_to_number(root + "0")
+
+    while root_midi < range[0]:
+        root_midi += 12
+
+    midi_notes = []
+
+    octave = 0
+    while True:
+        for interval in scales[mode]:
+            new_note = octave * 12 + root_midi + interval
+            if new_note >= range[1]:
+                return midi_notes
+            else:
+                midi_notes.append(new_note)
+        octave += 1
+
 
 def loop_sm(sm, loop_bars, n_loops):
     '''

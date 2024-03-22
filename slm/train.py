@@ -125,8 +125,7 @@ class EncoderOnlyModel(pl.LightningModule):
             decoder_logits, "b t a v -> b (t a) v"
         )
 
-        # multiply by format mask
-        decoder_logits = decoder_logits * format_mask
+        decoder_logits = decoder_logits * format_mask + (1-format_mask) * self.x_bias
 
         # crop to decoder length
         return decoder_logits
@@ -573,5 +572,5 @@ if __name__ == "__main__":
         model,
         trn_dl,
         val_dl,
-        ckpt_path="checkpoints/desert-capybara-249/epoch=82-step=119769-val/loss_epoch=0.14.ckpt",
+        ckpt_path="checkpoints/clear-terrain-265/epoch=111-step=161616-val/loss_epoch=0.14.ckpt"
     )

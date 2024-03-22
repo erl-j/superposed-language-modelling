@@ -3,6 +3,7 @@ import pydash
 import numpy as np
 import torch
 import pretty_midi
+from util import get_scale
 # has features over old one.
 # supports velocity bins
 # drums are now a separate instrument
@@ -432,38 +433,7 @@ class MergedTokenizer():
 
         constraint_mask = np.ones((len(self.note_attribute_order), len(self.vocab)), dtype=int)
 
-        def get_scale(scale, range):
-            root = scale.split(" ")[0]
-            mode = scale.split(" ")[1]
-
-            scales = {
-                "major": [0, 2, 4, 5, 7, 9, 11],
-                "pentatonic": [0, 2, 4, 7, 9],
-                "blues": [0, 3, 5, 6, 7, 10],
-            }
-
-            if root not in ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]:
-                raise ValueError("Root not found")
-
-            if mode not in scales:
-                raise ValueError(f"Mode not found, options are {scales.keys()}")
-
-            root_midi = pretty_midi.note_name_to_number(root + "0")
-
-            while root_midi < range[0]:
-                root_midi += 12
-
-            midi_notes = []
-
-            octave = 0
-            while True:
-                for interval in scales[mode]:
-                    new_note = octave * 12 + root_midi + interval
-                    if new_note >= range[1]:
-                        return midi_notes
-                    else:
-                        midi_notes.append(new_note)
-                octave += 1
+       
 
         for attribute_index, attribute in enumerate(self.note_attribute_order):
 
