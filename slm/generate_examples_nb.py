@@ -13,7 +13,7 @@ device = "cuda:7"
 ROOT_DIR = "../"
 
 # ckpt = "checkpoints/exalted-cloud-246/epoch=89-step=103950-val/loss_epoch=0.14.ckpt"
-ckpt = "checkpoints/desert-capybara-249/epoch=82-step=119769-val/loss_epoch=0.14.ckpt"
+ckpt = "checkpoints/clear-terrain-265/epoch=101-step=147186-val/loss_epoch=0.14.ckpt"
 model = EncoderOnlyModel.load_from_checkpoint(
     ROOT_DIR + ckpt,
     map_location=device,
@@ -40,7 +40,7 @@ ds = MidiDataset(
     max_notes=model.tokenizer.config["max_notes"],
 )
 
-OUTPUT_DIR = ROOT_DIR + "artefacts/examples_3"
+OUTPUT_DIR = ROOT_DIR + "artefacts/examples_4"
 TMP_DIR = ROOT_DIR + "artefacts/tmp"
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -123,7 +123,7 @@ mask = mask * mask2
 y = (
     model.generate(
         mask,
-        temperature=0.99,
+        temperature=1.0,
         schedule_fn=lambda x: x,
         top_p=1,
         top_k=0,
@@ -268,7 +268,7 @@ a = c * a
 y = model.generate(
     a,
     schedule_fn=lambda x: x,
-    temperature=0.99,
+    temperature=1.0,
     top_p=1.0,
     top_k=0,
 )[0].argmax(axis=1)
@@ -309,7 +309,7 @@ y = model.generate(
     mask,
     temperature=1.0,
     sampling_steps=300*9,
-    top_p=0.98
+    top_p=1.0
 )[0].cpu().numpy().argmax(axis=-1)
 y_sm = model.tokenizer.decode(y)
 
@@ -345,9 +345,9 @@ mask = (
 y = (
     model.generate(
         mask,
-        temperature=1.0,
+        temperature=0.98,
         schedule_fn=lambda x: x,
-        top_p=0.98,
+        top_p=1.0,
         top_k=0,
     )[0]
     .cpu()
@@ -388,7 +388,7 @@ y = (
         mask,
         temperature=1.0,
         schedule_fn=lambda x: x,
-        top_p=0.95,
+        top_p=1.0,
         top_k=0,
     )[0]
     .cpu()
