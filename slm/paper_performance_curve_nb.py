@@ -7,51 +7,71 @@ from train import EncoderOnlyModel
 from util import piano_roll
 import os
 import IPython.display as ipd
+from util import get_scale
+from paper_checkpoints import SLM_CKPT_PTH, MLM_CKPT_PTH
 import torch
-import random
 
-#%%
-
+# %%
 device = "cuda:7"
-
 ROOT_DIR = "../"
 
-# ckpt = "checkpoints/exalted-cloud-246/epoch=89-step=103950-val/loss_epoch=0.14.ckpt"
-# ckpt = "checkpoints/clear-terrain-265/epoch=111-step=161616-val/loss_epoch=0.14.ckpt"
-
-mlm_ckpt = "checkpoints/dry-shadow-267/epoch=2-step=4329-val/loss_epoch=1.72.ckpt"
-model = EncoderOnlyModel.load_from_checkpoint(
-    ROOT_DIR + mlm_ckpt,
-    map_location=device,
+slm = (
+    EncoderOnlyModel.load_from_checkpoint(
+        ROOT_DIR + SLM_CKPT_PTH,
+        map_location=device,
+        avg_positional_encoding=True,
+    )
+    .to(device)
+    .eval()
 )
 
+mlm = (
+    EncoderOnlyModel.load_from_checkpoint(
+        ROOT_DIR + MLM_CKPT_PTH,
+        map_location=device,
+        avg_positional_encoding=True,
+    )
+    .to(device)
+    .eval()
+)
+
+#%%
 N_BARS = 4
-
-
-# Move the model to the device
-model = model.to(device)
-
-model.eval()
-
 # Load the dataset
 val_ds = MidiDataset(
     cache_path="../artefacts/val_midi_records.pt",
     path_filter_fn=lambda x: f"n_bars={N_BARS}" in x,
-    genre_list=model.tokenizer.config["tags"],
-    tokenizer=model.tokenizer,
+    genre_list=slm.tokenizer.config["tags"],
+    tokenizer=None,
     min_notes=8 * N_BARS,
-    max_notes=model.tokenizer.config["max_notes"],
+    max_notes=slm.tokenizer.config["max_notes"],
 )
-
 BATCH_SIZE = 64
 # get val dataloader
 val_dl = torch.utils.data.DataLoader(
     val_ds,
     batch_size=BATCH_SIZE,
 )
-
-
 #%%
+
+for masking_ratio in np.linspace(0, 1, 5):
+    for superposition_prob in np.linspace(0, 1, 5):
+        superposition_ratio = 
+
+
+
+
+for known_token_ratio in np.linspace(0, 1, 5):
+    # get perforrance curve
+    metrics = slm.performance_curve(val_dl, known_token_ratio=known_token_ratio)
+
+    
+    # plot metrics
+    plt.plot(metrics)
+    plt.title(f"Known Token Ratio: {known_token_ratio}")
+    plt.show()
+
+
 
 batch = next(iter(val_dl)).to(device)
 

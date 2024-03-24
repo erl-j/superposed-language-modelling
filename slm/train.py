@@ -244,48 +244,6 @@ class EncoderOnlyModel(pl.LightningModule):
                     flat_x, "(b ta) v -> b ta v", b=batch, ta=time_attr
                 )
         return x
-    
-    def performance_curve(self, batch, base_masking_ratio):
-        if self.one_hot_input:
-            x = batch
-        else:
-            x = torch.nn.functional.one_hot(batch, num_classes=len(self.vocab)).float()
-        batch_size = x.shape[0]
-        self.eval()
-        with torch.no_grad():
-            base_masking_ratio = base_masking_ratio
-            superposition_ratios = torch.linspace(0, 1, 100)
-            metrics = []
-
-            # attr_mask 
-            # masking_ratios = torch.rand(batch_size, device=self.device)
-            masking_ratios = torch.ones(batch_size, device=self.device) * base_masking_ratio
-            attr_mask = (
-                torch.rand((x.shape[0], x.shape[1]), device=self.device)
-                < masking_ratios[:, None]
-            )
-            attr_mask = attr_mask[:,:,None]
-            for superposition_ratio in tqdm(superposition_ratios):
-                # create masking ratios
-                superposition_ratio = torch.ones(batch_size, device=self.device) * superposition_ratio
-                superposition_mask = torch.rand_like(x, device=self.device)<superposition_ratio[:,None,None]
-
-                combined_mask = superposition_mask * attr_mask
-
-                encoder_input = torch.clamp(x + combined_mask, 0, 1)
-
-                logits = self(encoder_input)
-
-                tgt_index = torch.argmax(
-                    x, dim=-1
-                )
-
-                ce = F.cross_entropy(
-                    logits.reshape(-1, logits.shape[-1]),
-                    tgt_index.reshape(-1),
-                )
-                metrics.append(ce.item())
-        return metrics
 
     def step(self, batch, batch_idx):
         if self.one_hot_input:
@@ -298,25 +256,25 @@ class EncoderOnlyModel(pl.LightningModule):
         if self.standard_mlm_forward:
             
             # create a binary mask of size (batch_size, (notes attributes))
-            masking_ratios = torch.rand(batch_size, device=self.device)
+            masking_probs = torch.rand(batch_size, device=self.device)
             mask = (
                 torch.rand((x.shape[0], x.shape[1]), device=self.device)
-                < masking_ratios[:, None]
+                < masking_probs[:, None]
             )
             mask = mask[:,:,None] * torch.ones_like(x, device=self.device)
 
         else:
 
-            masking_ratios = torch.rand(batch_size, device=self.device)
+            masking_probs = torch.rand(batch_size, device=self.device)
             mask = (
                 torch.rand((x.shape[0], x.shape[1]), device=self.device)
-                < masking_ratios[:, None]
+                < masking_probs[:, None]
             )
             mask = mask[:,:,None]
 
             # create masking ratios
-            superposition_density = torch.rand(batch_size, device=self.device)
-            superposition = torch.rand_like(x, device=self.device)<superposition_density[:,None,None]
+            superposition_probs = torch.rand(batch_size, device=self.device)
+            superposition = torch.rand_like(x, device=self.device)<superposition_probs[:,None,None]
 
             mask = mask * superposition
 
