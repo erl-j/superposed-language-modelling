@@ -86,9 +86,12 @@ class EncoderOnlyModel(pl.LightningModule):
 
         self.avg_positional_encoding = avg_positional_encoding
         self.use_positional_encoding = use_positional_encoding
+       
 
     def mlm_forward(self, x):
         format_mask = self.format_mask[None, ...].to(x.device)
+        xin = x
+
         x = x * format_mask
 
         # figure out if token is masked, i.e more than one token is masked
@@ -125,7 +128,11 @@ class EncoderOnlyModel(pl.LightningModule):
             decoder_logits, "b t a v -> b (t a) v"
         )
 
-        decoder_logits = decoder_logits * format_mask + (1-format_mask) * self.x_bias
+        format_mask_expanded = format_mask * torch.ones_like(xin, device=self.device)
+        decoder_logits[format_mask_expanded<0.5] = self.x_bias
+
+        if not self.training:
+            decoder_logits[xin<0.5] = self.x_bias
 
         # crop to decoder length
         return decoder_logits
@@ -288,21 +295,30 @@ class EncoderOnlyModel(pl.LightningModule):
         
         batch_size = x.shape[0]
 
-        # create masking ratios
-        masking_ratios = torch.rand(batch_size, device=self.device)
-        mask = torch.rand_like(x, device=self.device)<masking_ratios[:,None,None]
-
-        if not self.standard_mlm_masking:
-            masking_ratios_bis = torch.rand(batch_size, device=self.device)
-            attr_mask = (
+        if self.standard_mlm_forward:
+            
+            # create a binary mask of size (batch_size, (notes attributes))
+            masking_ratios = torch.rand(batch_size, device=self.device)
+            mask = (
                 torch.rand((x.shape[0], x.shape[1]), device=self.device)
-                < masking_ratios_bis[:, None]
+                < masking_ratios[:, None]
             )
-            attr_mask = attr_mask[:,:,None]
-        else:
-            attr_mask = torch.ones_like(x, device=self.device)
+            mask = mask[:,:,None] * torch.ones_like(x, device=self.device)
 
-        mask = mask * attr_mask
+        else:
+
+            masking_ratios = torch.rand(batch_size, device=self.device)
+            mask = (
+                torch.rand((x.shape[0], x.shape[1]), device=self.device)
+                < masking_ratios[:, None]
+            )
+            mask = mask[:,:,None]
+
+            # create masking ratios
+            superposition_density = torch.rand(batch_size, device=self.device)
+            superposition = torch.rand_like(x, device=self.device)<superposition_density[:,None,None]
+
+            mask = mask * superposition
 
         # mask encoder input
         # encoder input is mask or token tensor with undefined
@@ -510,7 +526,10 @@ if __name__ == "__main__":
         shuffle=False,
         num_workers=4,
         pin_memory=True,
+
     )
+
+    USE_MLM_BASELINE = True
     
     model = EncoderOnlyModel(
         hidden_size=768,
@@ -519,7 +538,7 @@ if __name__ == "__main__":
         n_layers=12,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
-        learning_rate=1e-4,
+        learning_rate=1e-4 if not USE_MLM_BASELINE else 5e-6,
         tokenizer_config=tokenizer_config,
         normalize_by_masking_ratio=False,
         learning_rate_gamma=0.99,
@@ -527,8 +546,8 @@ if __name__ == "__main__":
         x_bias=-1e9,
         fix_x_bias=True,
         embedding_bias=False,
-        standard_mlm_forward=False,
-        standard_mlm_masking=False,
+        standard_mlm_forward= USE_MLM_BASELINE,
+        standard_mlm_masking= USE_MLM_BASELINE,
         avg_positional_encoding=False,
         use_positional_encoding=False,
     )
@@ -543,7 +562,7 @@ if __name__ == "__main__":
     progress_bar_callback = RichProgressBar(refresh_rate=1)
 
     trainer = pl.Trainer(
-    strategy='ddp_find_unused_parameters_true',
+    strategy="ddp_find_unused_parameters_true",
     accelerator="gpu",
     devices=[2,3,5,6],
     # precision="16-mixed",
@@ -561,7 +580,7 @@ if __name__ == "__main__":
             mode="min",
             save_top_k=3,
             save_last=True,
-            filename="{epoch}-{step}-{val/loss_epoch:.2f}",
+            filename="{epoch}-{step}-{val/loss_epoch:.5f}",
             )],
     logger=wandb_logger,
     gradient_clip_val=1.0,
@@ -572,5 +591,6 @@ if __name__ == "__main__":
         model,
         trn_dl,
         val_dl,
-        ckpt_path="checkpoints/clear-terrain-265/epoch=111-step=161616-val/loss_epoch=0.14.ckpt"
+        # ckpt_path="checkpoints/trim-water-280/epoch=132-step=191919-val/loss_epoch=0.14.ckpt"
+        # ckpt_path="checkpoints/clear-terrain-265/epoch=111-step=161616-val/loss_epoch=0.14.ckpt"
     )

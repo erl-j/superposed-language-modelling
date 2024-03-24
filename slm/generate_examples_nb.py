@@ -13,7 +13,10 @@ device = "cuda:7"
 ROOT_DIR = "../"
 
 # ckpt = "checkpoints/exalted-cloud-246/epoch=89-step=103950-val/loss_epoch=0.14.ckpt"
-ckpt = "checkpoints/clear-terrain-265/epoch=111-step=161616-val/loss_epoch=0.14.ckpt"
+# ckpt = "checkpoints/clear-terrain-265/epoch=111-step=161616-val/loss_epoch=0.14.ckpt"
+# ckpt = "checkpoints/trim-water-280/epoch=127-step=184704-val/loss_epoch=0.14.ckpt"
+
+ckpt = "checkpoints/rural-jazz-289/epoch=27-step=40404-val/loss_epoch=1.24070.ckpt"
 model = EncoderOnlyModel.load_from_checkpoint(
     ROOT_DIR + ckpt,
     map_location=device,
@@ -81,10 +84,6 @@ x_sm.dump_midi(OUTPUT_DIR + "/resample_original.mid")
 #     x_sm = model.tokenizer.decode(x)
 
 #     preview(x_sm, TMP_DIR)
-
-#%%
-
-
 
 #%%
 
@@ -169,7 +168,7 @@ mask = model.tokenizer.replace_mask(x, ["instrument"]).to(model.device).float()
 
 mask2 = (
     model.tokenizer.constraint_mask(
-        instruments=["Bass","Guitar","Drums"],
+        instruments=["Organ","Piano"],
         min_notes=0,
     )[None, ...]
     .to(model.device)
@@ -254,13 +253,13 @@ y_sm.dump_midi(OUTPUT_DIR + "/slm_replace_velocity.mid")
 
 a = model.format_mask[None, ...].to(model.device)
 c = model.tokenizer.constraint_mask(
-    tags=["metal"],
+    # tags=["traditional"],
     # tags=["other"],
-    instruments=["Bass","Drums","Guitar"],
+    # instruments=["Piano"],
     tempos = ["126"],
-    # scale="G pentatonic",
-    min_notes=50,
-    max_notes=150,
+    scale="D major",
+    min_notes=150,
+    max_notes=200,
 )[None, ...].to(model.device)
 a = c * a
 
@@ -268,7 +267,7 @@ a = c * a
 y = model.generate(
     a,
     schedule_fn=lambda x: x,
-    temperature=0.999,
+    temperature=1.0,
     top_p=1.0,
     top_k=0,
 )[0].argmax(axis=1)
@@ -307,7 +306,7 @@ mask = (
 
 y = model.generate(
     mask,
-    temperature=0.999,
+    temperature=0.998,
     sampling_steps=300*9,
     top_p=1.0
 )[0].cpu().numpy().argmax(axis=-1)
@@ -450,29 +449,42 @@ import seaborn as sns
 
 # get the embedding
 embedding = model.embedding_layer.weight.detach().cpu().numpy().T
+projection = model.decoder_output_layer.weight.detach().cpu().numpy()
 
 # get vocab
 vocab = model.tokenizer.vocab
 
 embedding_norm = np.linalg.norm(embedding, axis=1, keepdims=True)
+projection_norm = np.linalg.norm(projection, axis=0, keepdims=True)
 
 # normalize the embedding
 embedding = embedding / embedding_norm
+projection = projection / projection_norm
 
 # compute the cosine similarity
-similarity = embedding @ embedding.T
+embedding_similarity = embedding @ embedding.T
+projection_similarity = projection @ projection.T
+
 
 # plot the similarity matrix
 # make large figure
 plt.figure(figsize=(50, 50))
 # set small font
 sns.set(font_scale=0.5)
-sns.heatmap(similarity, cmap="magma", xticklabels=vocab, yticklabels=vocab, mask = np.eye(len(vocab)))
+sns.heatmap(embedding_similarity, cmap="magma", xticklabels=vocab, yticklabels=vocab, mask = np.eye(len(vocab)))
+plt.show()
+
+# plot the similarity matrix
+# make large figure
+plt.figure(figsize=(50, 50))
+# set small font
+sns.set(font_scale=0.5)
+sns.heatmap(projection_similarity, cmap="magma", xticklabels=vocab, yticklabels=vocab, mask = np.eye(len(vocab)))
 plt.show()
 
 #%%
 
-# per attribute similarity
+# per attribute embedding_similarity
 for attr in model.tokenizer.note_attribute_order:
 
     tokens = [token for token in vocab if attr+":" in token]
@@ -481,12 +493,22 @@ for attr in model.tokenizer.note_attribute_order:
     # get the embedding
     emb = embedding[indices,:]
 
-    # compute the cosine similarity
-    similarity = emb @ emb.T
+    pro = projection[indices,:]
 
-    # plot the similarity matrix
+    # compute the cosine embedding_similarity
+    embedding_similarity = emb @ emb.T
+
+    projection_similarity = pro @ pro.T
+
+    # plot the embedding_similarity matrix
     plt.figure(figsize=(10, 10))
-    sns.heatmap(similarity, cmap="magma", xticklabels=tokens, yticklabels=tokens, mask = np.eye(len(tokens)))
+    sns.heatmap(embedding_similarity, cmap="magma", xticklabels=tokens, yticklabels=tokens, mask = np.eye(len(tokens)))
+    plt.title(attr)
+    plt.show()
+
+    # plot the embedding_similarity matrix
+    plt.figure(figsize=(10, 10))
+    sns.heatmap(projection_similarity, cmap="magma", xticklabels=tokens, yticklabels=tokens, mask = np.eye(len(tokens)))
     plt.title(attr)
     plt.show()
 

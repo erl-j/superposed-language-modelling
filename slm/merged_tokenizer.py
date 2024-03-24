@@ -183,22 +183,6 @@ class MergedTokenizer():
                         format_mask[note_idx * self.attributes_per_note + attr_idx, self.token2idx[token]] = 1
         return format_mask
     
-    # def fix_undefined(self, x):
-
-    #     x = x.reshape((self.config["max_notes"], len(self.note_attribute_order)))
-
-    #     # undefined mask
-    #     undefined_tokens = [attr + ":-" for attr in self.note_attribute_order]
-    #     undefined_token_idxs = [self.token2idx[token] for token in undefined_tokens]
-    #     undefned_token_idx = np.array(undefined_token_idxs)
-
-    #     # if any attribute is undefined, set all attributes to undefined
-    #     for note_idx in range(self.config["max_notes"]):
-    #         if (x[note_idx, :] == undefned_token_idx).any(axis=0):
-    #             x[note_idx, :] = undefned_token_idx
-        
-    #     return torch.tensor(x.reshape((self.config["max_notes"] * len(self.note_attribute_order))))
-        
     def replace_mask(self,x, attributes_to_replace):
         x = x.clone()
 
@@ -224,11 +208,6 @@ class MergedTokenizer():
         x_1h = x_1h.reshape((self.config["max_notes"] * len(self.note_attribute_order), len(self.vocab)))
         return torch.tensor(x_1h)
                     
-
-
-
-
-
 
     def shuffle_notes_mask(self, x, same_onset_times=False):
         x = x.clone()
@@ -264,7 +243,6 @@ class MergedTokenizer():
         return torch.tensor(x_1h)
 
 
-    
     def infilling_mask(self, x, beat_range=None, pitches=None, min_notes= None, max_notes=None):
         '''
         beat_range: tuple of ints, (min_beat, max_beat) : list of strings. If None, defaults to entire beat range.
@@ -426,14 +404,12 @@ class MergedTokenizer():
         return torch.tensor(mask)
                 
     
-    def constraint_mask(self,tags=None, tempos=None, instruments=None, pitches=None, scale="" ,min_notes=1, max_notes=None):
+    def constraint_mask(self,tags=None, tempos=None, instruments=None, pitches=None, onset_beats=None, offset_beats=None, scale="" ,min_notes=1, max_notes=None):
 
         if max_notes is None:
             max_notes = self.config["max_notes"]
 
         constraint_mask = np.ones((len(self.note_attribute_order), len(self.vocab)), dtype=int)
-
-       
 
         for attribute_index, attribute in enumerate(self.note_attribute_order):
 
