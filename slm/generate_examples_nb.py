@@ -7,20 +7,22 @@ from train import EncoderOnlyModel
 from util import piano_roll
 import os
 import IPython.display as ipd
+from paper_checkpoints import SLM_CKPT_PTH, MLM_CKPT_PTH,SS_SLM_CKPT_PTH
+
 
 device = "cuda:7"
-
 ROOT_DIR = "../"
 
-# ckpt = "checkpoints/exalted-cloud-246/epoch=89-step=103950-val/loss_epoch=0.14.ckpt"
-# ckpt = "checkpoints/clear-terrain-265/epoch=111-step=161616-val/loss_epoch=0.14.ckpt"
-# ckpt = "checkpoints/trim-water-280/epoch=127-step=184704-val/loss_epoch=0.14.ckpt"
+MODEL = "slm"
 
-ckpt = "checkpoints/rural-jazz-289/epoch=27-step=40404-val/loss_epoch=1.24070.ckpt"
-model = EncoderOnlyModel.load_from_checkpoint(
-    ROOT_DIR + ckpt,
-    map_location=device,
-    avg_positional_encoding=True,
+
+model = (
+    EncoderOnlyModel.load_from_checkpoint(
+        ROOT_DIR + (SS_SLM_CKPT_PTH if MODEL == "ss_slm" else SLM_CKPT_PTH if MODEL == "slm" else  MLM_CKPT_PTH),
+        map_location=device,
+    )
+    .to(device)
+    .eval()
 )
 
 #%%
@@ -253,13 +255,13 @@ y_sm.dump_midi(OUTPUT_DIR + "/slm_replace_velocity.mid")
 
 a = model.format_mask[None, ...].to(model.device)
 c = model.tokenizer.constraint_mask(
-    # tags=["traditional"],
+    # tags=["rock"],
     # tags=["other"],
-    # instruments=["Piano"],
-    tempos = ["126"],
-    scale="D major",
-    min_notes=150,
-    max_notes=200,
+    instruments=["Drums","Bass","Piano"],
+    tempos = ["138"],
+    # scale="G major",
+    min_notes=100,
+    max_notes=250,
 )[None, ...].to(model.device)
 a = c * a
 
@@ -267,7 +269,7 @@ a = c * a
 y = model.generate(
     a,
     schedule_fn=lambda x: x,
-    temperature=1.0,
+    temperature=0.99,
     top_p=1.0,
     top_k=0,
 )[0].argmax(axis=1)
@@ -302,11 +304,11 @@ mask = (
     )[None, ...]
     .to(model.device)
     .float()
-)
+) 
 
 y = model.generate(
     mask,
-    temperature=0.998,
+    temperature=0.85,
     sampling_steps=300*9,
     top_p=1.0
 )[0].cpu().numpy().argmax(axis=-1)
@@ -333,7 +335,7 @@ mask = (
     model.tokenizer.infilling_mask(
         x,
         beat_range,
-        min_notes=x_sm.note_num(),
+        min_notes=30,
         max_notes=x_sm.note_num(),
         pitches=pitch_range,
     )[None, ...]
@@ -344,7 +346,7 @@ mask = (
 y = (
     model.generate(
         mask,
-        temperature=0.999,
+        temperature=0.85,
         schedule_fn=lambda x: x,
         top_p=1.0,
         top_k=0,
@@ -385,7 +387,7 @@ mask = (
 y = (
     model.generate(
         mask,
-        temperature=0.99,
+        temperature=0.8,
         schedule_fn=lambda x: x,
         top_p=1.0,
         top_k=0,
@@ -425,7 +427,7 @@ mask = (
 y = (
     model.generate(
         mask,
-        temperature=1.0,
+        temperature=0.85,
         schedule_fn=lambda x: x,
         top_p=0.98,
         top_k=0,

@@ -259,8 +259,108 @@ class EncoderOnlyModel(pl.LightningModule):
                     flat_x, "(b ta) v -> b ta v", b=batch, ta=time_attr
                 )
         return x
+    
+    def compute_metrics(self, logits, targets):
+        metrics = {}
+        with torch.no_grad():
+            # get probability of the correct token
+            decoder_output_probs = F.softmax(logits, dim=-1)
+            probability = torch.gather(
+                decoder_output_probs,
+                dim=-1,
+                index=targets.unsqueeze(-1),
+            ).squeeze(-1)
+            metrics["probability"] = probability.mean()
+            # sort yhat by probability
+            decoder_output_probs_sort = torch.argsort(
+                decoder_output_probs, dim=-1, descending=True
+            )
+            for k in [1, 2, 4]:
+                metrics[f"accuracy@{k}"] = (
+                    (
+                        targets.unsqueeze(-1)
+                        == decoder_output_probs_sort[:, :, :k]
+                    )
+                    .any(dim=-1)
+                    .float()
+                    .mean()
+                )
+        return metrics
 
     def step(self, batch, batch_idx):
+        if self.one_hot_input:
+            x = batch
+        else:
+            tgt = batch
+            x = torch.nn.functional.one_hot(batch, num_classes=len(self.vocab)).float()
+        
+        # sample masking ratios
+        batch_masking_probs = torch.rand(x.shape[0], device=self.device)
+
+        # create a binary mask of size (batch_size, (notes attributes))
+        position_mask_a = torch.rand((x.shape[0], x.shape[1]), device=self.device) < batch_masking_probs[:, None]
+
+        # get masked x
+        x_masked_a = ((x + position_mask_a[:,:,None])>0.5).float()
+
+        # get logits 
+        logits_a = self(x_masked_a)
+
+        flat_logits_a = einops.rearrange(logits_a, "b ta v -> (b ta) v")
+
+        ce_a = F.cross_entropy(
+            flat_logits_a,
+            tgt.reshape(-1),
+        )
+
+        metrics_a = self.compute_metrics(logits_a, tgt)
+
+        top_p_thresholds = torch.rand(flat_logits_a.shape[0], device=self.device)
+
+        # top_p_logits
+        flat_logits_top = top_k_top_p_filtering(flat_logits_a, top_k=0, top_p=top_p_thresholds[:,None])
+
+        eps = 10e-10
+
+        flat_mask_b = (torch.softmax(flat_logits_top, dim=-1)>eps).float()
+
+        # mask_b
+        mask_b = einops.rearrange(flat_mask_b, "(b ta) v -> b ta v", b=x.shape[0], ta=x.shape[1])
+
+        mask_b = ((mask_b + x)  > 0.5).float()
+
+        position_mask_b = ~position_mask_a
+        # get masked x
+        x_masked_b = torch.ones(x.shape, device=self.device) * position_mask_b[:,:,None] + position_mask_a[:,:,None] * mask_b
+
+        # get logits
+        logits_b = self(x_masked_b)
+
+        flat_logits_b = einops.rearrange(logits_b, "b ta v -> (b ta) v")
+
+        ce_b = F.cross_entropy(
+            flat_logits_b,
+            tgt.reshape(-1),
+        )
+
+        metrics_b = self.compute_metrics(logits_b, tgt)
+
+
+        metrics = {}
+        for metric in metrics_a:
+            metrics[f"a/{metric}"] = metrics_a[metric]
+        for metric in metrics_b:
+            metrics[f"b/{metric}"] = metrics_b[metric]
+
+        return {
+            "ce_a": ce_a,
+            "ce_b": ce_b,
+            "cross_entropy": (ce_a + ce_b)/2,
+            **metrics,
+        }
+    
+
+    def old_step(self, batch, batch_idx):
         if self.one_hot_input:
             x = batch
         else:
@@ -319,27 +419,7 @@ class EncoderOnlyModel(pl.LightningModule):
         metrics["cross_entropy"] = ce.mean()
         metrics["cross_entropy_normalized"] = norm_ce
         # TODO: check that this code is correct
-        with torch.no_grad():
-            # get probability of the correct token
-            decoder_output_probs = F.softmax(decoder_output_logits, dim=-1)
-            probability = torch.gather(
-                decoder_output_probs, dim=-1, index=decoder_output_tokens_index.unsqueeze(-1)
-            ).squeeze(-1)
-            metrics["probability"] = probability.mean()
-            # sort yhat by probability
-            decoder_output_probs_sort = torch.argsort(
-                decoder_output_probs, dim=-1, descending=True
-            )
-            for k in [1, 2, 4]:
-                metrics[f"accuracy@{k}"] = (
-                    (
-                        decoder_output_tokens_index.unsqueeze(-1)
-                        == decoder_output_probs_sort[:, :, :k]
-                    )
-                    .any(dim=-1)
-                    .float()
-                    .mean()
-                )
+        
         return metrics
 
     def training_step(self, batch, batch_idx):
@@ -483,7 +563,7 @@ if __name__ == "__main__":
     )
     
     # desert capy uses batch size 80
-    BATCH_SIZE = 80
+    BATCH_SIZE = 40
 
     trn_dl = torch.utils.data.DataLoader(
         trn_ds,
