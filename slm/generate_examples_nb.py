@@ -13,7 +13,7 @@ from paper_checkpoints import SLM_CKPT_PTH, MLM_CKPT_PTH,SS_SLM_CKPT_PTH
 device = "cuda:7"
 ROOT_DIR = "../"
 
-MODEL = "slm"
+MODEL = "mlm"
 
 
 model = (
@@ -255,7 +255,7 @@ y_sm.dump_midi(OUTPUT_DIR + "/slm_replace_velocity.mid")
 
 a = model.format_mask[None, ...].to(model.device)
 c = model.tokenizer.constraint_mask(
-    # tags=["rock"],
+    tags=["rock"],
     # tags=["other"],
     instruments=["Drums","Bass","Piano"],
     tempos = ["138"],
@@ -269,7 +269,7 @@ a = c * a
 y = model.generate(
     a,
     schedule_fn=lambda x: x,
-    temperature=0.99,
+    temperature=0.999,
     top_p=1.0,
     top_k=0,
 )[0].argmax(axis=1)
@@ -387,7 +387,7 @@ mask = (
 y = (
     model.generate(
         mask,
-        temperature=0.8,
+        temperature=0.85,
         schedule_fn=lambda x: x,
         top_p=1.0,
         top_k=0,

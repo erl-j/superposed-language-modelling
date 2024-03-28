@@ -313,16 +313,38 @@ class EncoderOnlyModel(pl.LightningModule):
             tgt.reshape(-1),
         )
 
+
+        
+
+
+
+
         metrics_a = self.compute_metrics(logits_a, tgt)
 
-        top_p_thresholds = torch.rand(flat_logits_a.shape[0], device=self.device)
+        #top_p_thresholds = torch.rand(flat_logits_a.shape[0], device=self.device)
+
+        noise_levels = torch.rand(flat_logits_a.shape[0], device=self.device) * 0.05
+        probs = F.softmax(flat_logits_a, dim=-1)
+
+        probs = torch.nn.functional.softmax(flat_logits_a, dim=-1)
+
+        probs = probs + torch.randn_like(probs) * noise_levels[:,None]
+        # normalize
+        probs = probs / probs.sum(dim=-1, keepdim=True)
+
+        # get mask by sampling probs without replacement
+        superposition = torch.rand_like(probs) < probs
+
+        # stop gradient just to be sure
+        superposition = superposition.detach()
 
         # top_p_logits
-        flat_logits_top = top_k_top_p_filtering(flat_logits_a, top_k=0, top_p=top_p_thresholds[:,None])
+        # flat_logits_top = top_k_top_p_filtering(flat_logits_a, top_k=0, top_p=top_p_thresholds[:,None])
 
-        eps = 10e-10
+        # eps = 10e-10
 
-        flat_mask_b = (torch.softmax(flat_logits_top, dim=-1)>eps).float()
+        # flat_mask_b = (torch.softmax(flat_logits_top, dim=-1)>eps).float()
+        flat_mask_b = superposition.float()
 
         # mask_b
         mask_b = einops.rearrange(flat_mask_b, "(b ta) v -> b ta v", b=x.shape[0], ta=x.shape[1])
@@ -645,7 +667,6 @@ if __name__ == "__main__":
         model,
         trn_dl,
         val_dl,
-        ckpt_path="checkpoints/frosty-galaxy-297/epoch=29-step=43290-val/loss_epoch=0.15267.ckpt",
         # ckpt_path="checkpoints/trim-water-280/epoch=132-step=191919-val/loss_epoch=0.14.ckpt",
         # ckpt_path="checkpoints/trim-water-280/epoch=132-step=191919-val/loss_epoch=0.14.ckpt"
         # ckpt_path="checkpoints/clear-terrain-265/epoch=111-step=161616-val/loss_epoch=0.14.ckpt"

@@ -78,7 +78,7 @@ x = next(iter(dl)).to(device)
 
 
 for masking_ratio in np.linspace(0.1, 0.9, 9):
-    for topp in np.linspace(0.1, 0.9, 9):
+    for noise_level in np.linspace(0.0, 0.03, 10):
 
         mask = torch.rand((x.shape[0], x.shape[1]),device=device) < masking_ratio
 
@@ -97,22 +97,29 @@ for masking_ratio in np.linspace(0.1, 0.9, 9):
         from util import top_k_top_p_filtering
         import einops
 
-        logits = einops.rearrange(logits, "b s v -> (b s) v")
+        # logits = einops.rearrange(logits, "b s v -> (b s) v")
 
-        logits = top_k_top_p_filtering(logits, top_k=0, top_p=topp, filter_value=-float("Inf"))
+        # logits = top_k_top_p_filtering(logits, top_k=0, top_p=topp, filter_value=-float("Inf"))
 
-        logits = einops.rearrange(logits, "(b s) v -> b s v", b=x.shape[0], s=x.shape[1])
+        # logits = einops.rearrange(logits, "(b s) v -> b s v", b=x.shape[0], s=x.shape[1])
 
         probs = torch.nn.functional.softmax(logits, dim=-1)
 
-        probs *= mask[...,None]
+        probs = (probs + torch.randn_like(probs) * noise_level)
+        # normalize
+        probs = probs / probs.sum(dim=-1, keepdim=True)
 
-        probs = probs>1e-10
+        # get mask by sampling probs without replacement
+        superposition = (torch.rand_like(probs) < probs)
+
+        superposition = superposition * mask[...,None]
+
+        # probs = probs>1e-10
 
         # plot logits
         plt.figure(figsize=(10, 10))
-        sns.heatmap(probs[0,:9*4].detach().cpu().numpy().T, cmap="magma")
-        plt.title(f"masking_ratio={masking_ratio:.2f}, topp={topp:.2f}")
+        sns.heatmap(superposition[0,:9*4].detach().cpu().numpy().T, cmap="magma")
+        plt.title(f"masking_ratio={masking_ratio:.2f}, noise_level={noise_level:.2f}")
         plt.show()
 
 

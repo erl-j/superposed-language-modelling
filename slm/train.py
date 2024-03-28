@@ -259,6 +259,29 @@ class EncoderOnlyModel(pl.LightningModule):
                     flat_x, "(b ta) v -> b ta v", b=batch, ta=time_attr
                 )
         return x
+    
+    def compute_perplexity(self, x, tgt):
+        self.eval()
+        x = x.clone()
+        tgt = tgt.clone()
+        
+        log_probabilities = []
+        with torch.no_grad():
+            for i in tqdm(range(x.shape[1])):
+                logits = self(x)
+                probs = F.softmax(logits, dim=-1)
+                probs = probs * x # set non possible tokens to 0
+                probs = probs * self.format_mask[None, ...].to(x.device)
+                # normalize
+                probs = probs / probs.sum(dim=-1, keepdim=True)
+                # get probabilities
+                current_prob = (probs[:, i] * tgt[:, i]).sum(dim=-1)
+                current_log_prob = torch.log(current_prob)
+                log_probabilities.append(current_log_prob)
+                # replace with target
+                x[:, i ] = tgt[:, i]
+            total_prob = torch.stack(log_probabilities).sum(dim=0)
+            return total_prob
 
     def step(self, batch, batch_idx):
         if self.one_hot_input:
@@ -565,7 +588,7 @@ if __name__ == "__main__":
         model,
         trn_dl,
         val_dl,
-        ckpt_path="checkpoints/frosty-galaxy-297/epoch=29-step=43290-val/loss_epoch=0.15267.ckpt",
+        ckpt_path="checkpoints/trim-water-280/epoch=132-step=191919-val/loss_epoch=0.14.ckpt",
         # ckpt_path="checkpoints/trim-water-280/epoch=132-step=191919-val/loss_epoch=0.14.ckpt",
         # ckpt_path="checkpoints/trim-water-280/epoch=132-step=191919-val/loss_epoch=0.14.ckpt"
         # ckpt_path="checkpoints/clear-terrain-265/epoch=111-step=161616-val/loss_epoch=0.14.ckpt"

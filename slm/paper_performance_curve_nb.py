@@ -50,10 +50,10 @@ ds = MidiDataset(
     genre_list=slm.tokenizer.config["tags"],
     tokenizer=slm.tokenizer,
     # min_notes=8 * N_BARS,
-    min_notes=8 * N_BARS,
+    min_notes=200,
     max_notes=slm.tokenizer.config["max_notes"],
 )
-BATCH_SIZE = 64
+BATCH_SIZE = 1
 # get val dataloader
 dl = torch.utils.data.DataLoader(
     ds,
@@ -89,7 +89,7 @@ MASK_LEVELS = ["position", "note"]
 
 for superposition_scheme in SUPERPOSITION_SCHEMES:
     for mask_level in MASK_LEVELS:
-        for masking_ratio in np.linspace(0.1, 0.9, 7):
+        for masking_ratio in np.linspace(0.1, 0.9, 4):
 
             if mask_level == "position":
             
@@ -224,42 +224,48 @@ for scenario in ["easy", "standard","hard"]:
 
         for model in [mlm, slm]:
 
-            logits = model(x_masked)
+            probs = model.compute_perplexity(x_masked,x)
 
-            # get the masked indices
-            masked_logits = logits[:, masked_position_idx, :]
-            masked_target_idx = x_idx[:, masked_position_idx]
+            # logits = model(x_masked)
 
-            # get cross entropy loss
-            loss = torch.nn.functional.cross_entropy(
-                masked_logits.reshape(-1, vocab_size), masked_target_idx.flatten()
-            ).detach().cpu()
+            # # get the masked indices
+            # masked_logits = logits[:, masked_position_idx, :]
+            # masked_target_idx = x_idx[:, masked_position_idx]
 
-            top_k_accuracies = {}
-            # compute top k accuracy
-            for top_k in [1, 3, 5, 10, 20]:
-                top_k_accuracies[f"top_{top_k}_accuracy"] = torch.topk(
-                    masked_logits, top_k, dim=-1
-                ).indices.eq(masked_target_idx.unsqueeze(-1)).any(dim=-1).float().mean().item()
+            # # get cross entropy loss
+            # loss = torch.nn.functional.cross_entropy(
+            #     masked_logits.reshape(-1, vocab_size), masked_target_idx.flatten()
+            # ).detach().cpu()
 
-            print(f"Attribute: {attribute}, Loss: {loss.item()}")
+            # top_k_accuracies = {}
+            # # compute top k accuracy
+            # for top_k in [1, 3, 5, 10, 20]:
+            #     top_k_accuracies[f"top_{top_k}_accuracy"] = torch.topk(
+            #         masked_logits, top_k, dim=-1
+            #     ).indices.eq(masked_target_idx.unsqueeze(-1)).any(dim=-1).float().mean().item()
 
+            # print(f"Attribute: {attribute}, Loss: {loss.item()}")
+
+        
             model_name = ""
             if model.standard_mlm_forward:
                 model_name = "MLM"
-            elif model.standard_mlm_forward == False:
+            elif not model.standard_mlm_forward:
                 model_name = "SLM"
             # elif model == mlm_no_rs:
             #     model_name = "MLM (No RS)"
             metrics.append(
                 {
                     "attribute": attribute,
-                    "loss": loss.item(),
                     "model": model_name,
                     "scenario": scenario,
-                    **top_k_accuracies
+                    # "loss": loss.item(),
+                    # **top_k_accuracies,
+                    "log_probs": probs,
                 }
             )
+
+            print(metrics[-1])
 
 #%%
 
@@ -267,8 +273,11 @@ import pandas as pd
 metrics = pd.DataFrame(metrics)
 
 for scenario in ["easy", "standard","hard"]:
+    # get means of log probs
+    metrics["log_probs"] = metrics["log_probs"].apply(lambda x: x.mean().item())
+
     plt.figure(figsize=(10, 10))
-    sns.lineplot(data=metrics[metrics["scenario"] == scenario], x="attribute", y="top_3_accuracy", hue="model")
+    sns.lineplot(data=metrics[metrics["scenario"] == scenario], x="attribute", y="log_probs", hue="model")
     plt.title(f"Scenario: {scenario}")
     plt.show()
 #%%
