@@ -402,23 +402,26 @@ class EncoderOnlyModel(pl.LightningModule):
 
                 mask = torch.clamp(mask, 0, 1)
 
-        # mask encoder input
-        # encoder input is mask or token tensor with undefined
-        encoder_input = torch.clamp(x + mask, 0, 1)
+    
+        masked_x = torch.clamp(x + mask, 0, 1)
 
-        decoder_input = x
-        decoder_output_logits = self(encoder_input)
+        # multiply by format mask
+        masked_x = masked_x * self.format_mask[None, ...].to(masked_x.device)
 
-        decoder_output_tokens = decoder_input
-        decoder_output_logits = decoder_output_logits
+        target = x
+        logits = self(masked_x)
 
-        decoder_output_tokens_index = torch.argmax(decoder_output_tokens, dim=-1)
+        target_idx = torch.argmax(target, dim=-1)
 
         ce = F.cross_entropy(
-            decoder_output_logits.reshape(-1, decoder_output_logits.shape[-1]),
-            decoder_output_tokens_index.reshape(-1),
+            logits.reshape(-1, logits.shape[-1]),
+            target_idx.reshape(-1),
             reduction = "none",
         )
+
+        known_positions = (masked_x.sum(dim=-1) == 1).flatten()
+
+        ce[known_positions] = 0
 
         # reshape to batch, loss
         ce = ce.reshape(batch_size, -1)
@@ -431,9 +434,9 @@ class EncoderOnlyModel(pl.LightningModule):
         # TODO: check that this code is correct
         with torch.no_grad():
             # get probability of the correct token
-            decoder_output_probs = F.softmax(decoder_output_logits, dim=-1)
+            decoder_output_probs = F.softmax(logits, dim=-1)
             probability = torch.gather(
-                decoder_output_probs, dim=-1, index=decoder_output_tokens_index.unsqueeze(-1)
+                decoder_output_probs, dim=-1, index=target_idx.unsqueeze(-1)
             ).squeeze(-1)
             metrics["probability"] = probability.mean()
             # sort yhat by probability
@@ -443,7 +446,7 @@ class EncoderOnlyModel(pl.LightningModule):
             for k in [1, 2, 4]:
                 metrics[f"accuracy@{k}"] = (
                     (
-                        decoder_output_tokens_index.unsqueeze(-1)
+                        target_idx.unsqueeze(-1)
                         == decoder_output_probs_sort[:, :, :k]
                     )
                     .any(dim=-1)
@@ -649,7 +652,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
     strategy="ddp_find_unused_parameters_true",
     accelerator="gpu",
-    devices=[2,3,5,6],
+    devices=[2,3],
     # precision="16-mixed",
     max_epochs=10_000,
     log_every_n_steps=1,
