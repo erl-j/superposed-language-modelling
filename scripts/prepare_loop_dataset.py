@@ -11,9 +11,9 @@ genre_file="../midi_data/metamidi_dataset/MMD_scraped_genre.jsonl"
 
 
 for split in [
-    # "val",
-    # "tst",
     "trn",
+    "val",
+    "tst",
 ]:
     split_md5s=f"./split/{split}_md5s.txt"
 
@@ -47,6 +47,9 @@ for split in [
     print(f"Found {len(genre_counts)} genres that occur more than 10 times")
     for genre, count in genre_counts.items():
         print(f"{genre}: {count}")
+
+    # save genre counts
+    genre_counts.to_csv(f"./artefacts/{split}_genre_counts.csv")
 
 
     print(f"Loaded {len(genre_df)} genre records")
@@ -83,4 +86,4 @@ for split in [
 
     midi_records = [list(v) for k, v in itertools.groupby(midi_records, key=lambda x: x["md5"])]
 
-    torch.save(midi_records, f"./artefacts/{split}_midi_records_unique_pr.pt")
+    torch.save(midi_records, f"./artefacts/{split}_2_midi_records_unique_pr.pt")

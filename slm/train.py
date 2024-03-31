@@ -40,6 +40,7 @@ class EncoderOnlyModel(pl.LightningModule):
         use_positional_encoding = False,
         mlm_restricted_sampling = True,
         enforce_constraint_in_forward = True,
+        neighbour_superposition = False
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -91,6 +92,8 @@ class EncoderOnlyModel(pl.LightningModule):
         self.mlm_restricted_sampling = mlm_restricted_sampling
 
         self.enforce_constraint_in_forward = enforce_constraint_in_forward
+
+        self.neighbour_superposition = neighbour_superposition
 
     def mlm_forward(self, x):
         format_mask = self.format_mask[None, ...].to(x.device)
@@ -189,8 +192,61 @@ class EncoderOnlyModel(pl.LightningModule):
         # crop to decoder length
         return decoder_logits
     
+    def generate_parallel(self, x, sampling_steps=None, temperature=1, top_p=1, top_k=0, schedule_fn=lambda x: x):
 
-    def generate(self, x, sampling_steps=None, temperature=1, top_p=1, top_k=0, schedule_fn=lambda x: x):
+        with torch.no_grad():
+            x = x
+            # multiply by format mask
+            x = x * self.format_mask[None, ...].to(x.device)
+            batch, time_attr, vocab = x.shape
+            # linspace from schedule
+            schedule = torch.linspace(
+                0, 1, sampling_steps, dtype=torch.float32, device=x.device
+            )
+            schedule = schedule_fn(schedule)
+
+            step = 0
+
+            superposition_density = 1
+            
+            for i in tqdm(range(step + 1, sampling_steps)):
+                logits = self(x.float())
+
+                logits[x < 0.5] = self.x_bias
+
+                # invert probs
+                # flatten
+                flat_logits = einops.rearrange(logits, "b ta v -> (b ta) v")
+
+                flat_logits = top_k_top_p_filtering(
+                    flat_logits, top_k=top_k, top_p=top_p
+                )
+
+                flat_probs = F.softmax(flat_logits / temperature, dim=-1)
+
+                superposition_density = 1 - schedule[i].item()
+
+                n_values_to_sample = max(int(vocab * superposition_density),1)
+
+                # sample with
+                sampled = torch.multinomial(flat_probs, n_values_to_sample,replacement=True)
+
+                # convert to one hot
+                sampled = torch.nn.functional.one_hot(
+                    sampled, num_classes=vocab
+                ).float()
+
+                # sum to get superposition
+                sampled = sampled.sum(dim=1)
+
+                x = sampled.reshape(batch, time_attr, vocab)
+
+                if (x.sum(dim=-1) == 1 ).all():
+                    break
+
+        return x
+
+    def generate(self, x, sampling_steps=None, temperature=1, top_p=1, top_k=0, schedule_fn=lambda x: x, fixed_order=False):
         if sampling_steps is None:
             sampling_steps = self.tokenizer.config["max_notes"]*len(self.tokenizer.note_attribute_order)
         self.eval()
@@ -245,7 +301,8 @@ class EncoderOnlyModel(pl.LightningModule):
                 # get indices of tokens to unmask
                 # get indices of masked tokens
                 # shuffle masked indices
-                masked_indices = masked_indices[torch.randperm(n_masked)]
+                if not fixed_order:
+                    masked_indices = masked_indices[torch.randperm(n_masked)]
                 indices_to_unmask = masked_indices[:n_tokens_to_unmask]
 
                 # replace with sampled values
@@ -261,14 +318,21 @@ class EncoderOnlyModel(pl.LightningModule):
         return x
     
     def compute_perplexity(self, x, tgt):
+
+        # assert that x is not batched
+        assert len(x.shape) == 2
         self.eval()
         x = x.clone()
         tgt = tgt.clone()
+
+        # get unkown position indices
+        unkown_positions = x[0].sum(dim=-1) > 1
         
         log_probabilities = []
         with torch.no_grad():
-            for i in tqdm(range(x.shape[1])):
+            for i in tqdm(unkown_positions):
                 logits = self(x)
+                logits[x<0.5] = self.x_bias
                 probs = F.softmax(logits, dim=-1)
                 probs = probs * x # set non possible tokens to 0
                 probs = probs * self.format_mask[None, ...].to(x.device)
@@ -301,20 +365,42 @@ class EncoderOnlyModel(pl.LightningModule):
             )
             mask = mask[:,:,None] * torch.ones_like(x, device=self.device)
 
-        else:
+        else:                
 
             masking_probs = torch.rand(batch_size, device=self.device)
-            mask = (
+            position_mask = (
                 torch.rand((x.shape[0], x.shape[1]), device=self.device)
                 < masking_probs[:, None]
             )
-            mask = mask[:,:,None]
 
             # create masking ratios
             superposition_probs = torch.rand(batch_size, device=self.device)
             superposition = torch.rand_like(x, device=self.device)<superposition_probs[:,None,None]
 
-            mask = mask * superposition
+            mask = position_mask[:,:,None] * superposition
+
+
+            if self.neighbour_superposition:
+
+                neighbour_sum_superposition = x.sum(dim=1, keepdim=True) > 1
+
+                # get indices of tokens to apply neighbour sum mask
+
+                neighbour_mask_probs = torch.rand(batch_size, device=self.device)
+
+                neighbour_position_mask = (
+                    torch.rand((x.shape[0], x.shape[1]), device=self.device)
+                    < neighbour_mask_probs[...,None]
+                )
+
+                neighbour_superposition_mask = neighbour_position_mask[:,:,None] * neighbour_sum_superposition
+
+                # multiply by position mask
+                neighbour_sp = neighbour_superposition_mask * position_mask[:,:,None]
+
+                mask = mask + neighbour_sp
+
+                mask = torch.clamp(mask, 0, 1)
 
         # mask encoder input
         # encoder input is mask or token tensor with undefined
@@ -333,6 +419,7 @@ class EncoderOnlyModel(pl.LightningModule):
             decoder_output_tokens_index.reshape(-1),
             reduction = "none",
         )
+
         # reshape to batch, loss
         ce = ce.reshape(batch_size, -1)
 
@@ -525,7 +612,7 @@ if __name__ == "__main__":
 
     )
 
-    USE_MLM_BASELINE = False
+    USE_MLM_BASELINE = True
     
     model = EncoderOnlyModel(
         hidden_size=768,
@@ -534,7 +621,7 @@ if __name__ == "__main__":
         n_layers=12,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
-        learning_rate=1e-4 if not USE_MLM_BASELINE else 5e-6,
+        learning_rate=1e-4 if not USE_MLM_BASELINE else 1e-4,
         tokenizer_config=tokenizer_config,
         normalize_by_masking_ratio=False,
         learning_rate_gamma=0.99,
@@ -547,6 +634,7 @@ if __name__ == "__main__":
         avg_positional_encoding=False,
         use_positional_encoding=False,
         enforce_constraint_in_forward=True,
+        neighbour_superposition = False
     )
 
     wandb_logger = WandbLogger(log_model="all", project="slm")
@@ -588,7 +676,7 @@ if __name__ == "__main__":
         model,
         trn_dl,
         val_dl,
-        ckpt_path="checkpoints/trim-water-280/epoch=132-step=191919-val/loss_epoch=0.14.ckpt",
+        # ckpt_path="checkpoints/trim-water-280/epoch=132-step=191919-val/loss_epoch=0.14.ckpt",
         # ckpt_path="checkpoints/trim-water-280/epoch=132-step=191919-val/loss_epoch=0.14.ckpt",
         # ckpt_path="checkpoints/trim-water-280/epoch=132-step=191919-val/loss_epoch=0.14.ckpt"
         # ckpt_path="checkpoints/clear-terrain-265/epoch=111-step=161616-val/loss_epoch=0.14.ckpt"

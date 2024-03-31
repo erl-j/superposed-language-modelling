@@ -4,10 +4,10 @@ import numpy as np
 import seaborn as sns
 from data import MidiDataset
 from train import EncoderOnlyModel
-from util import piano_roll
+from util import preview
 import os
 import IPython.display as ipd
-from paper_checkpoints import SLM_CKPT_PTH, MLM_CKPT_PTH,SS_SLM_CKPT_PTH
+from paper_checkpoints import checkpoints
 
 
 device = "cuda:7"
@@ -18,12 +18,15 @@ MODEL = "mlm"
 
 model = (
     EncoderOnlyModel.load_from_checkpoint(
-        ROOT_DIR + (SS_SLM_CKPT_PTH if MODEL == "ss_slm" else SLM_CKPT_PTH if MODEL == "slm" else  MLM_CKPT_PTH),
+        ROOT_DIR + checkpoints[MODEL],
         map_location=device,
     )
     .to(device)
     .eval()
 )
+
+if MODEL == "mlm":
+    model.mlm_restricted_sampling = True
 
 #%%
 
@@ -50,19 +53,7 @@ TMP_DIR = ROOT_DIR + "artefacts/tmp"
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-def preview(sm, tmp_dir):
-    # SAMPLE_RATE = 44_100
-    os.makedirs(tmp_dir, exist_ok=True)
-    midi_path = tmp_dir + "/tmp.mid"
-    audio_path = tmp_dir + "/output.wav"
-    sm.dump_midi(midi_path)
-    pr = piano_roll(sm)
-    plt.figure(figsize=(10, 10))
-    sns.heatmap(pr, cmap="magma")
-    plt.show()
 
-    os.system(f"fluidsynth {midi_path} -F {audio_path}")
-    ipd.display(ipd.Audio(audio_path))
 
 RESAMPLE_IDX = 17009
 
@@ -105,6 +96,29 @@ y_sm = model.tokenizer.decode(y)
 preview(y_sm, TMP_DIR)
 
 y_sm.dump_midi(OUTPUT_DIR + "/slm_replace_pitch.mid")
+
+
+#%%
+
+y = (
+    model.generate_parallel(
+        mask,
+        sampling_steps=380,
+        temperature=1.0,
+        top_p=1,
+    )[0]
+    .cpu()
+    .numpy()
+    .argmax(axis=-1)
+)
+
+tokens = model.tokenizer.indices_to_tokens(y)
+
+y_sm = model.tokenizer.decode(y)
+
+preview(y_sm, TMP_DIR)
+
+y_sm.dump_midi(OUTPUT_DIR + "/slm_replace_pitch_parallel.mid")
 
 #%% 
 
@@ -259,9 +273,10 @@ c = model.tokenizer.constraint_mask(
     # tags=["other"],
     instruments=["Drums","Bass","Piano"],
     tempos = ["138"],
-    # scale="G major",
+    scale="G major",
     min_notes=100,
     max_notes=250,
+  
 )[None, ...].to(model.device)
 a = c * a
 
@@ -272,6 +287,7 @@ y = model.generate(
     temperature=0.999,
     top_p=1.0,
     top_k=0,
+    fixed_order=True,
 )[0].argmax(axis=1)
 
 # decode
@@ -282,6 +298,29 @@ print(f"Number of notes: {y_sm.note_num()}")
 preview(y_sm, TMP_DIR)
 
 y_sm.dump_midi(OUTPUT_DIR + "/pitch_set_constraint_c.mid")
+
+#%%
+
+a = model.format_mask[None, ...].to(model.device)
+
+# Generate a sequence
+y = model.generate(
+    a,
+    schedule_fn=lambda x: x,
+    temperature=0.999,
+    top_p=1.0,
+    top_k=0,
+    fixed_order=False,
+)[0].argmax(axis=1)
+
+# decode
+y_sm = model.tokenizer.decode(y)
+
+print(f"Number of notes: {y_sm.note_num()}")
+
+preview(y_sm, TMP_DIR)
+
+y_sm.dump_midi(OUTPUT_DIR + "/no_constraint.mid")
 
 
 #%%
@@ -298,10 +337,13 @@ mask = (
     model.tokenizer.infilling_mask(
         x,
         beat_range,
-        min_notes=x_sm.note_num(),
+        # min_notes=x_sm.note_num(),
+        min_notes=30,
         max_notes=x_sm.note_num(),
+        # min_notes=30,
+        # max_notes=200,
         pitches=pitch_range,
-    )[None, ...]
+    )[None, ...]    
     .to(model.device)
     .float()
 ) 
@@ -310,7 +352,8 @@ y = model.generate(
     mask,
     temperature=0.85,
     sampling_steps=300*9,
-    top_p=1.0
+    top_p=1.0,
+    top_k=0,
 )[0].cpu().numpy().argmax(axis=-1)
 y_sm = model.tokenizer.decode(y)
 
@@ -346,7 +389,7 @@ mask = (
 y = (
     model.generate(
         mask,
-        temperature=0.85,
+        temperature=1.0,
         schedule_fn=lambda x: x,
         top_p=1.0,
         top_k=0,

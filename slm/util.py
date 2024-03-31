@@ -2,6 +2,25 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import pretty_midi
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os
+import IPython.display as ipd
+
+def preview(sm, tmp_dir):
+    # SAMPLE_RATE = 44_100
+    os.makedirs(tmp_dir, exist_ok=True)
+    midi_path = tmp_dir + "/tmp.mid"
+    audio_path = tmp_dir + "/output.wav"
+    sm.dump_midi(midi_path)
+    pr = piano_roll(sm)
+    plt.figure(figsize=(10, 10))
+    sns.heatmap(pr, cmap="magma")
+    plt.show()
+
+    os.system(f"fluidsynth {midi_path} -F {audio_path}")
+    ipd.display(ipd.Audio(audio_path))
+
 
 def get_scale(scale, range):
     root = scale.split(" ")[0]

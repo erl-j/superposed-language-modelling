@@ -50,7 +50,7 @@ ds = MidiDataset(
     genre_list=slm.tokenizer.config["tags"],
     tokenizer=slm.tokenizer,
     # min_notes=8 * N_BARS,
-    min_notes=200,
+    min_notes=8*N_BARS,
     max_notes=slm.tokenizer.config["max_notes"],
 )
 BATCH_SIZE = 1
