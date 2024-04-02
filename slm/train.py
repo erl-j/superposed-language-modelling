@@ -191,62 +191,53 @@ class EncoderOnlyModel(pl.LightningModule):
 
         # crop to decoder length
         return decoder_logits
-    
-    def generate_parallel(self, x, sampling_steps=None, temperature=1, top_p=1, top_k=0, schedule_fn=lambda x: x):
+
+    def generate_batch(self, x, temperature=1, top_p=1, top_k=0, fixed_order=False):
+
+        self.eval()
 
         with torch.no_grad():
-            x = x
-            # multiply by format mask
+
             x = x * self.format_mask[None, ...].to(x.device)
-            batch, time_attr, vocab = x.shape
-            # linspace from schedule
-            schedule = torch.linspace(
-                0, 1, sampling_steps, dtype=torch.float32, device=x.device
-            )
-            schedule = schedule_fn(schedule)
 
-            step = 0
+            batch, time_attr, ft = x.shape
 
-            superposition_density = 1
-            
-            for i in tqdm(range(step + 1, sampling_steps)):
+            # sampling order
+            order = torch.randperm(time_attr)
+
+            for i in tqdm(order):
+
                 logits = self(x.float())
 
-                logits[x < 0.5] = self.x_bias
+                curr_logits = logits[:, i]
+
+                curr_x = x[:, i]
+
 
                 # invert probs
                 # flatten
-                flat_logits = einops.rearrange(logits, "b ta v -> (b ta) v")
 
-                flat_logits = top_k_top_p_filtering(
-                    flat_logits, top_k=top_k, top_p=top_p
-                )
+                curr_logits = top_k_top_p_filtering(curr_logits, top_k=top_k, top_p=top_p)
 
-                flat_probs = F.softmax(flat_logits / temperature, dim=-1)
+                curr_probs = F.softmax(curr_logits / temperature, dim=-1)
 
-                superposition_density = 1 - schedule[i].item()
+                curr_probs[curr_x < 0.5] = 0
 
-                n_values_to_sample = max(int(vocab * superposition_density),1)
+                # renormalize
+                curr_probs = curr_probs / curr_probs.sum(dim=-1, keepdim=True)
 
-                # sample with
-                sampled = torch.multinomial(flat_probs, n_values_to_sample,replacement=True)
+                curr_sampled = torch.multinomial(curr_probs, 1).squeeze(-1)
 
                 # convert to one hot
-                sampled = torch.nn.functional.one_hot(
-                    sampled, num_classes=vocab
+                curr_one_hot = torch.nn.functional.one_hot(
+                    curr_sampled, num_classes=curr_logits.shape[-1]
                 ).float()
 
-                # sum to get superposition
-                sampled = sampled.sum(dim=1)
-
-                x = sampled.reshape(batch, time_attr, vocab)
-
-                if (x.sum(dim=-1) == 1 ).all():
-                    break
+                x[:, i] = curr_one_hot
 
         return x
-
-    def generate(self, x, sampling_steps=None, temperature=1, top_p=1, top_k=0, schedule_fn=lambda x: x, fixed_order=False):
+    
+    def generate(self, x, sampling_steps=None, temperature=1, top_p=1, top_k=0, fixed_order=False):
         if sampling_steps is None:
             sampling_steps = self.tokenizer.config["max_notes"]*len(self.tokenizer.note_attribute_order)
         self.eval()
@@ -259,7 +250,7 @@ class EncoderOnlyModel(pl.LightningModule):
             schedule = (
                 torch.linspace(0, 1, sampling_steps, dtype=torch.float32, device=x.device)
             )
-            schedule = schedule_fn(schedule)
+            schedule = schedule
             total_tokens = time_attr
             # count number of known tokens
             masked_tokens = (x.sum(-1) > 1).sum().int()

@@ -8,9 +8,9 @@ from util import preview
 import os
 import IPython.display as ipd
 from paper_checkpoints import checkpoints
+import torch
 
-
-device = "cuda:7"
+device = "cuda:4"
 ROOT_DIR = "../"
 
 MODEL = "mlm"
@@ -40,7 +40,7 @@ with open(ROOT_DIR + "artefacts/vocab.txt", "w") as f:
 MODEL_BARS = 4
 # Load the dataset
 ds = MidiDataset(
-    cache_path=ROOT_DIR+"artefacts/tst_midi_records.pt",
+    cache_path=ROOT_DIR+"artefacts/tst_midi_records_unique_pr.pt",
     path_filter_fn=lambda x: f"n_bars={MODEL_BARS}" in x,
     genre_list=model.tokenizer.config["tags"],
     tokenizer=model.tokenizer,
@@ -78,7 +78,51 @@ x_sm.dump_midi(OUTPUT_DIR + "/resample_original.mid")
 
 #     preview(x_sm, TMP_DIR)
 
+
 #%%
+
+print(x_sm.tracks)
+
+x1h = torch.nn.functional.one_hot(x, len(model.tokenizer.vocab)).float()
+
+print(x1h.shape)
+
+mask = (x1h.sum(dim=0,keepdim=True)>0).repeat(x1h.shape[0],1).to(model.device).float()
+
+plt.figure(figsize=(10, 10))
+sns.heatmap(x1h.cpu().numpy(), cmap="magma")
+plt.show()
+
+plt.figure(figsize=(10,10))
+sns.heatmap(mask.cpu().numpy(), cmap="magma")
+plt.show()
+
+print(mask.shape)
+
+y = (
+    model.generate(
+        mask,
+        temperature=0.85,
+        top_p=1,
+    )[0]
+    .cpu()
+    .numpy()
+    .argmax(axis=-1)
+)
+
+# convert to tokens
+tokens = model.tokenizer.indices_to_tokens(y)
+
+y_sm = model.tokenizer.decode(y)
+
+preview(y_sm, TMP_DIR)
+
+print(y_sm.tracks)
+y_sm.dump_midi(OUTPUT_DIR + "/copy_vocab.mid")
+
+
+#%%
+
 
 mask = model.tokenizer.replace_mask(x, ["pitch"]).to(model.device).float()
 
@@ -269,13 +313,13 @@ y_sm.dump_midi(OUTPUT_DIR + "/slm_replace_velocity.mid")
 
 a = model.format_mask[None, ...].to(model.device)
 c = model.tokenizer.constraint_mask(
-    tags=["rock"],
+    tags=["metal"],
     # tags=["other"],
-    instruments=["Drums","Bass","Piano"],
+    instruments=["Drums","Bass","Guitar"],
     tempos = ["138"],
-    scale="G major",
+    # scale="G major",
     min_notes=100,
-    max_notes=250,
+    max_notes=280,
   
 )[None, ...].to(model.device)
 a = c * a
@@ -284,10 +328,10 @@ a = c * a
 y = model.generate(
     a,
     schedule_fn=lambda x: x,
-    temperature=0.999,
+    temperature=1.0,
     top_p=1.0,
     top_k=0,
-    fixed_order=True,
+    fixed_order=False,
 )[0].argmax(axis=1)
 
 # decode
@@ -307,7 +351,7 @@ a = model.format_mask[None, ...].to(model.device)
 y = model.generate(
     a,
     schedule_fn=lambda x: x,
-    temperature=0.999,
+    temperature=0.99,
     top_p=1.0,
     top_k=0,
     fixed_order=False,

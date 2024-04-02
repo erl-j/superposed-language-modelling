@@ -7,6 +7,15 @@ import seaborn as sns
 import os
 import IPython.display as ipd
 
+
+def render_directory_with_fluidsynth(midi_dir, audio_dir):
+    os.makedirs(audio_dir, exist_ok=True)
+    for midi_file in os.listdir(midi_dir):
+        midi_path = midi_dir + "/" + midi_file
+        audio_path = audio_dir + "/" + midi_file.replace(".mid", ".wav")
+        os.system(f"fluidsynth {midi_path} -F {audio_path}")
+
+
 def preview(sm, tmp_dir):
     # SAMPLE_RATE = 44_100
     os.makedirs(tmp_dir, exist_ok=True)

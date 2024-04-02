@@ -4,17 +4,38 @@ import numpy as np
 import seaborn as sns
 from data import MidiDataset
 from train import EncoderOnlyModel
-from util import preview
+from util import preview, render_directory_with_fluidsynth
 import os
 import IPython.display as ipd
 from paper_checkpoints import checkpoints
 from tqdm import tqdm
+import torch
 
 
-device = "cuda:7"
+def export_batch(y, model, output_dir):
+    for sample_index in tqdm(range(y.shape[0])):
+        # decode
+        y_sm = model.tokenizer.decode(y[sample_index])
+
+        out_path = output_dir + f"/nr_{sample_index}.mid"
+
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+
+        y_sm.dump_midi(out_path)
+
+    render_directory_with_fluidsynth(output_dir, output_dir + "_audio/")
+
+
+SEED = 0
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+torch.cuda.manual_seed(SEED)
+
+
+device = "cuda:4"
 ROOT_DIR = "../"
 
-MODEL = "slm"
+MODEL = "mlm"
 
 
 model = (
@@ -31,36 +52,58 @@ if MODEL == "mlm":
 
 TMP_DIR = ROOT_DIR + "tmp"
 
-OUTPUT_DIR = ROOT_DIR + "output"
+OUTPUT_DIR = ROOT_DIR + "artefacts/object_eval"
+
+#%%
+BATCH_SIZE = 64
+
+MODEL_BARS = 4
+# Load the dataset
+ds = MidiDataset(
+    cache_path=ROOT_DIR + "artefacts/tst_midi_records_unique_pr.pt",
+    path_filter_fn=lambda x: f"n_bars={MODEL_BARS}" in x,
+    genre_list=model.tokenizer.config["tags"],
+    tokenizer=model.tokenizer,
+    min_notes=8 * MODEL_BARS,
+    max_notes=model.tokenizer.config["max_notes"],
+)
+
+dl = torch.utils.data.DataLoader(
+    ds,
+    batch_size=BATCH_SIZE,
+    shuffle=True,
+)
+
+# get batch
+batch = next(iter(dl))
+
+# export batch
+export_batch(batch, model, OUTPUT_DIR + "/natural")
 
 #%%
 
-N_EXAMPLES = 100
+TEMPERATURE = 1.0
 
-for i in tqdm(range(N_EXAMPLES)):
-    a = model.format_mask[None, ...].to(model.device)
+a = model.format_mask[None, ...].to(model.device)
 
-    # Generate a sequence
-    y = model.generate(
-        a,
-        schedule_fn=lambda x: x,
-        temperature=0.999,
-        top_p=1.0,
-        top_k=0,
-    )[0].argmax(axis=1)
+# repeat a to match batch size
+a = a.repeat(BATCH_SIZE, 1, 1)
 
-    # decode
-    y_sm = model.tokenizer.decode(y)
+# Generate a sequence
+y = model.generate_batch(
+    a,
+    temperature=TEMPERATURE,
+    top_p=1.0,
+    top_k=0,
+).argmax(axis=-1)
 
-    print(f"Number of notes: {y_sm.note_num()}")
+# export batch
+export_batch(y, model, OUTPUT_DIR + f"/{MODEL}_temp_{TEMPERATURE}")
 
-    preview(y_sm, TMP_DIR)
 
-    out_path = OUTPUT_DIR + "/generation/" + f"{MODEL}/example_{i}.mid"
+#%%
 
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
 
-    y_sm.dump_midi(out_path)
 
 #%%
 

@@ -4,48 +4,44 @@ import numpy as np
 import seaborn as sns
 from data import MidiDataset
 from train import EncoderOnlyModel
-from util import piano_roll
+from util import preview
 import os
 import IPython.display as ipd
-from util import get_scale
-from paper_checkpoints import SLM_CKPT_PTH, MLM_CKPT_PTH, SS_SLM_CKPT_PTH
+from paper_checkpoints import checkpoints
 import torch
-import random
 import einops
+import random
 
-
-# %%
 device = "cuda:7"
 ROOT_DIR = "../"
 
-slm = (
-    EncoderOnlyModel.load_from_checkpoint(
-        ROOT_DIR + SLM_CKPT_PTH,
-        map_location=device,
-    )
-    .to(device)
-    .eval()
-)
 
 mlm = (
     EncoderOnlyModel.load_from_checkpoint(
-        ROOT_DIR + MLM_CKPT_PTH,
+        ROOT_DIR + checkpoints["mlm"],
         map_location=device,
     )
     .to(device)
     .eval()
 )
+mlm.enforce_constraint_in_forward = True
 
 
-print(slm.enforce_constraint_in_forward)
-mlm.mlm_restricted_sampling = True
+slm = (
+    EncoderOnlyModel.load_from_checkpoint(
+        ROOT_DIR + checkpoints["slm"],
+        map_location=device,
+    )
+    .to(device)
+    .eval()
+)
 
 
 #%%
 N_BARS = 4
 # Load the dataset
 ds = MidiDataset(
-    cache_path="../artefacts/tst_midi_records.pt",
+    cache_path="../artefacts/tst_midi_records_unique_pr.pt",
     path_filter_fn=lambda x: f"n_bars={N_BARS}" in x,
     genre_list=slm.tokenizer.config["tags"],
     tokenizer=slm.tokenizer,
@@ -53,7 +49,7 @@ ds = MidiDataset(
     min_notes=8*N_BARS,
     max_notes=slm.tokenizer.config["max_notes"],
 )
-BATCH_SIZE = 1
+BATCH_SIZE = 64
 # get val dataloader
 dl = torch.utils.data.DataLoader(
     ds,
