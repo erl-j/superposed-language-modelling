@@ -138,8 +138,8 @@ class EncoderOnlyModel(pl.LightningModule):
         format_mask_expanded = format_mask * torch.ones_like(xin, device=self.device)
         decoder_logits[format_mask_expanded<0.5] = self.x_bias
 
-        if not self.training and self.mlm_restricted_sampling:
-            decoder_logits[xin<0.5] = self.x_bias
+        # if not self.training and self.mlm_restricted_sampling:
+        #     decoder_logits[xin<0.5] = self.x_bias
 
         # crop to decoder length
         return decoder_logits
@@ -192,6 +192,155 @@ class EncoderOnlyModel(pl.LightningModule):
         # crop to decoder length
         return decoder_logits
 
+    def generate_mask_predict(self, x, temperature=1, top_p=1, top_k=0, steps = 100, temperature_decay=False):
+
+        self.eval()
+
+        schedule = 1-torch.linspace(0, 1, steps)
+
+
+        x = x * self.format_mask[None, ...].to(x.device)
+
+        x = x[0]
+
+        last_probs = torch.ones((x.shape[0]), device=x.device) * 1e9
+
+        # set probs to one for known tokens
+        last_probs[x.sum(-1) == 1] = 0
+
+        n_known_tokens = (x.sum(-1) == 1).sum()
+
+        x_in = x.clone()
+       
+        with torch.no_grad():
+
+
+            time_attr, ft = x.shape
+
+            for i in tqdm(range(steps)):
+
+                n_tokens_to_mask = int((1 - schedule[i].item()) * (time_attr-n_known_tokens))
+
+                # mask n_tokens_to_mask tokens with lowest probability
+                tokens_to_mask = torch.argsort(last_probs,descending=True)[:n_tokens_to_mask]
+
+                x[tokens_to_mask] = x_in[tokens_to_mask]
+
+                x_masked = x.clone()
+
+                logits = self(x_masked.float()[None,...])
+
+                logits = logits[0]
+
+                logits = top_k_top_p_filtering(logits, top_k=top_k, top_p=top_p)
+
+
+                curr_probs = F.softmax(logits / temperature, dim=-1)
+
+                curr_probs[x_in < 0.5] = 0
+
+                # renormalize
+                curr_probs = curr_probs / curr_probs.sum(dim=-1, keepdim=True)
+
+               
+
+                # # get probs and index of largest prob
+                # amax = curr_probs.max(dim=-1)
+                # amax_probs = amax.values
+                # amax_idx = amax.indices
+
+                sample = torch.multinomial(curr_probs, 1).squeeze(-1)
+                amax_probs = torch.gather(curr_probs, dim=-1, index=sample.unsqueeze(-1)).squeeze(-1)
+                amax_idx = sample
+
+                # convert to one hot
+                curr_one_hot = torch.nn.functional.one_hot(
+                    amax_idx, num_classes=logits.shape[-1]
+                ).float()
+
+
+                # update_probs
+                # last_probs[tokens_to_mask] = amax_probs[tokens_to_mask]
+
+                # get entropy of current probs
+                entropy = -torch.sum(curr_probs * torch.log(curr_probs+1e-9), dim=-1)
+
+                # get log likelihood of sample
+                sample_log_likelihood = -torch.log(amax_probs+1e-9)
+
+                adjusted_surprise = sample_log_likelihood/(entropy+1e-9)
+
+            
+
+                last_probs[tokens_to_mask] = adjusted_surprise[tokens_to_mask]
+
+                # update x
+                x[tokens_to_mask] = curr_one_hot[tokens_to_mask]
+
+
+                if i % 10 == 0:
+
+                    if False:
+
+                        print(sample)
+
+
+                        print(f"n tokens to mask: {n_tokens_to_mask}")
+
+                        # print max probs
+                        print(f"max probs: {curr_probs.max()}")
+                        print(f"min probs: {curr_probs.min()}")
+
+                        # max amax prob
+                        print(f"max amax prob: {amax_probs.max()}")
+                        print(f"min amax prob: {amax_probs.min()}")
+
+                        print(f"max surprise: {adjusted_surprise.max()}")
+                        print(f"min surprise: {adjusted_surprise.min()}")
+
+                        print(f"max entropy: {entropy.max()}")
+                        print(f"min entropy: {entropy.min()}")
+
+                        print(f"max sample log likelihood: {sample_log_likelihood.max()}")
+                        print(f"min sample log likelihood: {sample_log_likelihood.min()}")
+
+                        plt.plot(last_probs.cpu().numpy())
+                        plt.show()
+
+                        
+                        print(amax_probs.shape)
+
+                        plt.plot(torch.log(amax_probs).cpu().numpy())
+                        plt.show()
+
+                        # plot amax probs heatmap
+                        plt.plot(amax_probs.sort()[0].cpu().numpy())
+                        plt.show()
+
+                        # plot heatmap of curr_probs
+                        plt.imshow(curr_probs.cpu().numpy().T, aspect="auto",interpolation="none")
+                        plt.show()
+
+                        # plot x
+                        plt.imshow(x_masked.cpu().numpy().T, aspect="auto", interpolation="none")
+                        plt.show()
+
+                        # plot x
+                        plt.imshow(x.cpu().numpy().T, aspect="auto",interpolation="none")
+                        plt.show()
+
+                        plt.imshow(logits.cpu().numpy().T, aspect="auto",interpolation="none")
+                        plt.show()
+
+
+                # print unmasked tokens
+
+        x = x[None, ...]
+
+        return x
+
+
+
     def generate_batch(self, x, temperature=1, top_p=1, top_k=0, fixed_order=False):
 
         self.eval()
@@ -237,7 +386,7 @@ class EncoderOnlyModel(pl.LightningModule):
 
         return x
     
-    def generate(self, x, sampling_steps=None, temperature=1, top_p=1, top_k=0, fixed_order=False):
+    def generate(self, x, sampling_steps=None, temperature=1, top_p=1, top_k=0, order="random", typical_sampling_t=-1, temperature_decay=False, min_temperature=0.8):
         if sampling_steps is None:
             sampling_steps = self.tokenizer.config["max_notes"]*len(self.tokenizer.note_attribute_order)
         self.eval()
@@ -264,15 +413,53 @@ class EncoderOnlyModel(pl.LightningModule):
 
                 logits = self(x.float())
 
-                logits[x<0.5] = self.x_bias
-
                 # invert probs
                 # flatten
                 flat_logits = einops.rearrange(logits, "b ta v -> (b ta) v")
 
                 flat_logits = top_k_top_p_filtering(flat_logits, top_k=top_k, top_p=top_p)
 
-                flat_probs = F.softmax(flat_logits / temperature, dim=-1)
+                if temperature_decay:
+                    t = min_temperature + (temperature-min_temperature) * (schedule[i].item())
+                    print(t)
+                else:
+                    t = temperature
+
+                flat_probs = F.softmax(flat_logits / t, dim=-1)
+
+                flat_x = einops.rearrange(x, "b ta v -> (b ta) v")
+
+                if self.standard_mlm_forward:
+                    flat_probs[flat_x < 0.5] = 0
+
+                # renormalize
+                flat_probs = flat_probs / flat_probs.sum(dim=-1, keepdim=True)
+
+                if typical_sampling_t != -1:
+                    eps = 1e-9
+                    entropy = -torch.sum(flat_probs * torch.log(flat_probs-eps), dim=-1)
+                    information_content = -torch.log(flat_probs-eps)
+                    deviation = torch.abs(entropy[...,None] - information_content)
+                    # sorted deviation
+                    sorted_deviation = torch.argsort(deviation, dim=-1)
+
+                    #t_n_tokens = torch.ceil(flat_x.sum(dim=-1) * typical_sampling_t).ceil().long()
+                    t_n_tokens = torch.ceil(self.format_mask.to(x.device).sum(dim=-1) * typical_sampling_t).ceil().long()
+                    # int64
+
+                    
+                    # find t portion of tokens
+                    t_index = sorted_deviation.gather(dim=-1, index=t_n_tokens[...,None]).squeeze(-1)
+                    # see deviation value
+                    threshold = torch.gather(deviation, dim=-1, index=t_index[...,None]).squeeze(-1)
+                 
+                    # set probs with deviation above threshold to 0
+                    flat_probs[deviation > threshold[...,None]] = 0
+
+                
+                    # renormalize
+                    flat_probs = flat_probs / flat_probs.sum(dim=-1, keepdim=True)
+
 
                 sampled = torch.multinomial(flat_probs, 1).squeeze(-1)
 
@@ -292,9 +479,21 @@ class EncoderOnlyModel(pl.LightningModule):
                 # get indices of tokens to unmask
                 # get indices of masked tokens
                 # shuffle masked indices
-                if not fixed_order:
+                if order == "random":
                     masked_indices = masked_indices[torch.randperm(n_masked)]
-                indices_to_unmask = masked_indices[:n_tokens_to_unmask]
+                    indices_to_unmask = masked_indices[:n_tokens_to_unmask]
+                elif order == "attribute":
+                    indices_to_unmask = masked_indices[:n_tokens_to_unmask]
+                elif order == "lowest_entropy":
+                    masked_probs = flat_probs[masked_indices]
+                    entropy = -torch.sum(masked_probs * torch.log(masked_probs), dim=-1)
+                    masked_indices = masked_indices[torch.argsort(entropy)]
+                    indices_to_unmask = masked_indices[:n_tokens_to_unmask]       
+                elif order == "highest_entropy":
+                    masked_probs = flat_probs[masked_indices]
+                    entropy = -torch.sum(masked_probs * torch.log(masked_probs), dim=-1)
+                    masked_indices = masked_indices[torch.argsort(entropy, descending=True)]
+                    indices_to_unmask = masked_indices[:n_tokens_to_unmask] 
 
                 # replace with sampled values
                 flat_x[indices_to_unmask] = torch.nn.functional.one_hot(

@@ -16,19 +16,20 @@ def render_directory_with_fluidsynth(midi_dir, audio_dir):
         os.system(f"fluidsynth {midi_path} -F {audio_path}")
 
 
-def preview(sm, tmp_dir):
+def preview(sm, tmp_dir, audio=True):
     # SAMPLE_RATE = 44_100
     os.makedirs(tmp_dir, exist_ok=True)
     midi_path = tmp_dir + "/tmp.mid"
     audio_path = tmp_dir + "/output.wav"
     sm.dump_midi(midi_path)
-    pr = piano_roll(sm)
+    pr = piano_roll(sm, tpq=16)
     plt.figure(figsize=(10, 10))
     sns.heatmap(pr, cmap="magma")
     plt.show()
 
-    os.system(f"fluidsynth {midi_path} -F {audio_path}")
-    ipd.display(ipd.Audio(audio_path))
+    if audio:
+        os.system(f"fluidsynth {midi_path} -F {audio_path}")
+        ipd.display(ipd.Audio(audio_path))
 
 
 def get_scale(scale, range):
@@ -99,9 +100,9 @@ def loop_sm(sm, loop_bars, n_loops):
         track.notes.extend(new_notes)
     return sm
 
-def piano_roll(sm):
+def piano_roll(sm, tpq):
     sm = sm.copy()
-    sm = sm.resample(tpq=4, min_dur=0)
+    sm = sm.resample(tpq=tpq, min_dur=0)
 
     # set all is_drum to False
     for track in sm.tracks:
