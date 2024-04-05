@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import pretty_midi
 from util import get_scale
+import einops
 # has features over old one.
 # supports velocity bins
 # drums are now a separate instrument
@@ -554,6 +555,33 @@ class MergedTokenizer():
         # flatten note_encodings
         note_encodings = pydash.flatten(note_encodings)
         return note_encodings
+    
+    def collapse_undefined_attributes(self, x1h):
+
+        x1h = x1h.clone()
+        undefined_tokens = [attribute + ":-" for attribute in self.note_attribute_order]
+
+        undefined_token_idx = [self.token2idx[token] for token in undefined_tokens]
+
+        undefined_token_1h = torch.nn.functional.one_hot(torch.tensor(undefined_token_idx,device=x1h.device), num_classes=len(self.vocab)).float()
+
+        x1h = einops.rearrange(x1h, "1 (n a) v -> 1 n a v", n=self.config["max_notes"], a=len(self.note_attribute_order))
+
+        # where any attribute is undefined, set all attributes to undefined
+        has_undefined_attr = torch.any(x1h == undefined_token_1h, dim=2, keepdim=True)
+
+        has_undefined_attr = has_undefined_attr.repeat(1,1,len(self.note_attribute_order),1)
+
+        # if any attribute is undefined, set all attributes to undefined
+        x1h = torch.where(has_undefined_attr, undefined_token_1h, x1h)
+
+        x1h = einops.rearrange(x1h, "1 n a v -> 1 (n a) v")
+
+        return x1h
+
+
+
+
         
     def tokens_to_sm(self, tokens):
       

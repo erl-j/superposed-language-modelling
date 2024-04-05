@@ -407,9 +407,11 @@ class EncoderOnlyModel(pl.LightningModule):
             masking_ratio = masked_tokens / total_tokens
 
             # find step in schedule
-            step = torch.argmin((1 - schedule - masking_ratio).abs())
+            step = torch.argmin((1 - schedule - masking_ratio).abs())            
 
             for i in tqdm(range(step + 1, sampling_steps)):
+
+                # x = self.tokenizer.collapse_undefined_attributes(x)
 
                 logits = self(x.float())
 
