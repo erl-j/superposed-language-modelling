@@ -10,7 +10,7 @@ import IPython.display as ipd
 from paper_checkpoints import checkpoints
 import torch
 
-device = "cuda:4"
+device = "cuda:7"
 ROOT_DIR = "../"
 
 MODEL = "slm"
@@ -32,7 +32,7 @@ model = (
 # if MODEL == "mlm":
 #     model.mlm_restricted_sampling = True
 
-
+#%%
 
 
 a = model.format_mask[None, ...].to(model.device)
@@ -42,8 +42,8 @@ c = model.tokenizer.constraint_mask(
     instruments=["Drums", "Pipe","Chromatic Percussion"],
     tempos=["138"],
     # scale="G major",
-    min_notes=50,
-    max_notes=250,
+    min_notes=10,
+    max_notes=290,
 )[None, ...].to(model.device)
 a = c * a
 
@@ -101,6 +101,10 @@ mask = (
     model.tokenizer.infilling_mask(
         x,
         beat_range=beat_range,
+        # min_notes = 0,
+        # max_notes = 290
+        # min_notes=0,
+        # max_notes=290,
         min_notes=x_sm.note_num(),
         max_notes=x_sm.note_num(),
     )[None, ...]
@@ -111,32 +115,46 @@ mask = (
 # y = (
 #     model.generate(
 #         mask,
-#         temperature=1.0,
+#         temperature=0.9,
 #         top_p=1.0,
 #         top_k=0,
-#         order = "lowest_entropy"
+#         order = "random"
 #     )[0]
 #     .cpu()
 #     .numpy()
 #     .argmax(axis=-1)
 # )
 
+y = model.generate_gibbs(
+    mask, 
+    temperature=0.99,
+    top_p=1.0,
+    top_k=0,
+    steps=1000,
+    pmax = 0.5,
+    pmin = 0.1,
+    alpha=0.7,
+)[0].argmax(axis=1)
 
-y = (
-    model.generate(
-        mask, 
-        temperature=0.9, 
-        top_p=1.0, 
-        top_k=0,
-        typical_sampling_t=-1,
-        order = "random",
-        temperature_decay=False,
-        min_temperature=0,
-        )[0]
-    .cpu()
-    .numpy()
-    .argmax(axis=-1)
-)
+
+
+# y = (
+#     model.generate(
+#         mask, 
+#         temperature=0.85, 
+#         top_p=1.0, 
+#         top_k=0,
+#         typical_sampling_t=-1,
+#         order = "random",
+#         temperature_decay=False,
+#         min_temperature=0,
+#         )[0]
+#     .cpu()
+#     .numpy()
+#     .argmax(axis=-1)
+# )
+
+
 
 y_sm = model.tokenizer.decode(y)
 
@@ -147,10 +165,6 @@ preview(y_sm, TMP_DIR)
 y_sm.dump_midi(OUTPUT_DIR + "/infilling_middle.mid")
 
 #%%
-
-
-#%%
-
 
 mask = model.tokenizer.replace_mask(x, ["pitch"]).to(model.device).float()
 
@@ -349,7 +363,7 @@ print(f"Number of notes: {x_sm.note_num()}")
 # beat range
 # beat_range=(8,12)
 beat_range=(0,16)
-pitch_range = [f"pitch:{i}" for i in range(55,model.tokenizer.config["pitch_range"][1])]
+pitch_range = [f"pitch:{i}" for i in range(55,108) ]+["pitch:-"]
 # make infilling mask
 mask = (
     model.tokenizer.infilling_mask(
@@ -363,11 +377,16 @@ mask = (
     .float()
 ) 
 
+plt.figure(figsize=(10,10))
+plt.imshow(mask[0].cpu().numpy().T, aspect="auto",interpolation="nearest")
+plt.show()
+
+
 y = model.generate(
     mask,
-    temperature=1,
+    temperature=0.9,
     sampling_steps=300*9,
-    top_p=0.9,
+    top_p=1.0,
     top_k=0,
     order = "random"
 )[0].cpu().numpy().argmax(axis=-1)
@@ -405,8 +424,8 @@ mask = (
 y = (
     model.generate(
         mask,
-        temperature=1.0,
-        top_p=0.9,
+        temperature=0.85,
+        top_p=1.0,
         top_k=0,
         order = "random"
     )[0]
@@ -446,8 +465,8 @@ mask = (
 y = (
     model.generate(
         mask,
-        temperature=1.0,
-        top_p=0.9,
+        temperature=0.9,
+        top_p=1.0,
         top_k=0,
         order = "random"
     )[0]

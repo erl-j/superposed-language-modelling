@@ -5,6 +5,7 @@ import torch
 import pretty_midi
 from util import get_scale
 import einops
+import matplotlib.pyplot as plt
 # has features over old one.
 # supports velocity bins
 # drums are now a separate instrument
@@ -390,7 +391,22 @@ class MergedTokenizer():
         forced = np.repeat(forced_mask[None,...], forced_notes, axis=0)
         optional = np.repeat(optional_mask[None,...], optional_notes, axis=0)
 
-        mask = np.concatenate([keep, modify, dead, forced, optional], axis=0)
+        mask = np.concatenate([keep, modify, dead, optional, forced], axis=0)
+
+
+        # plt.figure(figsize=(10,10))
+        # plt.imshow(dead[0,:,:].T, aspect="auto",interpolation="nearest")
+        # plt.show()
+
+        # plt.figure(figsize=(10,10))
+        # plt.imshow(optional[0,:,:].T, aspect="auto",interpolation="nearest")
+        # plt.show()
+
+        # plt.figure(figsize=(10,10))
+        # plt.imshow(optional[0,:,:].T+dead[0,:,:].T, aspect="auto",interpolation="nearest")
+        # plt.show()
+
+        # print(dead[0].sum(-1))
 
         # # shuffle in the first dimension
         if self.config["shuffle_notes"]:
@@ -565,17 +581,15 @@ class MergedTokenizer():
 
         undefined_token_1h = torch.nn.functional.one_hot(torch.tensor(undefined_token_idx,device=x1h.device), num_classes=len(self.vocab)).float()
 
-        x1h = einops.rearrange(x1h, "1 (n a) v -> 1 n a v", n=self.config["max_notes"], a=len(self.note_attribute_order))
+        x1h = einops.rearrange(x1h, "b (n a) v -> b n a v", n=self.config["max_notes"], a=len(self.note_attribute_order))
 
-        # where any attribute is undefined, set all attributes to undefined
-        has_undefined_attr = torch.any(x1h == undefined_token_1h, dim=2, keepdim=True)
+        x1h_has_undefined_attribute = (x1h == undefined_token_1h[None,None,...]).all(dim=-1).any(dim=-1)
 
-        has_undefined_attr = has_undefined_attr.repeat(1,1,len(self.note_attribute_order),1)
+        all_undef = undefined_token_1h[None,None,...]
 
-        # if any attribute is undefined, set all attributes to undefined
-        x1h = torch.where(has_undefined_attr, undefined_token_1h, x1h)
+        x1h = torch.where(x1h_has_undefined_attribute[...,None,None], all_undef, x1h)
 
-        x1h = einops.rearrange(x1h, "1 n a v -> 1 (n a) v")
+        x1h = einops.rearrange(x1h, "b n a v -> b (n a) v")
 
         return x1h
 

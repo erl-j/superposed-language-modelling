@@ -8,6 +8,29 @@ import os
 import IPython.display as ipd
 
 
+def has_drum(sm):
+    for track in sm.tracks:
+        if track.is_drum and len(track.notes) > 0:
+            return True
+    return False
+
+def has_harmonic(sm):
+    for track in sm.tracks:
+        if not track.is_drum and len(track.notes) > 0:
+            return True
+    return False
+            
+
+def get_sm_pitch_range(sm):
+    pitches = []
+    for track in sm.tracks:
+        if not track.is_drum:
+            for note in track.notes:
+                pitches.append(note.pitch)
+    min_pitch = min(pitches)
+    max_pitch = max(pitches)
+    return min_pitch, max_pitch
+
 def render_directory_with_fluidsynth(midi_dir, audio_dir):
     os.makedirs(audio_dir, exist_ok=True)
     for midi_file in os.listdir(midi_dir):

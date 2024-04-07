@@ -310,21 +310,16 @@ if __name__ == "__main__":
 
     )
 
-    
-    
-
-    wandb_logger = WandbLogger(log_model="all", project="slm")
+    wandb_logger = WandbLogger(log_model="all", project="simplex-diffusion")
     # get name
     name = wandb_logger.experiment.name
 
-    logger = logging.getLogger("wandb")
-    logger.setLevel(logging.ERROR)
 
     progress_bar_callback = RichProgressBar(refresh_rate=1)
 
     trainer = pl.Trainer(
     accelerator="gpu",
-    devices=[2,3],
+    devices=[7],
     # precision="16-mixed",
     max_epochs=10_000,
     log_every_n_steps=1,
