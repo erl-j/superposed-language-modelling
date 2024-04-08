@@ -10,7 +10,7 @@ import IPython.display as ipd
 from paper_checkpoints import checkpoints
 import torch
 
-device = "cuda:7"
+device = "cuda:0"
 ROOT_DIR = "../"
 
 MODEL = "slm"
@@ -31,8 +31,19 @@ model = (
 
 # if MODEL == "mlm":
 #     model.mlm_restricted_sampling = True
+#%%
+
+print(model.standard_mlm_forward)
+
+print(model.hparams)
+#%%
+
+
+
+
 
 #%%
+
 
 
 a = model.format_mask[None, ...].to(model.device)
@@ -70,7 +81,7 @@ y_sm.dump_midi(OUTPUT_DIR + "/pitch_set_constraint_c.mid")
 MODEL_BARS = 4
 # Load the dataset
 ds = MidiDataset(
-    cache_path=ROOT_DIR+"artefacts/tst_midi_records_unique_pr.pt",
+    cache_path=ROOT_DIR+"paper_assets/tst_midi_records_unique_pr.pt",
     path_filter_fn=lambda x: f"n_bars={MODEL_BARS}" in x,
     genre_list=model.tokenizer.config["tags"],
     tokenizer=model.tokenizer,
@@ -87,6 +98,40 @@ x_sm = model.tokenizer.decode(x)
 preview(x_sm, TMP_DIR)
 
 x_sm.dump_midi(OUTPUT_DIR + "/resample_original.mid")
+
+#%%
+
+# one hot encode x
+x1h = torch.nn.functional.one_hot(x, len(model.tokenizer.vocab)).float().to(model.device)
+
+# sum across the note dimension
+mask= (x1h.sum(axis=0)>0).float().repeat(x1h.shape[0],1)
+
+print(mask.shape)
+
+
+# use as mask
+
+y = model.generate(
+        mask,
+        temperature=10.0,
+        top_p=1.0,
+        top_k=0,
+        order = "random"
+    )[0].cpu().numpy().argmax(axis=-1)
+
+y_sm = model.tokenizer.decode(y)
+
+print(f"Number of notes: {y_sm.note_num()}")
+
+preview(y_sm, TMP_DIR)
+
+for track in y_sm.tracks:
+    print(track.name)
+print("\n")
+for track in x_sm.tracks:
+    print(track.name)
+
 
 #%%
 x_sm = model.tokenizer.decode(x)

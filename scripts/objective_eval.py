@@ -1,28 +1,45 @@
 #%%
 import muspy
 import glob
+import os
+from tqdm import tqdm
 
-dir_a = "../artefacts/object_eval/natural"
+root_dir = "../artefacts/eval_audio/generate_tasks_2/"
 
-dir_b = "../artefacts/object_eval/mlm_temp_1.0"
+# %%
+
+# recursively find all subdirs
+def find_midi_dirs(root_dir):
+    midi_dirs = []
+    for root, dirs, files in os.walk(root_dir):
+        if any(file.endswith(".mid") for file in files):
+            midi_dirs.append(root)
+    return midi_dirs
+
+
+
 
 records = []
-for dir in [dir_a, dir_b]:
-    files = glob.glob(f"{dir}/**/*.mid", recursive=True)
-    for file in files:
+for dir in find_midi_dirs(root_dir):
+    files = glob.glob(f"{dir}/*.mid", recursive=True)
+    for file in tqdm(files):
         midi = muspy.read_midi(file)
-        record = {
-            "set": dir,
-            "pitch_range": muspy.pitch_range(midi),
-            "n_pitches_used": muspy.n_pitches_used(midi),
-            "n_pitch_classes_used": muspy.n_pitch_classes_used(midi),
-            "polyphony": muspy.polyphony(midi),
-            "polyphony_rate": muspy.polyphony_rate(midi),
-            "scale_consistency": muspy.scale_consistency(midi),
-            "pitch_entropy": muspy.pitch_entropy(midi),
-            "pitch_class_entropy": muspy.pitch_class_entropy(midi),
-        }
-        records.append(record)   
+        # check if midi is empty
+        if len(midi.tracks)>0:
+            record = {
+                "set": dir,
+                "pitch_range": muspy.pitch_range(midi),
+                "n_pitches_used": muspy.n_pitches_used(midi),
+                "n_pitch_classes_used": muspy.n_pitch_classes_used(midi),
+                "polyphony": muspy.polyphony(midi),
+                "polyphony_rate": muspy.polyphony_rate(midi),
+                "scale_consistency": muspy.scale_consistency(midi),
+                "pitch_entropy": muspy.pitch_entropy(midi),
+                "pitch_class_entropy": muspy.pitch_class_entropy(midi),
+                "empty_beat_rate": muspy.empty_beat_rate(midi),
+                "drum_pattern_consistency": muspy.drum_pattern_consistency(midi),
+            }
+            records.append(record)   
 
 
 
@@ -34,10 +51,27 @@ df = pd.DataFrame(records)
 
 # %%
 
+df["set"] = df["set"].str.replace("../artefacts/eval_audio/generate_tasks_2/", "")
+
+df = df.sort_values("set", ascending=False)
+
+# remove ../artefacts/eval_audio/generate_tasks_2
+
+
 # print dir averages and stds across metrics in a nice format
 print(df.groupby("set").agg(["mean", "std"]).T)
 
+# print a nice table
+print(df.groupby("set").agg(["mean", "std"]).T.to_latex())
 
+from IPython.display import display
+
+display(df.groupby("set").agg(["mean", "std"]))
+
+# put natural on top
+
+
+#%%
 # plot histograms of each metric 
 
 import matplotlib.pyplot as plt

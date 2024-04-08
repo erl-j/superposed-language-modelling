@@ -195,6 +195,7 @@ class EncoderOnlyModel(pl.LightningModule):
 
     def generate_gibbs(self, x, temperature=1, top_p=1, top_k=0, steps = 100, pmax=None, pmin=None, alpha=None):
 
+        self.eval()
 
         x = x * self.format_mask[None, ...].to(x.device)
 
@@ -441,6 +442,10 @@ class EncoderOnlyModel(pl.LightningModule):
                 # renormalize
                 curr_probs = curr_probs / curr_probs.sum(dim=-1, keepdim=True)
 
+                # print probs
+                print(curr_probs.min())
+
+
                 curr_sampled = torch.multinomial(curr_probs, 1).squeeze(-1)
 
                 # convert to one hot
@@ -589,13 +594,13 @@ class EncoderOnlyModel(pl.LightningModule):
     def compute_perplexity(self, x, tgt):
 
         # assert that x is not batched
-        assert len(x.shape) == 2
         self.eval()
         x = x.clone()
         tgt = tgt.clone()
 
         # get unkown position indices
-        unkown_positions = x[0].sum(dim=-1) > 1
+        unkown_positions = torch.where(x[0].sum(-1) > 1)[0]
+        print(unkown_positions.shape)
         
         log_probabilities = []
         with torch.no_grad():
@@ -609,12 +614,12 @@ class EncoderOnlyModel(pl.LightningModule):
                 probs = probs / probs.sum(dim=-1, keepdim=True)
                 # get probabilities
                 current_prob = (probs[:, i] * tgt[:, i]).sum(dim=-1)
-                current_log_prob = torch.log(current_prob)
-                log_probabilities.append(current_log_prob)
                 # replace with target
                 x[:, i ] = tgt[:, i]
-            total_prob = torch.stack(log_probabilities).sum(dim=0)
-            return total_prob
+                log_probabilities.append(torch.log(current_prob))
+        log_probs = torch.stack(log_probabilities)
+        log_probs_sum = log_probs.mean(dim=0)
+        return log_probs_sum
 
     def step(self, batch, batch_idx):
         if self.one_hot_input:

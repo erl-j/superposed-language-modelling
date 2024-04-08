@@ -1,0 +1,13 @@
+The FAD clap-laion-music score between artefacts/eval_audio/generate_tasks_2/natural and artefacts/eval_audio/generate_tasks_2/infilling_start/_mlm_t=0.85 is: 0.008975529055275877
+The FAD clap-laion-music score between artefacts/eval_audio/generate_tasks_2/natural and artefacts/eval_audio/generate_tasks_2/infilling_start/_slm_t=0.9 is: 0.004599412283844528
+The FAD clap-laion-music score between artefacts/eval_audio/generate_tasks_2/natural and artefacts/eval_audio/generate_tasks_2/infilling_start/_slm_t=0.85 is: 0.004909511640915021
+The FAD clap-laion-music score between artefacts/eval_audio/generate_tasks_2/natural and artefacts/eval_audio/generate_tasks_2/infilling_start/_mlm_t=0.9 is: 0.009243015424286183
+The FAD clap-laion-music score between artefacts/eval_audio/generate_tasks_2/natural and artefacts/eval_audio/generate_tasks_2/infilling_start/_mlm_t=1.0 is: 0.01090273378792328
+The FAD clap-laion-music score between artefacts/eval_audio/generate_tasks_2/natural and artefacts/eval_audio/generate_tasks_2/infilling_start/_slm_t=1.0 is: 0.005292634741640434
+The FAD clap-laion-music score between artefacts/eval_audio/generate_tasks_2/natural and artefacts/eval_audio/generate_tasks_2/infilling_low/_mlm_t=0.85 is: 0.022588018394926412
+The FAD clap-laion-music score between artefacts/eval_audio/generate_tasks_2/natural and artefacts/eval_audio/generate_tasks_2/infilling_low/_slm_t=0.9 is: 0.02277174321422093
+The FAD clap-laion-music score between artefacts/eval_audio/generate_tasks_2/natural and artefacts/eval_audio/generate_tasks_2/infilling_low/_slm_t=0.85 is: 0.022262064639755663
+The FAD clap-laion-music score between artefacts/eval_audio/generate_tasks_2/natural and artefacts/eval_audio/generate_tasks_2/infilling_low/_mlm_t=0.9 is: 0.024313808265893577
+The FAD clap-laion-music score between artefacts/eval_audio/generate_tasks_2/natural and artefacts/eval_audio/generate_tasks_2/infilling_low/_mlm_t=1.0 is: 0.024191445794682687
+The FAD clap-laion-music score between artefacts/eval_audio/generate_tasks_2/natural and artefacts/eval_audio/generate_tasks_2/infilling_low/_slm_t=1.0 is: 0.021355414073561008
+The FAD clap-laion-music score between artefacts/eval_audio/generate_tasks_2/natural and artefacts/eval_audio/generate_tasks_2/natural is: -1.2874292742992566e-09

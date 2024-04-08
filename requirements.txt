@@ -1,0 +1,12 @@
+symusic
+seaborn
+lightning
+matplotlib
+pandas
+numpy
+wandb
+pydash
+einops
+pretty_midi
+muspy
+fadtk

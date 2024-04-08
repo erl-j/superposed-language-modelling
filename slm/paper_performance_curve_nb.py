@@ -12,7 +12,7 @@ import torch
 import einops
 import random
 
-device = "cuda:7"
+device = "cuda:3"
 ROOT_DIR = "../"
 
 
@@ -41,7 +41,7 @@ slm = (
 N_BARS = 4
 # Load the dataset
 ds = MidiDataset(
-    cache_path="../artefacts/tst_midi_records_unique_pr.pt",
+    cache_path="../paper_assets/tst_midi_records_unique_pr.pt",
     path_filter_fn=lambda x: f"n_bars={N_BARS}" in x,
     genre_list=slm.tokenizer.config["tags"],
     tokenizer=slm.tokenizer,
@@ -184,8 +184,8 @@ for mask_level in MASK_LEVELS:
 x_idx = next(iter(dl)).to(device)
 
 metrics = []
-for scenario in ["easy", "standard","hard"]:
-    for attribute in mlm.tokenizer.note_attribute_order:
+for scenario in ["standard"]:
+    for attribute in ["pitch","onset/beat","offset/beat","instrument"]:
 
         attribute_index = mlm.tokenizer.note_attribute_order.index(attribute)
 
@@ -195,8 +195,7 @@ for scenario in ["easy", "standard","hard"]:
 
         x_masked = x.clone() 
         x_masked = einops.rearrange(x_masked, "b (n a) v -> b n a v", n=n_notes, a=n_attributes)
-
-
+        x_beavr =  einops.rearrange(x, "b (n a) v -> b n a v", n=n_notes, a=n_attributes)
         if scenario == "easy":
             # to constraint
             x_masked[:,:, attribute_index] = x_masked[:,:, attribute_index].sum(dim=2, keepdim=True) > 0
@@ -209,6 +208,13 @@ for scenario in ["easy", "standard","hard"]:
             for attribute_index2 in range(n_attributes):
                 if attribute_index2 != attribute_index:
                     x_masked[:, :, attribute_index2,:] = x_masked[:,:, attribute_index2].sum(dim=2, keepdim=True) > 0
+        elif scenario == "0.5 random":
+            noise = torch.rand(x_masked.shape).to(device) < 0.5
+            for attribute_index2 in range(n_attributes):
+                if attribute_index2 != attribute_index:
+                    x_masked[:, :, attribute_index2,:] = torch.clamp(x_masked[:, :, attribute_index2,:] + noise[:, :, attribute_index2,:], 0, 1)
+
+
         else:
             raise ValueError("Invalid Scenario")
 
@@ -220,7 +226,7 @@ for scenario in ["easy", "standard","hard"]:
 
         for model in [mlm, slm]:
 
-            probs = model.compute_perplexity(x_masked,x)
+            probs = model.compute_perplexity(x_masked[:2],x[:2])
 
             # logits = model(x_masked)
 
@@ -268,22 +274,15 @@ for scenario in ["easy", "standard","hard"]:
 import pandas as pd
 metrics = pd.DataFrame(metrics)
 
-for scenario in ["easy", "standard","hard"]:
+for scenario in ["standard"]:
     # get means of log probs
     metrics["log_probs"] = metrics["log_probs"].apply(lambda x: x.mean().item())
 
     plt.figure(figsize=(10, 10))
-    sns.lineplot(data=metrics[metrics["scenario"] == scenario], x="attribute", y="log_probs", hue="model")
+    sns.barplot(data=metrics[metrics["scenario"] == scenario], x="attribute", y="log_probs", hue="model")
     plt.title(f"Scenario: {scenario}")
     plt.show()
 #%%
-
-
-
-    
-
-
-    
         
 
 

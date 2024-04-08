@@ -1,6 +1,6 @@
 checkpoints = {
-    "mlm": "checkpoints/magic-forest-321/epoch=78-step=256197-val/loss_epoch=0.29299.ckpt",
-    "slm": "checkpoints/easy-night-320/epoch=102-step=334029-val/loss_epoch=0.12267.ckpt",
+    "mlm": "paper_assets/mlm_magic_forest_321_epoch_78.ckpt",
+    "slm": "paper_assets/slm_easy_night_320_epoch_102.ckpt",
 }
 
 MLM_CKPT_PTH = (

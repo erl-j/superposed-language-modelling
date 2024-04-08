@@ -1,20 +1,45 @@
+#%%
 import os
 import subprocess
-experiment_dir = "artefacts/infilling_test"
+experiment_dir = "artefacts/eval_audio/generate_tasks_2"
 
-reference_audio_dir = experiment_dir + "/natural_audio"
+# recursively find all dirs that contain wav files
+sys_dirs = []
+# get all dir_paths under experimetn dir that contain at least one wav file
+for root, dirs, files in os.walk(experiment_dir):
+    if any([f.endswith(".wav") for f in files]):
+        sys_dirs.append(root)
 
-# get all directories under the reference audio directory
-sys_dirs = os.listdir(experiment_dir)
-# keep only dirs that end with suffix "_audio"
-sys_dirs = [d for d in sys_dirs if d.endswith("_audio")]
 
-for sys_dir in sys_dirs:
-    sys_audio_dir = experiment_dir + "/" + sys_dir
+# remove sys_dirs with "convert" in the name
+
+sys_dirs = [d for d in sys_dirs if "convert" not in d]
+
+
+reference_audio_dir = "artefacts/eval_audio/generate_tasks_2/natural"
+
+print(sys_dirs)
+#%%
+
+# open output file
+for sys_audio_dir in sys_dirs:
+
+    print(f"Computing FAD for {sys_audio_dir}, with reference {reference_audio_dir}")
+
+    # move all midi file to a identical folder structure with midi files
+
+
     # compute the FAD and read the output
     # fadtk clap-laion-music reference_audio_dir system_audio_dir
-    fad_cmd = f"CUDA_VISIBLE_DEVICES=4 fadtk clap-laion-music {reference_audio_dir} {sys_audio_dir}"
+    fad_cmd = f"CUDA_VISIBLE_DEVICES=1 fadtk clap-laion-music {reference_audio_dir} {sys_audio_dir}"
     result = subprocess.run(fad_cmd, shell=True, capture_output=True)
-    # last line of the output is the FAD
-    fad = float(result.stdout.decode().split("\n")[-2])
-    print(f"FAD for {sys_dir}: {fad}")
+    output = result.stderr.decode("utf-8")
+    # get last line
+
+    output = str(output).split("\n")[-2]
+    
+    with open("fad_results.txt", "a") as f:
+        # write to file
+        # write file
+        f.write(f"{output}\n")
+        # 

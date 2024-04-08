@@ -18,8 +18,8 @@ torch.cuda.manual_seed(SEED)
 
 ROOT_DIR = "./"
 TMP_DIR = ROOT_DIR + "tmp"
-OUTPUT_DIR = ROOT_DIR + "artefacts/eval/generate_tasks"
-device = "cuda:6"
+OUTPUT_DIR = ROOT_DIR + "artefacts/eval/generate_tasks_debug"
+device = "cuda:2"
 
 def export_batch(y, tokenizer, output_dir):
     for sample_index in tqdm(range(y.shape[0])):
@@ -43,11 +43,11 @@ tokenizer = dummy_model.tokenizer
 del dummy_model
 
 
-BATCH_SIZE = 200
+BATCH_SIZE = 100
 MODEL_BARS = 4
 # Load the dataset
 ds = MidiDataset(
-    cache_path=ROOT_DIR + "artefacts/val_midi_records_unique_pr.pt",
+    cache_path=ROOT_DIR + "paper_assets/tst_midi_records_unique_pr.pt",
     path_filter_fn=lambda x: f"n_bars={MODEL_BARS}" in x,
     genre_list=tokenizer.config["tags"],
     tokenizer=tokenizer,
@@ -65,25 +65,24 @@ dl = torch.utils.data.DataLoader(
 batch = next(iter(dl))
 
 # export batch
-export_batch(batch,tokenizer,OUTPUT_DIR + "/natural")
+# export_batch(batch,tokenizer,OUTPUT_DIR + "/natural")
 
 #%%
 
 tasks = [
-# "infilling_high",
+# "generate",
 # "infilling_low",
+# "infilling_high",
 # "infilling_start",
-# "infilling_end"
-# "infill_drums",
-# "infilling_harmonic",
-"generate",
+# "infilling_end",
+# "infilling_drums",
+"infilling_harmonic",
 ]
-
 
 # infilling tasks
 for task in tasks:
     for model_name in ["mlm","slm"]:
-        for temperature in [0.85,0.9,0.95,0.99,1.0]:
+        for temperature in [0.85,0.9,1.0]:
             model = (
                 EncoderOnlyModel.load_from_checkpoint(
                     ROOT_DIR + checkpoints[model_name],
@@ -123,19 +122,21 @@ for task in tasks:
 
                         case "infilling_start":
                             beat_range = (0,8)
+                            pitches=None
                         
                         case "infilling_end":
                             beat_range = (8,16)
+                            pitches=None
 
-                        case "infill_drums":
+                        case "infilling_drums":
                             vocab = model.tokenizer.vocab
                             drum_range = [token for token in vocab if ("pitch" in token) and ("(Drums)" in token)]
                             pitches = drum_range
                             beat_range = (0,16)
                     
-                        case "infill_harmonic":
+                        case "infilling_harmonic":
                             pitches = [
-                                f"pitch:{i}" for i in range(min_pitch,max_pitch)
+                                f"pitch:{i}" for i in range(min_pitch,max_pitch+1)
                             ]
                             beat_range = (0,16)
 

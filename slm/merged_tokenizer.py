@@ -209,6 +209,9 @@ class MergedTokenizer():
 
         x_1h = x_1h.reshape((self.config["max_notes"] * len(self.note_attribute_order), len(self.vocab)))
         return torch.tensor(x_1h)
+    
+
+    # def constraint_to_mask(self, x, constraints):
                     
 
     def shuffle_notes_mask(self, x, same_onset_times=False):
@@ -678,6 +681,7 @@ class MergedTokenizer():
             else:
                 offset_tick = offset * self.config["ticks_per_beat"] + offset_tick
 
+            offset_tick = min(offset_tick, self.config["max_beats"] * self.config["ticks_per_beat"])
             note_recs.append({
                 "pitch": pitch,
                 "onset": onset_tick,
@@ -707,4 +711,12 @@ class MergedTokenizer():
             for note in notes:
                 track.notes.append(symusic.Note(pitch=note["pitch"], time=note["onset"], duration=note["offset"]-note["onset"], velocity=note["velocity"]))
             sm.tracks.append(track)
+
+        print(f"sm end time: {sm.end()}")
+        # assert
+        if sm.end() > self.config["max_beats"] * self.config["ticks_per_beat"]:
+            # write tokens to file
+            with open("error_tokens.txt", "w") as f:
+                f.write("\n".join(tokens))
+            raise ValueError("End time exceeds maximum beats")
         return sm

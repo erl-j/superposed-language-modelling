@@ -12,7 +12,7 @@ import torch
 import einops
 
 
-device = "cuda:7"
+device = "cuda:0"
 ROOT_DIR = "../"
 
 
@@ -42,7 +42,7 @@ slm = (
 N_BARS = 4
 # Load the dataset
 ds = MidiDataset(
-    cache_path="../artefacts/tst_midi_records_unique_pr.pt",
+    cache_path="../paper_assets/tst_midi_records_unique_pr.pt",
     path_filter_fn=lambda x: f"n_bars={N_BARS}" in x,
     genre_list=slm.tokenizer.config["tags"],
     tokenizer=slm.tokenizer,

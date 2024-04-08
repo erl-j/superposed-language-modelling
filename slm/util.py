@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 import IPython.display as ipd
-
+import symusic
 
 def has_drum(sm):
     for track in sm.tracks:
@@ -31,12 +31,37 @@ def get_sm_pitch_range(sm):
     max_pitch = max(pitches)
     return min_pitch, max_pitch
 
-def render_directory_with_fluidsynth(midi_dir, audio_dir):
+def render_directory_with_fluidsynth(midi_dir, audio_dir, overwrite=False):
     os.makedirs(audio_dir, exist_ok=True)
     for midi_file in os.listdir(midi_dir):
         midi_path = midi_dir + "/" + midi_file
         audio_path = audio_dir + "/" + midi_file.replace(".mid", ".wav")
-        os.system(f"fluidsynth {midi_path} -F {audio_path}")
+        # open with symusic
+        sm = symusic.Score(midi_path)
+
+
+        # 16 beats in 4/4
+        end_4_bars_tick = 16 * sm.ticks_per_quarter
+        # assert sm.end() <= end_4_bars_tick
+        # crop midi file to 4 bars
+        for track in sm.tracks:
+            for note in track.notes:
+                    note.duration = min(end_4_bars_tick - note.start, note.duration)
+        print(f"end of midi file: {sm.end()}")
+
+        tmp_path = midi_path
+        tmp_path = tmp_path.replace(".mid", "_cropped.mid")
+        tmp_path = tmp_path.replace(midi_dir, audio_dir)
+        sm.dump_midi(tmp_path)
+        
+        # assert sm.end()<40, "midi file is too long"
+        # crop to 4 bars
+
+        # midi_path = tmp_path
+
+
+        if not os.path.exists(audio_path) or overwrite:
+            os.system(f"fluidsynth {tmp_path} -F {audio_path}")
 
 
 def preview(sm, tmp_dir, audio=True):
