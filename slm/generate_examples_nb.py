@@ -107,14 +107,19 @@ x1h = torch.nn.functional.one_hot(x, len(model.tokenizer.vocab)).float().to(mode
 # sum across the note dimension
 mask= (x1h.sum(axis=0)>0).float().repeat(x1h.shape[0],1)
 
-print(mask.shape)
+# multiply by the format mask
+mask = mask * model.format_mask[None, ...].to(model.device).float()
+
+plt.figure(figsize=(10,10))
+plt.imshow(mask.cpu().numpy().T, aspect="auto",interpolation="nearest")
+plt.show()
 
 
 # use as mask
 
 y = model.generate(
         mask,
-        temperature=10.0,
+        temperature=1.0,
         top_p=1.0,
         top_k=0,
         order = "random"

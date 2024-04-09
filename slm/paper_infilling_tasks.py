@@ -18,7 +18,7 @@ torch.cuda.manual_seed(SEED)
 
 ROOT_DIR = "./"
 TMP_DIR = ROOT_DIR + "tmp"
-OUTPUT_DIR = ROOT_DIR + "artefacts/eval/generate_tasks_debug"
+OUTPUT_DIR = ROOT_DIR + "artefacts/eval/generate_tasks_natural2"
 device = "cuda:2"
 
 def export_batch(y, tokenizer, output_dir):
@@ -61,11 +61,23 @@ dl = torch.utils.data.DataLoader(
     batch_size=BATCH_SIZE,
     shuffle=True,
 )
+iterator = iter(dl)
 # get batch
-batch = next(iter(dl))
+batch = next(iterator)
 
 # export batch
 # export_batch(batch,tokenizer,OUTPUT_DIR + "/natural")
+
+# get second batch, different from the first
+batch2 = next(iterator)
+
+# assert that the two batches are different
+assert not torch.allclose(batch, batch2)
+
+export_batch(batch2,tokenizer,OUTPUT_DIR + "/natural2")
+
+asd
+
 
 #%%
 

@@ -1,7 +1,7 @@
 import os
 from util import render_directory_with_fluidsynth
 
-root_dir = "artefacts/eval/generate_tasks_2"
+root_dir = "artefacts/eval/generate_tasks_natural2"
 
 # recursively find all directories which contain midi files at next level
 def find_midi_dirs(root_dir):
