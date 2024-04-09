@@ -18,7 +18,7 @@ torch.cuda.manual_seed(SEED)
 
 ROOT_DIR = "./"
 TMP_DIR = ROOT_DIR + "tmp"
-OUTPUT_DIR = ROOT_DIR + "artefacts/eval/generate_tasks_natural2"
+OUTPUT_DIR = ROOT_DIR + "artefacts/eval/generate_tasks_constrained"
 device = "cuda:2"
 
 def export_batch(y, tokenizer, output_dir):
@@ -66,7 +66,7 @@ iterator = iter(dl)
 batch = next(iterator)
 
 # export batch
-# export_batch(batch,tokenizer,OUTPUT_DIR + "/natural")
+export_batch(batch,tokenizer,OUTPUT_DIR + "/natural")
 
 # get second batch, different from the first
 batch2 = next(iterator)
@@ -76,7 +76,6 @@ assert not torch.allclose(batch, batch2)
 
 export_batch(batch2,tokenizer,OUTPUT_DIR + "/natural2")
 
-asd
 
 
 #%%
@@ -88,7 +87,8 @@ tasks = [
 # "infilling_start",
 # "infilling_end",
 # "infilling_drums",
-"infilling_harmonic",
+# "infilling_harmonic",
+"constrained_generation"
 ]
 
 # infilling tasks
@@ -167,6 +167,44 @@ for task in tasks:
                 elif "generate" in task:
 
                     mask = model.format_mask[None, ...].float()
+
+                elif "constrained" in task:
+                    x = batch[sample_idx]
+                    x_sm = model.tokenizer.decode(x)
+                    x_tokens = model.tokenizer.indices_to_tokens(x)
+
+                    pitch_tokens = [token for token in x_tokens if "pitch:" in token]
+                    # take unique
+                    pitch_tokens = list(set(pitch_tokens))
+                    instrument_tokens = [token for token in x_tokens if ("instrument:" in token and ":-" not in token)]
+                    instruments = [token.split(":")[1] for token in instrument_tokens]
+                    # take unique
+                    instruments = list(set(instruments))
+
+                    tempo_tokens = [token for token in x_tokens if "tempo:" in token]
+                    tempos = [token.split(":")[1] for token in tempo_tokens if ":-" not in token]
+                    tempos = list(set(tempos))
+                    tag_tokens = [token for token in x_tokens if "tag:" in token if ":-" not in token]
+                    tags = [token.split(":")[1] for token in tag_tokens]
+                    tags = list(set(tags))
+
+                    # onset beats
+                    onset_beat_tokens = [token for token in x_tokens if "onset/beat:" in token if ":-" not in token]
+                    # get unique
+                    onset_beat_tokens = list(set(onset_beat_tokens))
+
+                    n_notes = x_sm.note_num()
+
+                    mask = model.tokenizer.constraint_mask(
+                        pitches = pitch_tokens,
+                        instruments = instruments,
+                        onset_beats=onset_beat_tokens,
+                        tempos = tempos,
+                        # tags = tags,
+                        min_notes=n_notes,
+                        max_notes=n_notes,
+                        min_notes_per_instrument=1,
+                    )[None, ...].float()
 
                 masks.append(mask)
 

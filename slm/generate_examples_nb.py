@@ -90,7 +90,7 @@ ds = MidiDataset(
 )
 
 
-RESAMPLE_IDX = 1990
+RESAMPLE_IDX = 50
 
 x = ds[RESAMPLE_IDX]
 x_sm = model.tokenizer.decode(x)
@@ -98,6 +98,76 @@ x_sm = model.tokenizer.decode(x)
 preview(x_sm, TMP_DIR)
 
 x_sm.dump_midi(OUTPUT_DIR + "/resample_original.mid")
+
+#%%
+
+x_sm = model.tokenizer.decode(x)
+x_tokens = model.tokenizer.indices_to_tokens(x)
+
+pitch_tokens = [token for token in x_tokens if "pitch:" in token]
+# take unique
+pitch_tokens = list(set(pitch_tokens))
+instrument_tokens = [token for token in x_tokens if ("instrument:" in token and ":-" not in token)]
+instruments = [token.split(":")[1] for token in instrument_tokens]
+# take unique
+instruments = list(set(instruments))
+
+tempo_tokens = [token for token in x_tokens if "tempo:" in token]
+tempos = [token.split(":")[1] for token in tempo_tokens if ":-" not in token]
+tempos = list(set(tempos))
+tag_tokens = [token for token in x_tokens if "tag:" in token if ":-" not in token]
+tags = [token.split(":")[1] for token in tag_tokens]
+tags = list(set(tags))
+
+# onset beats
+onset_beat_tokens = [token for token in x_tokens if "onset/beat:" in token if ":-" not in token]
+# get unique
+onset_beat_tokens = list(set(onset_beat_tokens))
+
+n_notes = x_sm.note_num()
+
+mask = model.tokenizer.constraint_mask(
+    pitches = pitch_tokens,
+    instruments = instruments,
+    onset_beats=onset_beat_tokens,
+    tempos = tempos,
+    # tags = tags,
+    min_notes=n_notes,
+    max_notes=n_notes,
+    min_notes_per_instrument=1,
+)[None, ...].to(model.device).float()
+
+
+plt.figure(figsize=(10,10))
+plt.imshow(mask[0].cpu().numpy().T, aspect="auto",interpolation="nearest")
+plt.show()
+
+y = model.generate(
+        mask,
+        temperature=1.0,
+        top_p=1.0,
+        top_k=0,
+        order = "random"
+    )[0].cpu().numpy().argmax(axis=-1)
+
+y_tokens = model.tokenizer.indices_to_tokens(y)
+
+print(y_tokens)
+
+y_sm = model.tokenizer.decode(y)
+
+print(f"Number of notes: {y_sm.note_num()}")
+
+preview(y_sm, TMP_DIR)
+
+for track in y_sm.tracks:
+    print(track.name)
+print("\n")
+for track in x_sm.tracks:
+    print(track.name)
+
+
+
 
 #%%
 
@@ -119,7 +189,7 @@ plt.show()
 
 y = model.generate(
         mask,
-        temperature=1.0,
+        temperature=1.5,
         top_p=1.0,
         top_k=0,
         order = "random"

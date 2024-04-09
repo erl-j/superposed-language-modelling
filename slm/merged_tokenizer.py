@@ -424,10 +424,15 @@ class MergedTokenizer():
         return torch.tensor(mask)
                 
     
-    def constraint_mask(self,tags=None, tempos=None, instruments=None, pitches=None, onset_beats=None, offset_beats=None, scale="" ,min_notes=1, max_notes=None):
+    def constraint_mask(self,tags=None, tempos=None, instruments=None, pitches=None, onset_beats=None, offset_beats=None, scale="" ,min_notes=1, max_notes=None, min_notes_per_instrument=0):
 
         if max_notes is None:
             max_notes = self.config["max_notes"]
+
+        n_instruments = len(instruments)
+        n_instrument_specific_notes = min_notes_per_instrument * n_instruments
+
+        min_notes = max(min_notes, n_instrument_specific_notes)
 
         constraint_mask = np.ones((len(self.note_attribute_order), len(self.vocab)), dtype=int)
 
@@ -454,7 +459,7 @@ class MergedTokenizer():
                     for instrument in instruments:
                         constraint_mask[attribute_index,self.vocab.index("instrument:" + instrument)] = 1
                     # allow undefined instrument
-                        
+                    
             if attribute == "pitch":
                 if scale != "":
                     midi_notes = get_scale(scale, self.config["pitch_range"])
@@ -471,7 +476,6 @@ class MergedTokenizer():
         # repeat max notes times in the first dimension
         constraint_mask = np.tile(constraint_mask, (self.config["max_notes"], 1))
 
-
         undefined_mask = np.zeros((len(self.note_attribute_order), len(self.vocab)), dtype=int)
         for token in self.vocab:
             if token.endswith("-"):
@@ -480,6 +484,16 @@ class MergedTokenizer():
         # up to min notes, remove undefined attributes
         for i in range(min_notes):
             constraint_mask[i * len(self.note_attribute_order):(i+1) * len(self.note_attribute_order),:] *= (1-undefined_mask)
+
+
+        if min_notes_per_instrument > 0:
+            assert n_instrument_specific_notes <= max_notes, "min_notes_per_instrument * n_instruments must be less than or equal to max_notes"
+            for instrument_idx,instrument in enumerate(instruments):
+                instrument_one_hot = np.eye(len(self.vocab))[self.token2idx["instrument:" + instrument]]
+                for i in range(min_notes_per_instrument):
+                    instrument_attribute_index = self.note_attribute_order.index("instrument")
+                    constraint_mask[(instrument_idx*min_notes_per_instrument + i) * len(self.note_attribute_order) + instrument_attribute_index,:] = instrument_one_hot
+
 
         # after max notes, make all attributes undefined
         for i in range(max_notes, self.config["max_notes"]):
@@ -494,9 +508,16 @@ class MergedTokenizer():
             # shuffle notes         
             np.random.shuffle(constraint_mask)  
 
+        
         constraint_mask = constraint_mask.reshape(
             (self.config["max_notes"] * len(self.note_attribute_order), len(self.vocab))
         )
+        
+
+
+
+       
+     
 
         return torch.tensor(constraint_mask)
 
