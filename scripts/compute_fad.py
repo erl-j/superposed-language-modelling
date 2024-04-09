@@ -32,14 +32,14 @@ for sys_audio_dir in sys_dirs:
 
         # compute the FAD and read the output
         # fadtk clap-laion-music reference_audio_dir system_audio_dir
-        fad_cmd = f"CUDA_VISIBLE_DEVICES=1 fadtk clap-laion-music {reference_audio_dir} {sys_audio_dir}"
+        fad_cmd = f"CUDA_VISIBLE_DEVICES=3 fadtk clap-laion-audio {reference_audio_dir} {sys_audio_dir}"
         result = subprocess.run(fad_cmd, shell=True, capture_output=True)
         output = result.stderr.decode("utf-8")
         # get last line
 
         output = str(output).split("\n")[-2]
         
-        with open("fad_results_2.txt", "a") as f:
+        with open("fad_results_clap_audio.txt", "a") as f:
             # write to file
             # write file
             f.write(f"{output}\n")

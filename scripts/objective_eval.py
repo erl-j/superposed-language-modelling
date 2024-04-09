@@ -4,7 +4,7 @@ import glob
 import os
 from tqdm import tqdm
 
-root_dir = "../artefacts/eval_cropped_midi/generate_tasks_2/"
+root_dir = "../artefacts/eval_cropped_midi/fad_test/"
 
 # %%
 
@@ -49,28 +49,41 @@ import pandas as pd
 
 df = pd.DataFrame(records)
 
-# %%
 
-df["set"] = df["set"].str.replace("../artefacts/eval_cropped_midi/generate_tasks_2/", "")
+df["set"] = df["set"].str.replace("../artefacts/eval_cropped_midi/fad_test/", "")
 
 df = df.sort_values("set", ascending=False)
+
+
+#%%
 
 # remove ../artefacts/eval_audio/generate_tasks_2
 
 
-# print dir averages and stds across metrics in a nice format
-print(df.groupby("set").agg(["mean", "std"]).T)
 
-# print a nice table
-print(df.groupby("set").agg(["mean", "std"]).T.to_latex())
+
+
+
+
 
 from IPython.display import display
 
-display(df.groupby("set").agg(["mean", "std"]))
-
-# put natural on top
+pd.options.display.float_format = '{:.2f}'.format
 
 
+
+df = df.groupby("task","system").agg(["mean", "std"])
+
+# 
+
+# df.columns = df.columns.droplevel(1)
+
+# compute distances from set mean to natural mean on 
+
+
+
+# highlight means with least distance to natural in red
+df
 #%%
 # plot histograms of each metric 
 

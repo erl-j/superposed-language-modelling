@@ -18,8 +18,8 @@ torch.cuda.manual_seed(SEED)
 
 ROOT_DIR = "./"
 TMP_DIR = ROOT_DIR + "tmp"
-OUTPUT_DIR = ROOT_DIR + "artefacts/eval/generate_tasks_constrained"
-device = "cuda:2"
+OUTPUT_DIR = ROOT_DIR + "artefacts/eval/400_b"
+device = "cuda:3"
 
 def export_batch(y, tokenizer, output_dir):
     for sample_index in tqdm(range(y.shape[0])):
@@ -43,7 +43,7 @@ tokenizer = dummy_model.tokenizer
 del dummy_model
 
 
-BATCH_SIZE = 100
+BATCH_SIZE = 400
 MODEL_BARS = 4
 # Load the dataset
 ds = MidiDataset(
@@ -84,8 +84,8 @@ tasks = [
 # "generate",
 # "infilling_low",
 # "infilling_high",
-# "infilling_start",
-# "infilling_end",
+"infilling_start",
+"infilling_end",
 # "infilling_drums",
 # "infilling_harmonic",
 "constrained_generation"
@@ -94,7 +94,7 @@ tasks = [
 # infilling tasks
 for task in tasks:
     for model_name in ["mlm","slm"]:
-        for temperature in [0.85,0.9,1.0]:
+        for temperature in [1.0]:
             model = (
                 EncoderOnlyModel.load_from_checkpoint(
                     ROOT_DIR + checkpoints[model_name],

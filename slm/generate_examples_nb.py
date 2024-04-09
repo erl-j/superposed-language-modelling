@@ -13,7 +13,7 @@ import torch
 device = "cuda:0"
 ROOT_DIR = "../"
 
-MODEL = "slm"
+MODEL = "mlm"
 
 OUTPUT_DIR = ROOT_DIR + "artefacts/examples_4"
 TMP_DIR = ROOT_DIR + "artefacts/tmp"
