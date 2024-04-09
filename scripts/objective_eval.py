@@ -4,7 +4,7 @@ import glob
 import os
 from tqdm import tqdm
 
-root_dir = "../artefacts/eval_audio/generate_tasks_2/"
+root_dir = "../artefacts/eval_cropped_midi/generate_tasks_2/"
 
 # %%
 
@@ -51,7 +51,7 @@ df = pd.DataFrame(records)
 
 # %%
 
-df["set"] = df["set"].str.replace("../artefacts/eval_audio/generate_tasks_2/", "")
+df["set"] = df["set"].str.replace("../artefacts/eval_cropped_midi/generate_tasks_2/", "")
 
 df = df.sort_values("set", ascending=False)
 
