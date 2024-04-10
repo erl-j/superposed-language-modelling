@@ -68,3 +68,10 @@ The FAD clap-laion-audio score between artefacts/eval_audio/fad_test/natural and
 The FAD clap-laion-audio score between artefacts/eval_audio/fad_test/natural2 and artefacts/eval_audio/fad_test/infilling_high/_mlm_t=0.85 is: 0.06384002671546951
 The FAD clap-laion-audio score between artefacts/eval_audio/fad_test/natural and artefacts/eval_audio/fad_test/infilling_high/_slm_t=0.9 is: 0.028857009473249873
 The FAD clap-laion-audio score between artefacts/eval_audio/fad_test/natural2 and artefacts/eval_audio/fad_test/infilling_high/_slm_t=0.9 is: 0.06033666516630809
+The FAD clap-laion-audio score between artefacts/eval_audio/fad_test/natural and artefacts/eval_audio/fad_test/infilling_high/mlm_t=1.01 is: 0.03230412884981537
+The FAD clap-laion-audio score between artefacts/eval_audio/fad_test/natural2 and artefacts/eval_audio/fad_test/infilling_high/mlm_t=1.01 is: 0.06404828431433329
+The FAD clap-laion-audio score between artefacts/eval_audio/fad_test/natural and artefacts/eval_audio/fad_test/infilling_high/_slm_t=0.85 is: 0.033341602785929125
+The FAD clap-laion-audio score between artefacts/eval_audio/fad_test/natural2 and artefacts/eval_audio/fad_test/infilling_high/_slm_t=0.85 is: 0.07159854830908219
+The FAD clap-laion-audio score between artefacts/eval_audio/fad_test/natural and artefacts/eval_audio/fad_test/infilling_high/mlm_t=1.05 is: 0.02966684097567951
+The FAD clap-laion-audio score between artefacts/eval_audio/fad_test/natural2 and artefacts/eval_audio/fad_test/infilling_high/mlm_t=1.05 is: 0.06112386536612946
+The FAD clap-laion-audio score between artefacts/eval_audio/fad_test/natural and artefacts/eval_audio/fad_test/infilling_high/mlm_t=0.99 is: 0.032591999744659095

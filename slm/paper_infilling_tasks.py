@@ -101,7 +101,7 @@ tasks = [
 ]
 
 # infilling tasks
-for temperature in [1.0, 0.99, 0.95]:
+for temperature in [0.95,1.0,1.05]:
     for task in tasks:
         for model_name in ["mlm","slm"]:
             model = (
