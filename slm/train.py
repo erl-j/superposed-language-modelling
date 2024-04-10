@@ -443,7 +443,6 @@ class EncoderOnlyModel(pl.LightningModule):
                 curr_probs = curr_probs / (curr_probs.sum(dim=-1, keepdim=True)+1e-12)
 
                 # print probs
-                print(curr_probs.min())
 
 
                 curr_sampled = torch.multinomial(curr_probs, 1).squeeze(-1)

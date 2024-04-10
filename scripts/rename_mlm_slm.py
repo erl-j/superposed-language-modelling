@@ -1,4 +1,4 @@
-# we accidentally mislabeled the models
+# we accidentally mislabeled the models for the first run
 # this scrips renames the outputs of the models
 
 import os

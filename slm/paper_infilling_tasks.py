@@ -10,6 +10,7 @@ import IPython.display as ipd
 from paper_checkpoints import checkpoints
 from tqdm import tqdm
 import torch
+import einops
 
 SEED = 0
 np.random.seed(SEED)
@@ -18,7 +19,7 @@ torch.cuda.manual_seed(SEED)
 
 ROOT_DIR = "./"
 TMP_DIR = ROOT_DIR + "tmp"
-OUTPUT_DIR = ROOT_DIR + "artefacts/eval/100_1.01"
+OUTPUT_DIR = ROOT_DIR + "artefacts/eval/new_tasks"
 device = "cuda:3"
 
 def export_batch(y, tokenizer, output_dir):
@@ -65,36 +66,44 @@ iterator = iter(dl)
 # get batch
 batch = next(iterator)
 
-# export batch
-export_batch(batch,tokenizer,OUTPUT_DIR + "/natural")
+if False:
 
-# get second batch, different from the first
-batch2 = next(iterator)
+    # export batch
+    export_batch(batch,tokenizer,OUTPUT_DIR + "/natural")
 
-# assert that the two batches are different
-assert not torch.allclose(batch, batch2)
+    # get second batch, different from the first
+    batch2 = next(iterator)
 
-export_batch(batch2,tokenizer,OUTPUT_DIR + "/natural2")
+    # assert that the two batches are different
+    assert not torch.allclose(batch, batch2)
+
+    export_batch(batch2,tokenizer,OUTPUT_DIR + "/natural2")
 
 
 
 #%%
 
 tasks = [
-"generate",
-"infilling_low",
-"infilling_high",
-"infilling_start",
-"infilling_end",
-# "infilling_drums",
-# "infilling_harmonic",
-"constrained_generation"
+# "generate",
+# "infilling_low",
+"pitch_set",
+"infilling_high_patched",
+# "infilling_start",
+# "infilling_end",
+"infilling_box_middle",
+"infilling_box_end",
+# "constrained_generation"
+"onset_set",
+"pitch_onset_set",
+"infilling_drums",
+"infilling_harmonic",
+# ,"constrained_generation",
 ]
 
 # infilling tasks
-for task in tasks:
-    for model_name in ["mlm","slm"]:
-        for temperature in [1.01]:
+for temperature in [1.0, 0.99, 0.95]:
+    for task in tasks:
+        for model_name in ["mlm","slm"]:
             model = (
                 EncoderOnlyModel.load_from_checkpoint(
                     ROOT_DIR + checkpoints[model_name],
@@ -103,6 +112,7 @@ for task in tasks:
                 .to(device)
                 .eval()
             )
+            print(device)
             # prepare masks
             masks = []
             for sample_idx in range(batch.shape[0]):
@@ -115,11 +125,11 @@ for task in tasks:
                 if "infilling" in task: 
 
                     match task:
-                        case "infilling_high":
+                        case "infilling_high_patched":
                             min_box_pitch = (max_pitch - min_pitch)//2 + min_pitch
                             max_box_pitch = max_pitch 
                             pitches = [
-                                f"pitch:{i}" for i in range(min_box_pitch,max_box_pitch)
+                                f"pitch:{i}" for i in range(min_box_pitch,max_box_pitch+1)
                             ]
                             beat_range = (0,16)
 
@@ -142,7 +152,7 @@ for task in tasks:
 
                         case "infilling_drums":
                             vocab = model.tokenizer.vocab
-                            drum_range = [token for token in vocab if ("pitch" in token) and ("(Drums)" in token)]
+                            drum_range = [token for token in vocab if ("pitch:" in token) and ("(Drums)" in token)]
                             pitches = drum_range
                             beat_range = (0,16)
                     
@@ -151,6 +161,32 @@ for task in tasks:
                                 f"pitch:{i}" for i in range(min_pitch,max_pitch+1)
                             ]
                             beat_range = (0,16)
+
+                        case "infilling_box_middle":
+                            # pitch range 
+                            pitches = [
+
+                                f"pitch:{i}" for i in range(min_pitch,max_pitch+1)
+                            ]
+                            min_box_pitch = (max_pitch - min_pitch)//2 + min_pitch
+                            max_box_pitch = max_pitch 
+                            pitches = [
+                                f"pitch:{i}" for i in range(min_box_pitch,max_box_pitch+1)
+                            ]
+                            beat_range = (8,12)
+
+                        case "infilling_box_end":
+                            # pitch range 
+                            pitches = [
+
+                                f"pitch:{i}" for i in range(min_pitch,max_pitch+1)
+                            ]
+                            min_box_pitch = (max_pitch - min_pitch)//2 + min_pitch
+                            max_box_pitch = max_pitch 
+                            pitches = [
+                                f"pitch:{i}" for i in range(min_box_pitch,max_box_pitch+1)
+                            ]
+                            beat_range = (12,16)
 
                     # make infilling mask
                     mask = (
@@ -173,7 +209,7 @@ for task in tasks:
                     x_sm = model.tokenizer.decode(x)
                     x_tokens = model.tokenizer.indices_to_tokens(x)
 
-                    pitch_tokens = [token for token in x_tokens if "pitch:" in token]
+                    pitch_tokens = [token for token in x_tokens if "pitch:" in token and ":-" not in token]
                     # take unique
                     pitch_tokens = list(set(pitch_tokens))
                     instrument_tokens = [token for token in x_tokens if ("instrument:" in token and ":-" not in token)]
@@ -205,6 +241,57 @@ for task in tasks:
                         max_notes=n_notes,
                         min_notes_per_instrument=1,
                     )[None, ...].float()
+
+                elif task == "pitch_set":
+                    x = batch[sample_idx]
+                    x_sm = model.tokenizer.decode(x)
+                    n_notes = x_sm.note_num()
+
+                    x1h = torch.nn.functional.one_hot(x, num_classes=len(model.tokenizer.vocab)).float()
+
+                    # reshape x have (n_notes,n_attributes,vocab)
+                    x_a = einops.rearrange(x1h,"(n_notes n_attributes) vocab -> n_notes n_attributes vocab",vocab=len(model.tokenizer.vocab),n_attributes=len(model.tokenizer.note_attribute_order))
+                    # get pitch tokens
+                    pitch_tokens = (x_a[:,model.tokenizer.note_attribute_order.index("pitch"),:].sum(axis=0)>0).float()
+                    # replace pitch attribute with pitch tokens, making sure that shape matches x_a
+                    print(pitch_tokens.shape)
+                    x_a[:,model.tokenizer.note_attribute_order.index("pitch")] = pitch_tokens
+                    mask = einops.rearrange(x_a,"n_notes n_attributes vocab -> (n_notes n_attributes) vocab")[None,...]
+
+                elif task == "onset_beats":
+                    x = batch[sample_idx]
+                    x_sm = model.tokenizer.decode(x)
+                    n_notes = x_sm.note_num()
+
+                    x1h = torch.nn.functional.one_hot(x, num_classes=len(model.tokenizer.vocab)).float()
+
+                    # reshape x have (n_notes,n_attributes,vocab)
+                    x_a = einops.rearrange(x1h,"(n_notes n_attributes) vocab -> n_notes n_attributes vocab",vocab=len(model.tokenizer.vocab),n_attributes=len(model.tokenizer.note_attribute_order))
+                    # get pitch tokens
+                    onset_tokens = (x_a[:,model.tokenizer.note_attribute_order.index("onset/beat"),:].sum(axis=0)>0 ).float()
+                    x_a[:,model.tokenizer.note_attribute_order.index("onset/beat"),:] = onset_tokens
+                    mask = einops.rearrange(x_a,"n_notes n_attributes vocab -> (n_notes n_attributes) vocab")[None,...]
+
+                elif task == "pitch_onset_set":
+
+                    x = batch[sample_idx]
+                    x_sm = model.tokenizer.decode(x)
+                    n_notes = x_sm.note_num()
+
+                    x1h = torch.nn.functional.one_hot(x, num_classes=len(model.tokenizer.vocab)).float()
+
+                    # reshape x have (n_notes,n_attributes,vocab)
+                    x_a = einops.rearrange(x1h,"(n_notes n_attributes) vocab -> n_notes n_attributes vocab",vocab=len(model.tokenizer.vocab),n_attributes=len(model.tokenizer.note_attribute_order))
+                    # get pitch tokens
+                    pitch_tokens = (x_a[:,model.tokenizer.note_attribute_order.index("pitch"),:].sum(axis=0)>0).float()
+                    x_a[:,model.tokenizer.note_attribute_order.index("pitch"),:] = pitch_tokens
+
+                    onset_tokens = (x_a[:,model.tokenizer.note_attribute_order.index("onset/beat"),:].sum(axis=0)>0).float()
+                    x_a[:,model.tokenizer.note_attribute_order.index("onset/beat"),:] = onset_tokens
+
+                    mask = einops.rearrange(x_a,"n_notes n_attributes vocab -> (n_notes n_attributes) vocab")[None,...]
+
+
 
                 masks.append(mask)
 
