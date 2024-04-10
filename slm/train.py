@@ -439,8 +439,8 @@ class EncoderOnlyModel(pl.LightningModule):
 
                 curr_probs[curr_x < 0.5] = 0
 
-                # renormalize
-                curr_probs = curr_probs / curr_probs.sum(dim=-1, keepdim=True)
+                # renormalize, eps for rare cases where probs are 0
+                curr_probs = curr_probs / (curr_probs.sum(dim=-1, keepdim=True)+1e-12)
 
                 # print probs
                 print(curr_probs.min())
