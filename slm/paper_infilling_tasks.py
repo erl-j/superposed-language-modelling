@@ -84,11 +84,14 @@ if False:
 #%%
 
 tasks = [
+    "pitch_set",
+    "onset_offset_set",
+    "pitch_onset_offset_set",
 # "infilling_low",
-"infilling_box_middle",
-"infilling_box_end",
-"pitch_set",
-"infilling_high_patched",
+# "infilling_box_middle",
+# "infilling_box_end",
+# "pitch_set",
+# "infilling_high_patched",
 # "generate",
 # "infilling_start",
 # "infilling_end",
@@ -102,7 +105,7 @@ tasks = [
 ]
 
 # infilling tasks
-for temperature in [0.95]:
+for temperature in [1.0,0.95,0.9,0.85]:
     for task in tasks:
         for model_name in ["mlm","slm"]:
             model = (
@@ -261,7 +264,7 @@ for temperature in [0.95]:
                     x_a[:,model.tokenizer.note_attribute_order.index("pitch")] = pitch_tokens
                     mask = einops.rearrange(x_a,"n_notes n_attributes vocab -> (n_notes n_attributes) vocab")[None,...]
 
-                elif task == "onset_set":
+                elif task == "onset_offset_set":
                     x = batch[sample_idx]
                     x_sm = model.tokenizer.decode(x)
                     n_notes = x_sm.note_num()
@@ -271,11 +274,17 @@ for temperature in [0.95]:
                     # reshape x have (n_notes,n_attributes,vocab)
                     x_a = einops.rearrange(x1h,"(n_notes n_attributes) vocab -> n_notes n_attributes vocab",vocab=len(model.tokenizer.vocab),n_attributes=len(model.tokenizer.note_attribute_order))
                     # get pitch tokens
-                    onset_tokens = (x_a[:,model.tokenizer.note_attribute_order.index("onset/beat"),:].sum(axis=0)>0 ).float()
-                    x_a[:,model.tokenizer.note_attribute_order.index("onset/beat"),:] = onset_tokens
+                    onset_tokens = (x_a[:,model.tokenizer.note_attribute_order.index("onset/beat"),:].sum(axis=0)>0).float()
+                    x_a[:,model.tokenizer.note_attribute_order.index("onset/beat")] = onset_tokens
+
+                    # resample offsets
+                    offset_tokens = (x_a[:,model.tokenizer.note_attribute_order.index("offset/tokens"),:].sum(axis=0)>0).float()
+                    x_a[:,model.tokenizer.note_attribute_order.index("offset/tokens")] = offset_tokens
+                    # get pitch tokens
+
                     mask = einops.rearrange(x_a,"n_notes n_attributes vocab -> (n_notes n_attributes) vocab")[None,...]
 
-                elif task == "pitch_onset_set":
+                elif task == "pitch_onset_offset_set":
 
                     x = batch[sample_idx]
                     x_sm = model.tokenizer.decode(x)
@@ -286,11 +295,19 @@ for temperature in [0.95]:
                     # reshape x have (n_notes,n_attributes,vocab)
                     x_a = einops.rearrange(x1h,"(n_notes n_attributes) vocab -> n_notes n_attributes vocab",vocab=len(model.tokenizer.vocab),n_attributes=len(model.tokenizer.note_attribute_order))
                     # get pitch tokens
-                    pitch_tokens = (x_a[:,model.tokenizer.note_attribute_order.index("pitch"),:].sum(axis=0)>0).float()
-                    x_a[:,model.tokenizer.note_attribute_order.index("pitch"),:] = pitch_tokens
 
+                    # get pitch tokens
+                    pitch_tokens = (x_a[:,model.tokenizer.note_attribute_order.index("pitch"),:].sum(axis=0)>0).float()
+                    x_a[:,model.tokenizer.note_attribute_order.index("pitch")] = pitch_tokens
+
+                    # get pitch tokens
                     onset_tokens = (x_a[:,model.tokenizer.note_attribute_order.index("onset/beat"),:].sum(axis=0)>0).float()
-                    x_a[:,model.tokenizer.note_attribute_order.index("onset/beat"),:] = onset_tokens
+                    x_a[:,model.tokenizer.note_attribute_order.index("onset/beat")] = onset_tokens
+
+                    # resample offsets
+                    offset_tokens = (x_a[:,model.tokenizer.note_attribute_order.index("offset/tokens"),:].sum(axis=0)>0).float()
+                    x_a[:,model.tokenizer.note_attribute_order.index("offset/tokens")] = offset_tokens
+
 
                     mask = einops.rearrange(x_a,"n_notes n_attributes vocab -> (n_notes n_attributes) vocab")[None,...]
 
