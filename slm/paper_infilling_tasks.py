@@ -19,8 +19,8 @@ torch.cuda.manual_seed(SEED)
 
 ROOT_DIR = "./"
 TMP_DIR = ROOT_DIR + "tmp"
-OUTPUT_DIR = ROOT_DIR + "artefacts/eval/new_tasks"
-device = "cuda:3"
+OUTPUT_DIR = ROOT_DIR + "artefacts/eval/0.95"
+device = "cuda:2"
 
 def export_batch(y, tokenizer, output_dir):
     for sample_index in tqdm(range(y.shape[0])):
@@ -84,24 +84,25 @@ if False:
 #%%
 
 tasks = [
-# "generate",
 # "infilling_low",
-"pitch_set",
-"infilling_high_patched",
-# "infilling_start",
-# "infilling_end",
 "infilling_box_middle",
 "infilling_box_end",
+"pitch_set",
+"infilling_high_patched",
+# "generate",
+# "infilling_start",
+# "infilling_end",
+
 # "constrained_generation"
-"onset_set",
-"pitch_onset_set",
-"infilling_drums",
-"infilling_harmonic",
+# "onset_set",
+# "pitch_onset_set",
+# "new_drums",
+# "new_harmonic",
 # ,"constrained_generation",
 ]
 
 # infilling tasks
-for temperature in [0.95,1.0,1.05]:
+for temperature in [0.95]:
     for task in tasks:
         for model_name in ["mlm","slm"]:
             model = (
@@ -127,7 +128,7 @@ for temperature in [0.95,1.0,1.05]:
                     match task:
                         case "infilling_high_patched":
                             min_box_pitch = (max_pitch - min_pitch)//2 + min_pitch
-                            max_box_pitch = max_pitch 
+                            max_box_pitch = max_pitch
                             pitches = [
                                 f"pitch:{i}" for i in range(min_box_pitch,max_box_pitch+1)
                             ]
@@ -150,7 +151,7 @@ for temperature in [0.95,1.0,1.05]:
                             beat_range = (8,16)
                             pitches=None
 
-                        case "infilling_drums":
+                        case "infilling_drums_patched":
                             vocab = model.tokenizer.vocab
                             drum_range = [token for token in vocab if ("pitch:" in token) and ("(Drums)" in token)]
                             pitches = drum_range
@@ -198,7 +199,9 @@ for temperature in [0.95,1.0,1.05]:
                             max_notes=n_notes,
                         )[None, ...]
                         .float()
-                    )
+                    ) 
+
+                                
                 
                 elif "generate" in task:
 
@@ -258,7 +261,7 @@ for temperature in [0.95,1.0,1.05]:
                     x_a[:,model.tokenizer.note_attribute_order.index("pitch")] = pitch_tokens
                     mask = einops.rearrange(x_a,"n_notes n_attributes vocab -> (n_notes n_attributes) vocab")[None,...]
 
-                elif task == "onset_beats":
+                elif task == "onset_set":
                     x = batch[sample_idx]
                     x_sm = model.tokenizer.decode(x)
                     n_notes = x_sm.note_num()

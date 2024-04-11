@@ -103,13 +103,6 @@ df
 
 #%%
 # read fad results
-fad_a = open("../fad_results_clap_music.txt").readlines()
-fad_b = open("../fad_results_clap_audio.txt").readlines()
-
-
-fad_a = [x.strip() for x in fad_a]
-fad_b = [x.strip() for x in fad_b]
-
 def parse_fad_line(line):
     parts = line.split()
     reference = parts[5]
@@ -118,11 +111,16 @@ def parse_fad_line(line):
     ref = reference.replace("artefacts/eval_audio/fad_test/","")
     return {"system": system.replace("artefacts/eval_audio/fad_test/",""), parts[2]+"_fad_"+ref: score }
 
+fad_a = open("../fad_results_clap_audio_new.txt").readlines()
+fad_a = [x.strip() for x in fad_a]
 fad_a = [parse_fad_line(x) for x in fad_a]
 fad_a = sorted(fad_a, key=lambda x: x["system"])
 fad_a = [dict(x, **y) for x, y in zip(fad_a[::2], fad_a[1::2])]
 fad_df = pd.DataFrame(fad_a)
 fad_df
+
+
+
 
 
 # remove rows where "natural" is in the system name, avoiding bad operand type for unary ~: 'str'
@@ -141,6 +139,9 @@ display(fad_df)
 
 # split system into system and temperature
 fad_df["temperature"] = fad_df["system"].str.split("t=").str[-1]
+
+# convert temperature to float
+fad_df["temperature"] = fad_df["temperature"].astype(float)
 fad_df["system"] = fad_df["system"].str.split("t=").str[0]
 
 
@@ -152,8 +153,9 @@ fad_df["system"] = fad_df["system"].str.split("t=").str[0]
 for task in fad_df["task"].unique():
     plt.figure()
     for system in fad_df[fad_df["task"] == task]["system"].unique():
-        plt.plot(fad_df[(fad_df["task"] == task) & (fad_df["system"] == system)]["temperature"], fad_df[(fad_df["task"] == task) & (fad_df["system"] == system)]["clap-laion-music_fad_natural"], label=system, linestyle="dashed", color="red" if "mlm" in system else "green")
-        plt.plot(fad_df[(fad_df["task"] == task) & (fad_df["system"] == system)]["temperature"], fad_df[(fad_df["task"] == task) & (fad_df["system"] == system)]["clap-laion-music_fad_natural2"], label=system, linestyle="solid", color="red" if "mlm" in system else "green")
+        plt.plot(fad_df[(fad_df["task"] == task) & (fad_df["system"] == system)]["temperature"], fad_df[(fad_df["task"] == task) & (fad_df["system"] == system)]["clap-laion-audio_fad_natural"], label=system, linestyle="dashed", color="red" if "mlm" in system else "green")
+        plt.plot(fad_df[(fad_df["task"] == task) & (fad_df["system"] == system)]["temperature"], fad_df[(fad_df["task"] == task) & (fad_df["system"] == system)]["clap-laion-audio_fad_natural2"], label=system, linestyle="solid", color="red" if "mlm" in system else "green")
+
     plt.title(task)
     plt.legend()
     plt.show()

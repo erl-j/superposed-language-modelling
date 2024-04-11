@@ -2,7 +2,7 @@ import datetime
 import os
 
 # zip src
-zip_src = "artefacts/eval_cropped_midi/fad_test"
+zip_src = "artefacts/eval_cropped_midi/fad_test_sane"
 # Check if the directory exists and contains files
 if os.path.exists(zip_src) and os.listdir(zip_src):
     # zip dest

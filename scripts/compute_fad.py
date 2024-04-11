@@ -39,7 +39,7 @@ for sys_audio_dir in sys_dirs:
 
         output = str(output).split("\n")[-2]
         
-        with open("fad_results_clap_audio_new.txt", "a") as f:
+        with open("fad_results_clap_audio_new_tasks_thursday.txt", "a") as f:
             # write to file
             # write file
             f.write(f"{output}\n")
