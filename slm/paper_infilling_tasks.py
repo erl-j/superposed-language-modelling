@@ -19,8 +19,8 @@ torch.cuda.manual_seed(SEED)
 
 ROOT_DIR = "./"
 TMP_DIR = ROOT_DIR + "tmp"
-OUTPUT_DIR = ROOT_DIR + "artefacts/eval/0.95"
-device = "cuda:2"
+OUTPUT_DIR = ROOT_DIR + "artefacts/eval/missing_temperatures_tasks"
+device = "cuda:3"
 
 def export_batch(y, tokenizer, output_dir):
     for sample_index in tqdm(range(y.shape[0])):
@@ -64,7 +64,17 @@ dl = torch.utils.data.DataLoader(
 )
 iterator = iter(dl)
 # get batch
+# drop first
 batch = next(iterator)
+
+# drop second
+# a = next(iterator)
+
+# for i in range(100):
+#     new_batch = next(iterator)
+
+#     # export batch
+#     export_batch(new_batch,tokenizer,OUTPUT_DIR + f"/natural_ref_{i}")
 
 if False:
 
@@ -86,12 +96,12 @@ if False:
 tasks = [
     "pitch_set",
     "onset_offset_set",
-    "pitch_onset_offset_set",
+    # "pitch_onset_offset_set",
+    # "infilling_box_middle",
+    # "infilling_high_patched", 
 # "infilling_low",
-# "infilling_box_middle",
 # "infilling_box_end",
 # "pitch_set",
-# "infilling_high_patched",
 # "generate",
 # "infilling_start",
 # "infilling_end",
@@ -105,7 +115,7 @@ tasks = [
 ]
 
 # infilling tasks
-for temperature in [1.0,0.95,0.9,0.85]:
+for temperature in [1.0,0.9,0.95,0.85]:
     for task in tasks:
         for model_name in ["mlm","slm"]:
             model = (
@@ -278,8 +288,8 @@ for temperature in [1.0,0.95,0.9,0.85]:
                     x_a[:,model.tokenizer.note_attribute_order.index("onset/beat")] = onset_tokens
 
                     # resample offsets
-                    offset_tokens = (x_a[:,model.tokenizer.note_attribute_order.index("offset/tokens"),:].sum(axis=0)>0).float()
-                    x_a[:,model.tokenizer.note_attribute_order.index("offset/tokens")] = offset_tokens
+                    offset_tokens = (x_a[:,model.tokenizer.note_attribute_order.index("offset/beat"),:].sum(axis=0)>0).float()
+                    x_a[:,model.tokenizer.note_attribute_order.index("offset/beat")] = offset_tokens
                     # get pitch tokens
 
                     mask = einops.rearrange(x_a,"n_notes n_attributes vocab -> (n_notes n_attributes) vocab")[None,...]
@@ -305,8 +315,8 @@ for temperature in [1.0,0.95,0.9,0.85]:
                     x_a[:,model.tokenizer.note_attribute_order.index("onset/beat")] = onset_tokens
 
                     # resample offsets
-                    offset_tokens = (x_a[:,model.tokenizer.note_attribute_order.index("offset/tokens"),:].sum(axis=0)>0).float()
-                    x_a[:,model.tokenizer.note_attribute_order.index("offset/tokens")] = offset_tokens
+                    offset_tokens = (x_a[:,model.tokenizer.note_attribute_order.index("offset/beat"),:].sum(axis=0)>0).float()
+                    x_a[:,model.tokenizer.note_attribute_order.index("offset/beat")] = offset_tokens
 
 
                     mask = einops.rearrange(x_a,"n_notes n_attributes vocab -> (n_notes n_attributes) vocab")[None,...]

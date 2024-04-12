@@ -9,6 +9,140 @@ import matplotlib.pyplot as plt
 
 root_dir = "../artefacts/eval_cropped_midi/fad_test/"
 
+#%%
+import numpy as np
+
+# embedding dir
+embed_dir = "../artefacts/eval_audio/fad_test/"
+
+embedding_name = "clap-laion-audio"
+
+# read embeddings
+embedding_paths = glob.glob(f"{embed_dir}/**/{embedding_name}/*.npy",recursive=True)
+
+# read embeddings
+records = []
+for embedding_path in tqdm(embedding_paths):
+    if "nr" in embedding_path:
+        crop_path = embedding_path.replace(embed_dir,"")
+        split_path = crop_path.split("/")
+        task = split_path[0]
+
+        embedding = np.load(embedding_path)
+
+        if "natural" in task:
+            record = {
+                "path": embedding_path,
+                "embedding": embedding,
+                "task": task,
+                "src_id": split_path[1].replace(".npy",""),
+            }
+        else:
+            task,system,_d,_d,fn = split_path
+            src_id = fn.replace(".npy","")
+            record = {
+                "path": embedding_path,
+                "embedding": embedding,
+                "task": task,
+                "system": system,
+                "src_id": src_id,
+            }
+        records.append(record)
+
+#%%
+
+src_embeds = []
+for src_idx in range(100):
+    src_embed = np.load(f"../artefacts/eval_audio/fad_test/natural/embeddings/clap-laion-audio/nr_{src_idx}.npy")
+    src_embeds.append(np.mean(src_embed, axis=0))
+    
+src_embeds = np.stack(src_embeds)
+
+
+
+editing_tasks = [
+    "infilling_start",
+    "infilling_end",
+    "infilling_low",
+    "pitch_set",
+    "constrained_generation",
+    "generate",
+    "infilling_high_patched",
+    "infilling_box_middle",
+]
+
+temperature = "1.0"
+for task in editing_tasks:
+    print(task)
+    # load slm embeddings
+    slm_embeds = []
+    for src_idx in range(100):
+        path = f"../artefacts/eval_audio/fad_test/{task}/*slm_t={temperature}/embeddings/clap-laion-audio/nr_{src_idx}.npy"
+        gen_embed = np.load(glob.glob(path)[0])
+        slm_embeds.append(np.mean(gen_embed, axis=0))
+    slm_embeds = np.stack(slm_embeds)
+
+    # l2 normalize
+    norm_slm_embeds = slm_embeds / np.linalg.norm(slm_embeds, axis=1)[:,None]
+
+    mlm_embeds = []
+    for src_idx in range(100):
+        path = f"../artefacts/eval_audio/fad_test/{task}/*mlm_t={temperature}/embeddings/clap-laion-audio/nr_{src_idx}.npy"
+        gen_embed = np.load(glob.glob(path)[0])
+        mlm_embeds.append(np.mean(gen_embed, axis=0))
+
+    mlm_embeds = np.stack(mlm_embeds)
+    # l2 norm
+    norm_mlm_embeds = mlm_embeds / np.linalg.norm(mlm_embeds, axis=1)[:,None]
+
+    # l2 normalize
+    norm_src_embeds = src_embeds / np.linalg.norm(src_embeds, axis=1)[:,None]
+
+    # get cosine similarity matrix
+    slm_cosine_sim = np.dot(norm_slm_embeds, norm_src_embeds.T)
+    slm_cosine_sim_diag = np.diag(slm_cosine_sim)
+    mlm_cosine_sim = np.dot(norm_mlm_embeds, norm_src_embeds.T)
+    mlm_cosine_sim_diag = np.diag(mlm_cosine_sim)
+    nat_self_cosine_sim = np.dot(norm_src_embeds, norm_src_embeds.T)
+    nat_self_cosine_sim_diag = np.diag(nat_self_cosine_sim)
+
+    # plot histograms of cosine similarity
+    plt.figure()
+    n_bins = 10
+    plt.hist(slm_cosine_sim_diag, bins=n_bins, alpha=0.5, label="slm")
+    plt.hist(mlm_cosine_sim_diag, bins=n_bins, alpha=0.5, label="mlm")
+    plt.hist(nat_self_cosine_sim_diag, bins=n_bins, alpha=0.5, label="natural")
+    # plot means
+    plt.axvline(np.mean(slm_cosine_sim_diag), color="blue", linestyle="dashed")
+    plt.axvline(np.mean(mlm_cosine_sim_diag), color="orange", linestyle="dashed")
+    plt.axvline(np.mean(nat_self_cosine_sim_diag), color="green", linestyle="dashed")
+    plt.title(f"{task} cosine similarity")
+    plt.legend()
+    plt.show()
+
+    # count slm wins
+    slm_wins = np.sum(slm_cosine_sim_diag > mlm_cosine_sim_diag)
+    print(f"slm wins: {slm_wins}/{len(slm_cosine_sim_diag)}")
+
+
+    # plot both histograms with different alphas
+    
+
+
+
+
+
+#%%
+
+
+for task in editing_tasks:
+    for system in ["mlm", "slm"]:
+        # get embedding for task
+        for src_id in range(100):
+            # get natural embedding for src_id
+            src_embed = df
+   
+
 # %%
 
 # recursively find all subdirs

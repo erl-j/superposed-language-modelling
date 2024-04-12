@@ -2,7 +2,7 @@ import os
 from util import render_directory_with_fluidsynth
 
 
-for exp in ["eval/0.95"]:
+for exp in ["eval/big_natural"]:
 
     # recursively find all directories which contain midi files at next level
     def find_midi_dirs(root_dir):
