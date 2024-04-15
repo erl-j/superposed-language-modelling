@@ -128,6 +128,9 @@ for task in editing_tasks:
     # plot both histograms with different alphas
     
 
+# get fad scores
+fad_scores = pd.read_csv("../fad_results_clap_audio_new_tasks_thursday.txt", sep=" ", header=None)
+
 
 
 

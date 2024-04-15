@@ -590,6 +590,72 @@ class EncoderOnlyModel(pl.LightningModule):
                         break
         return x
     
+
+    def get_attention_pattern(self, x, sampling_steps=None, temperature=1, top_p=1, top_k=0, order="random", typical_sampling_t=-1, temperature_decay=False, min_temperature=0.8):
+        if sampling_steps is None:
+            sampling_steps = self.tokenizer.config["max_notes"]*len(self.tokenizer.note_attribute_order)
+        self.eval()
+
+        def patch_attention(m):
+            forward_orig = m.forward
+
+            def wrap(*args, **kwargs):
+                kwargs['need_weights'] = True
+                kwargs['average_attn_weights'] = False
+
+                return forward_orig(*args, **kwargs)
+
+            self.forward = wrap
+
+        class SaveOutput:
+            def __init__(self):
+                self.outputs = []
+
+            def __call__(self, module, module_in, module_out):
+                self.outputs.append(module_out[1])
+
+            def clear(self):
+                self.outputs = []
+
+        save_output = SaveOutput()
+
+        for module in self.transformer.modules():
+            if isinstance(module, nn.MultiheadAttention):
+                patch_attention(module)
+                module.register_forward_hook(save_output)
+                
+        with torch.no_grad():
+            x = x
+            # multiply by format mask
+            x = x * self.format_mask[None, ...].to(x.device)
+
+            x = self.tokenizer.collapse_undefined_attributes(x)
+
+
+            batch, time_attr, ft = x.shape
+
+            total_tokens = time_attr
+            # count number of known tokens
+            masked_tokens = (x.sum(-1) > 1).sum().int().item()
+            # find masking ratio
+            masking_ratio = masked_tokens / total_tokens
+
+
+            with tqdm(total=masked_tokens) as pbar:
+                while True:
+
+                    masked_tokens_before = (x.sum(-1) > 1).sum().int().item()
+
+                    # plot attention pattern
+                    # first get logits
+                    logits = self(x.float())
+                    # next we visualize the attention pattern
+                    # get attention pattern
+                  
+                    return save_output
+                    
+        return x
+    
     def compute_perplexity(self, x, tgt):
 
         # assert that x is not batched

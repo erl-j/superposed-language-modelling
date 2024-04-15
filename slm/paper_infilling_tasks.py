@@ -94,8 +94,8 @@ if False:
 #%%
 
 tasks = [
-    "pitch_set",
-    "onset_offset_set",
+    # "pitch_set",
+    # "onset_offset_set",
     # "pitch_onset_offset_set",
     # "infilling_box_middle",
     # "infilling_high_patched", 
@@ -112,6 +112,8 @@ tasks = [
 # "new_drums",
 # "new_harmonic",
 # ,"constrained_generation",
+"resample_velocity",
+
 ]
 
 # infilling tasks
