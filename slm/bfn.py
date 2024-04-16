@@ -31,7 +31,7 @@ class BFNModel(pl.LightningModule):
         normalize_by_masking_ratio=False,
         learning_rate_gamma=0.9,
         norm_first=False,
-        beta1 = 0.75,
+        beta1 = 1.0,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -57,7 +57,7 @@ class BFNModel(pl.LightningModule):
         )
         self.decoder_output_layer = nn.Linear(hidden_size, vocab_size)
         self.n_attributes = len(self.tokenizer.note_attribute_order)
-        self.n_events = tokenizer.config["max_notes"]
+        self.n_events = self.tokenizer.config["max_notes"]
         self.learning_rate_gamma = learning_rate_gamma
 
         self.t_embedding = torch.nn.Linear(1, hidden_size)
@@ -109,7 +109,6 @@ class BFNModel(pl.LightningModule):
         else:
             x = torch.nn.functional.one_hot(batch, num_classes=len(self.vocab)).float()
 
-        format_mask = self.format_mask[None, ...].to(x.device).expand_as(x)
         K = x.shape[-1]
         # get one t in [0, 1] per sample in batch
         t = torch.rand((x.shape[0],1,1), device=x.device)
@@ -124,11 +123,45 @@ class BFNModel(pl.LightningModule):
 
         output_probs = self.discrete_output_distribution(theta, t)
         ehat = output_probs
-        loss = na_k*self.beta1 * t * (x-ehat)**2
+        loss = na_k*self.beta1 * t * ((x-ehat)**2)
 
         metrics = {}
         metrics["l_inf_loss"]=loss.mean()
         return metrics
+    
+    def sample(self,batch_size,nb_steps=10,device="cpu",eps_=1e-12, plot_interval=-1):
+        self.eval()
+
+        theta = torch.zeros((batch_size, self.n_events * self.n_attributes, len(self.vocab)), device=device)
+
+        K = theta.shape[-1]
+        for i in tqdm(range(1, nb_steps+1)):
+            t = (i-1) / nb_steps
+            t = t * torch.ones((theta.shape[0],1,1), device=theta.device, dtype=theta.dtype)
+            
+            k_probs = self.discrete_output_distribution(theta, t)  # (B, D, K)
+            if plot_interval>0:
+                
+            plt.imshow(k_probs[0].cpu().detach().numpy().T, aspect="auto", interpolation="none")
+            plt.show()
+            k = torch.distributions.Categorical(probs=k_probs).sample()  # (B, D)
+            alpha = self.beta1 * (2 * i - 1) / (nb_steps ** 2)
+
+            e_k = F.one_hot(k, num_classes=K).float()  # (B, D, K)
+            mean = alpha * (K * e_k - 1)
+            var = (alpha * K)
+            std = torch.full_like(mean, fill_value=var).sqrt()
+            eps = torch.randn_like(e_k)
+            y = mean + std * eps  # (B, D, K)
+
+            theta = F.softmax(y + torch.log(theta + eps_), dim=-1)
+
+
+        k_probs_final = self.discrete_output_distribution(theta, torch.ones_like(t))
+        k_final = torch.distributions.Categorical(probs=k_probs_final).sample()
+
+        return k_final
+
 
     def training_step(self, batch, batch_idx):
         metrics = self.step(batch, batch_idx)
@@ -234,7 +267,7 @@ if __name__ == "__main__":
         n_layers=12,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
-        learning_rate=1e-4,
+        learning_rate=1e-5,
         tokenizer_config=tokenizer_config,
         learning_rate_gamma=0.99,
         norm_first=True,
