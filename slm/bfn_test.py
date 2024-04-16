@@ -12,7 +12,7 @@ model = BFNModel.load_from_checkpoint(checkpoint, map_location=device)
 
 tokenizer = model.tokenizer
 
-y = model.sample(10,1000,device=device)
+y = model.sample(10,20,device=device, plot_interval=5)
 
 import matplotlib.pyplot as plt
 import torch

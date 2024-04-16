@@ -140,10 +140,17 @@ class BFNModel(pl.LightningModule):
             t = t * torch.ones((theta.shape[0],1,1), device=theta.device, dtype=theta.dtype)
             
             k_probs = self.discrete_output_distribution(theta, t)  # (B, D, K)
-            if plot_interval>0:
-                
-            plt.imshow(k_probs[0].cpu().detach().numpy().T, aspect="auto", interpolation="none")
-            plt.show()
+            if plot_interval>0 and i % plot_interval == 0:
+                # plt.imshow(k_probs[0].cpu().detach().numpy().T, aspect="auto", interpolation="none")
+                # plt.show()
+                # create subplot for each attribute
+                fig, axs = plt.subplots(self.n_attributes, 1, figsize=(12, 8))
+                for j in range(self.n_attributes):
+                    #axs[j].plot(k_probs[0, j].cpu().detach().numpy().T)
+                    # bar plot
+                    axs[j].bar(range(K), k_probs[0, j].cpu().detach().numpy().T)
+                plt.show()
+
             k = torch.distributions.Categorical(probs=k_probs).sample()  # (B, D)
             alpha = self.beta1 * (2 * i - 1) / (nb_steps ** 2)
 
