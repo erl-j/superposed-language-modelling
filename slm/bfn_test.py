@@ -2,7 +2,7 @@
 device = "cuda:7"
 from bfn import BFNModel
 
-checkpoint = "../checkpoints/upbeat-dawn-53/epoch=2-step=4866-val/loss_epoch=0.00629.ckpt"
+checkpoint = "../checkpoints/upbeat-dawn-53/epoch=12-step=21086-val/loss_epoch=0.00282.ckpt"
 
 model = BFNModel.load_from_checkpoint(checkpoint, map_location=device)
 
@@ -45,16 +45,16 @@ print(model.beta1)
 tokenizer = model.tokenizer
 
 mask = tokenizer.constraint_mask(
-    scale="C pentatonic",
+    scale="C major",
     instruments = ["Piano","Drums","Bass"],
     min_notes = 50,
     max_notes = 100,
     min_notes_per_instrument=30,
 )
 
-BATCH_SIZE = 10
-N_STEPS = 10
-y = model.sample(None,BATCH_SIZE,N_STEPS,device=device,argmax=True)
+BATCH_SIZE = 2
+N_STEPS = 300
+y = model.sample(mask,BATCH_SIZE,N_STEPS,device=device,argmax=False)
 
 import matplotlib.pyplot as plt
 import torch

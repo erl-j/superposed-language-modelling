@@ -233,6 +233,15 @@ class BFNModel(pl.LightningModule):
             theta = theta / theta.sum(dim=-1, keepdim=True)
 
         K = theta.shape[-1]
+
+        entropies = []
+        # add theta entropy
+        entropies.append(-torch.sum(theta * torch.log(theta + eps_), dim=-1).mean().detach().cpu())
+
+        first_event_probs = []
+        # get first event probs
+        first_event_probs.append(theta[0, : self.n_attributes, :].detach().cpu())
+
         for i in tqdm(range(1, nb_steps + 1)):
             t = (i - 1) / nb_steps
             t = t * torch.ones(
@@ -267,12 +276,30 @@ class BFNModel(pl.LightningModule):
 
             theta = theta / theta.sum(dim=-1, keepdim=True)
 
+            # add theta entropy
+            entropies.append(-torch.sum(theta * torch.log(theta + eps_), dim=-1).mean().detach().cpu())
+            first_event_probs.append(theta[0, : self.n_attributes, :].detach().cpu())
+
         k_probs_final = self.discrete_output_distribution(theta, torch.ones_like(t))
 
         if argmax:
             k_final = k_probs_final.argmax(dim=-1)
         else:
             k_final = torch.distributions.Categorical(probs=k_probs_final).sample()
+
+        # plot entropies
+        plt.plot(entropies)
+        plt.show()
+
+        # plot first event probs
+        first_event_probs = torch.stack(first_event_probs, dim=0)
+
+        first_event_probs = torch.log(first_event_probs + eps_)
+
+        for i in range(self.n_attributes):
+            plt.imshow(first_event_probs[:,i].T, aspect="auto", interpolation="none")
+            plt.title(f"Probs for attribute {self.tokenizer.note_attribute_order[i]}")
+            plt.show()
 
         return k_final
 
@@ -401,7 +428,7 @@ if __name__ == "__main__":
         tokenizer_config=tokenizer_config,
         learning_rate_gamma=0.99,
         norm_first=True,
-        beta1=0.075,
+        beta1=0.15,
     )
 
     BATCH_SIZE = 80
@@ -456,7 +483,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[2,3,5,6],
+        devices=[5,6],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[
@@ -475,4 +502,9 @@ if __name__ == "__main__":
         gradient_clip_val=1.0,
     )
 
-    trainer.fit(model, trn_dl, val_dl)
+    trainer.fit(
+                model,
+                trn_dl, 
+                val_dl,
+    )
+                # ckpt_path="checkpoints/upbeat-dawn-53/epoch=14-step=24330-val/loss_epoch=0.00273.ckpt")
