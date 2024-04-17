@@ -121,6 +121,10 @@ class BFNModel(pl.LightningModule):
         # if format mask is not 1 set to -ifn
         theta = torch.nn.functional.softmax(y, dim=-1)
 
+        format_mask = self.format_mask[None, ...].to(x.device)
+        theta = theta * format_mask
+        theta = theta / theta.sum(dim=-1,keepdim=True)
+
         output_probs = self.discrete_output_distribution(theta, t)
         ehat = output_probs
         loss = na_k*self.beta1 * t * ((x-ehat)**2)
