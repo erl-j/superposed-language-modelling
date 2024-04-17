@@ -16,6 +16,7 @@ import einops
 from tqdm import tqdm
 from util import top_k_top_p_filtering
 
+
 class BFNModel(pl.LightningModule):
     def __init__(
         self,
@@ -31,7 +32,7 @@ class BFNModel(pl.LightningModule):
         normalize_by_masking_ratio=False,
         learning_rate_gamma=0.9,
         norm_first=False,
-        beta1 = 1.0,
+        beta1=1.0,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -46,12 +47,12 @@ class BFNModel(pl.LightningModule):
         self.one_hot_input = one_hot_input
         self.transformer = torch.nn.TransformerEncoder(
             encoder_layer=torch.nn.TransformerEncoderLayer(
-            d_model=hidden_size,
-            nhead=n_heads,
-            dim_feedforward=feed_forward_size,
-            norm_first= norm_first,
-            dropout=0.1,
-            batch_first=True,
+                d_model=hidden_size,
+                nhead=n_heads,
+                dim_feedforward=feed_forward_size,
+                norm_first=norm_first,
+                dropout=0.1,
+                batch_first=True,
             ),
             num_layers=n_layers,
         )
@@ -72,7 +73,7 @@ class BFNModel(pl.LightningModule):
 
         x = einops.rearrange(x, "b (t a) v -> b t a v", a=self.n_attributes)
         ze = self.embedding_layer(x)
-        ze += t_z[...,None,:]
+        ze += t_z[..., None, :]
         ze = ze.sum(dim=2)
 
         # pass through transformer
@@ -90,14 +91,16 @@ class BFNModel(pl.LightningModule):
         return decoder_logits
 
     def discrete_output_distribution(self, theta, t):
-        output_dist = self.forward(theta,t)
+        output_dist = self.forward(theta, t)
         output_probs = torch.nn.functional.softmax(output_dist, dim=-1)
         return output_probs
 
     def test_step(self, batch_size):
-
         format_mask = self.format_mask[None, ...].to(self.device)
-        noise = torch.randn((batch_size, self.n_events * self.n_attributes, len(self.vocab)), device=self.device)
+        noise = torch.randn(
+            (batch_size, self.n_events * self.n_attributes, len(self.vocab)),
+            device=self.device,
+        )
         noise = noise * format_mask.expand_as(noise)
         batch = noise.argmax(dim=-1)
         loss = self.step(batch, 0)
@@ -111,75 +114,114 @@ class BFNModel(pl.LightningModule):
 
         K = x.shape[-1]
         # get one t in [0, 1] per sample in batch
-        t = torch.rand((x.shape[0],1,1), device=x.device)
-        beta = self.beta1 * (t ** 2)
-        #na_k = format_mask.sum(dim=-1, keepdim=True)
+        t = torch.rand((x.shape[0], 1, 1), device=x.device)
+        beta = self.beta1 * (t**2)
+        # na_k = format_mask.sum(dim=-1, keepdim=True)
         na_k = K
-        y_mean = beta*(na_k*x-1)
-        y_std = (beta*na_k).sqrt()
-        y = torch.randn(x.shape, device=x.device)*y_std + y_mean
+        y_mean = beta * (na_k * x - 1)
+        y_std = (beta * na_k).sqrt()
+        y = torch.randn(x.shape, device=x.device) * y_std + y_mean
         # if format mask is not 1 set to -ifn
         theta = torch.nn.functional.softmax(y, dim=-1)
 
-        format_mask = self.format_mask[None, ...].to(x.device)
-        theta = theta * format_mask
-        theta = theta / theta.sum(dim=-1,keepdim=True)
+        # multiply with format mask
+        theta = theta * self.format_mask[None, ...].to(theta.device)
+        # normalize
+        theta = theta / theta.sum(dim=-1, keepdim=True)
 
         output_probs = self.discrete_output_distribution(theta, t)
         ehat = output_probs
-        loss = na_k*self.beta1 * t * ((x-ehat)**2)
+        loss = na_k * self.beta1 * t * ((x - ehat) ** 2)
 
         metrics = {}
-        metrics["l_inf_loss"]=loss.mean()
+        metrics["l_inf_loss"] = loss.mean()
         return metrics
-    
-    def sample(self,batch_size,nb_steps=10,device="cpu",eps_=1e-12, plot_interval=-1):
+
+    def sample(
+        self,
+        mask=None,
+        batch_size=1,
+        nb_steps=10,
+        device="cpu",
+        eps_=1e-12,
+        plot_interval=-1,
+        argmax=False,
+    ):
         self.eval()
 
-        theta = torch.zeros((batch_size, self.n_events * self.n_attributes, len(self.vocab)), device=device)
+        theta = torch.ones(
+            (batch_size, self.n_events * self.n_attributes, len(self.vocab)),
+            device=device,
+        )
+
+        theta = theta * self.format_mask[None, ...].to(theta.device)
+
+        # turn into uniform prior
+        theta = theta / theta.sum(dim=-1, keepdim=True)
+
+        # mult with mask
+        if mask is not None:
+            mask = mask[None, ...].to(theta.device)
+            theta = theta * mask
+
+        # normalize
+        theta = theta / theta.sum(dim=-1, keepdim=True)
 
         K = theta.shape[-1]
-        for i in tqdm(range(1, nb_steps+1)):
-            t = (i-1) / nb_steps
-            t = t * torch.ones((theta.shape[0],1,1), device=theta.device, dtype=theta.dtype)
-            
+        for i in tqdm(range(1, nb_steps + 1)):
+            t = (i - 1) / nb_steps
+            t = t * torch.ones(
+                (theta.shape[0], 1, 1), device=theta.device, dtype=theta.dtype
+            )
+
             k_probs = self.discrete_output_distribution(theta, t)  # (B, D, K)
-            if plot_interval>0 and i % plot_interval == 0:
+            if plot_interval > 0 and i % plot_interval == 0:
                 # plt.imshow(k_probs[0].cpu().detach().numpy().T, aspect="auto", interpolation="none")
                 # plt.show()
                 # create subplot for each attribute
                 fig, axs = plt.subplots(self.n_attributes, 1, figsize=(12, 8))
                 for j in range(self.n_attributes):
-                    #axs[j].plot(k_probs[0, j].cpu().detach().numpy().T)
+                    # axs[j].plot(k_probs[0, j].cpu().detach().numpy().T)
                     # bar plot
                     axs[j].bar(range(K), k_probs[0, j].cpu().detach().numpy().T)
                 plt.show()
 
             k = torch.distributions.Categorical(probs=k_probs).sample()  # (B, D)
-            alpha = self.beta1 * (2 * i - 1) / (nb_steps ** 2)
+            alpha = self.beta1 * (2 * i - 1) / (nb_steps**2)
 
             e_k = F.one_hot(k, num_classes=K).float()  # (B, D, K)
             mean = alpha * (K * e_k - 1)
-            var = (alpha * K)
+            var = alpha * K
             std = torch.full_like(mean, fill_value=var).sqrt()
             eps = torch.randn_like(e_k)
             y = mean + std * eps  # (B, D, K)
 
             theta = F.softmax(y + torch.log(theta + eps_), dim=-1)
 
-
         k_probs_final = self.discrete_output_distribution(theta, torch.ones_like(t))
-        k_final = torch.distributions.Categorical(probs=k_probs_final).sample()
+
+        if argmax:
+            k_final = k_probs_final.argmax(dim=-1)
+        else:
+            k_final = torch.distributions.Categorical(probs=k_probs_final).sample()
 
         return k_final
-
 
     def training_step(self, batch, batch_idx):
         metrics = self.step(batch, batch_idx)
         for metric in metrics:
-            self.log(f"trn/{metric}", metrics[metric], on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+            self.log(
+                f"trn/{metric}",
+                metrics[metric],
+                on_step=True,
+                on_epoch=True,
+                prog_bar=True,
+                sync_dist=True,
+            )
         loss = metrics["l_inf_loss"]
-        self.log("trn/loss", loss, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
+        self.log(
+            "trn/loss", loss, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True
+        )
         # log wandb name
         self.log("gpu", loss.device.index)
         return loss
@@ -188,88 +230,96 @@ class BFNModel(pl.LightningModule):
         with torch.no_grad():
             metrics = self.step(batch, batch_idx)
         for metric in metrics:
-            self.log(f"val/{metric}", metrics[metric], prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
+            self.log(
+                f"val/{metric}",
+                metrics[metric],
+                prog_bar=True,
+                on_step=True,
+                on_epoch=True,
+                sync_dist=True,
+            )
         loss = metrics["l_inf_loss"]
-        self.log("val/loss", loss, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
+        self.log(
+            "val/loss", loss, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True
+        )
         return loss
 
     def configure_optimizers(self):
         # learning rate decay
         optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, gamma=self.learning_rate_gamma, step_size=1)
+        scheduler = torch.optim.lr_scheduler.StepLR(
+            optimizer, gamma=self.learning_rate_gamma, step_size=1
+        )
         return [optimizer], [scheduler]
 
 
 if __name__ == "__main__":
-
     genre_list = [
-    "other",
-    "pop",
-    "rock",
-    "italian%2cfrench%2cspanish",
-    "classical",
-    "romantic",
-    "renaissance",
-    "alternative-indie",
-    "metal",
-    "traditional",
-    "country",
-    "baroque",
-    "punk",
-    "modern",
-    "jazz",
-    "dance-eletric",
-    "rnb-soul",
-    "medley",
-    "blues",
-    "hip-hop-rap",
-    "hits of the 2000s",
-    "instrumental",
-    "midi karaoke",
-    "folk",
-    "newage",
-    "latino",
-    "hits of the 1980s",
-    "hits of 2011 2020",
-    "musical%2cfilm%2ctv",
-    "reggae-ska",
-    "hits of the 1970s",
-    "christian-gospel",
-    "world",
-    "early_20th_century",
-    "hits of the 1990s",
-    "grunge",
-    "australian artists",
-    "funk",
-    "best of british"
+        "other",
+        "pop",
+        "rock",
+        "italian%2cfrench%2cspanish",
+        "classical",
+        "romantic",
+        "renaissance",
+        "alternative-indie",
+        "metal",
+        "traditional",
+        "country",
+        "baroque",
+        "punk",
+        "modern",
+        "jazz",
+        "dance-eletric",
+        "rnb-soul",
+        "medley",
+        "blues",
+        "hip-hop-rap",
+        "hits of the 2000s",
+        "instrumental",
+        "midi karaoke",
+        "folk",
+        "newage",
+        "latino",
+        "hits of the 1980s",
+        "hits of 2011 2020",
+        "musical%2cfilm%2ctv",
+        "reggae-ska",
+        "hits of the 1970s",
+        "christian-gospel",
+        "world",
+        "early_20th_century",
+        "hits of the 1990s",
+        "grunge",
+        "australian artists",
+        "funk",
+        "best of british",
     ]
 
     N_BARS = 4
 
     tokenizer_config = {
-        "ticks_per_beat":24,
-        "pitch_range":[0, 128],
-        "max_beats":4*N_BARS,
-        "max_notes":75 * N_BARS,
-        "min_tempo":50,
-        "max_tempo":200,
+        "ticks_per_beat": 24,
+        "pitch_range": [0, 128],
+        "max_beats": 4 * N_BARS,
+        "max_notes": 75 * N_BARS,
+        "min_tempo": 50,
+        "max_tempo": 200,
         "n_tempo_bins": 16,
         "n_velocity_bins": 32,
         "time_signatures": None,
         "tags": genre_list,
         "shuffle_notes": True,
         "use_offset": True,
-        "merge_pitch_and_beat":False,
+        "merge_pitch_and_beat": False,
         "use_program": False,
         "use_instrument": True,
-        "ignored_track_names":[f"Layers{i}" for i in range(0, 8)],
+        "ignored_track_names": [f"Layers{i}" for i in range(0, 8)],
         "separate_drum_pitch": True,
         "use_drum_duration": False,
     }
 
-    tokenizer = MergedTokenizer(
-        tokenizer_config
-    )
+    tokenizer = MergedTokenizer(tokenizer_config)
 
     model = BFNModel(
         hidden_size=768,
@@ -282,21 +332,21 @@ if __name__ == "__main__":
         tokenizer_config=tokenizer_config,
         learning_rate_gamma=0.99,
         norm_first=True,
+        beta1=0.5,
     )
 
     BATCH_SIZE = 50
-
 
     # model.test_step(batch_size=60)
 
     trn_ds = MidiDataset(
         cache_path="./paper_assets/trn_midi_records_unique_pr.pt",
-        path_filter_fn = lambda x: f"n_bars={N_BARS}" in x,
+        path_filter_fn=lambda x: f"n_bars={N_BARS}" in x,
         genre_list=genre_list,
         tokenizer=tokenizer,
         transposition_range=[-4, 4],
-        min_notes = 8*N_BARS,
-        max_notes = tokenizer_config["max_notes"],
+        min_notes=8 * N_BARS,
+        max_notes=tokenizer_config["max_notes"],
     )
 
     val_ds = MidiDataset(
@@ -307,7 +357,7 @@ if __name__ == "__main__":
         min_notes=8 * N_BARS,
         max_notes=tokenizer_config["max_notes"],
     )
-    
+
     # desert capy uses batch size 80
 
     trn_dl = torch.utils.data.DataLoader(
@@ -324,7 +374,6 @@ if __name__ == "__main__":
         shuffle=False,
         num_workers=4,
         pin_memory=True,
-
     )
 
     wandb_logger = WandbLogger(log_model="all", project="bfn")
@@ -337,27 +386,24 @@ if __name__ == "__main__":
     progress_bar_callback = RichProgressBar(refresh_rate=1)
 
     trainer = pl.Trainer(
-    accelerator="gpu",
-    devices=[0],
-    max_epochs=10_000,
-    log_every_n_steps=1,
-    callbacks=[
-        progress_bar_callback,
+        accelerator="gpu",
+        devices=[1],
+        max_epochs=10_000,
+        log_every_n_steps=1,
+        callbacks=[
+            progress_bar_callback,
             pl.callbacks.LearningRateMonitor(logging_interval="step"),
             pl.callbacks.ModelCheckpoint(
-            dirpath=f"./checkpoints/{name}/",
-            monitor="val/loss_epoch",
-            mode="min",
-            save_top_k=3,
-            save_last=True,
-            filename="{epoch}-{step}-{val/loss_epoch:.5f}",
-            )],
-    logger=wandb_logger,
-    gradient_clip_val=1.0,
+                dirpath=f"./checkpoints/{name}/",
+                monitor="val/loss_epoch",
+                mode="min",
+                save_top_k=3,
+                save_last=True,
+                filename="{epoch}-{step}-{val/loss_epoch:.5f}",
+            ),
+        ],
+        logger=wandb_logger,
+        gradient_clip_val=1.0,
     )
 
-    trainer.fit(
-        model,
-        trn_dl,
-        val_dl
-    )
+    trainer.fit(model, trn_dl, val_dl)
