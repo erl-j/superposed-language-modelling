@@ -1,26 +1,60 @@
 #%%
-
-device = "cuda:3"
+device = "cuda:7"
 from bfn import BFNModel
 
-checkpoint = "../checkpoints/wobbly-river-40/epoch=2-step=31125-val/loss_epoch=0.00729.ckpt"
+checkpoint = "../checkpoints/upbeat-dawn-53/epoch=1-step=3244-val/loss_epoch=0.00907.ckpt"
 
 model = BFNModel.load_from_checkpoint(checkpoint, map_location=device)
+
+
+#%%
+from data import MidiDataset
+ROOT_DIR = "../"
+TMP_DIR = ROOT_DIR + "artefacts/tmp"
+OUTPUT_DIR = ROOT_DIR + "artefacts/output"
+
+MODEL_BARS = 4
+# Load the dataset
+ds = MidiDataset(
+    cache_path=ROOT_DIR+"paper_assets/tst_midi_records_unique_pr.pt",
+    path_filter_fn=lambda x: f"n_bars={MODEL_BARS}" in x,
+    genre_list=model.tokenizer.config["tags"],
+    tokenizer=model.tokenizer,
+    min_notes=8 * MODEL_BARS,
+    max_notes=model.tokenizer.config["max_notes"],
+)
+
+
+RESAMPLE_IDX = 50
+
+x = ds[RESAMPLE_IDX]
+x_sm = model.tokenizer.decode(x)
+
+
+
+
+
+#%%
+batch = x.unsqueeze(0).to(device)
+model.preview_beta(batch)
+
 # %%
+
+print(model.beta1)
 
 tokenizer = model.tokenizer
 
 mask = tokenizer.constraint_mask(
-    scale="C major",
+    scale="C pentatonic",
     instruments = ["Piano","Drums","Bass"],
     min_notes = 50,
     max_notes = 100,
+    min_notes_per_instrument=30,
 )
 
-
 BATCH_SIZE = 10
-N_STEPS = 20
-y = model.sample(None,BATCH_SIZE,N_STEPS,device=device,argmax=False)
+N_STEPS = 100
+y = model.sample(None,BATCH_SIZE,N_STEPS,device=device,argmax=True)
 
 import matplotlib.pyplot as plt
 import torch
@@ -44,6 +78,9 @@ for i in range(BATCH_SIZE):
     axs[i].imshow(pr, aspect="auto",interpolation="none")
 plt.show()
 
+#%%
 # play audio of last 
-preview(y_sm, tmp_dir="tmp", audio=True)
+preview(y_sm, tmp_dir="artefacts/tmp", audio=True)
     
+
+# %%

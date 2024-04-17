@@ -13,7 +13,7 @@ import torch
 device = "cuda:0"
 ROOT_DIR = "../"
 
-MODEL = "mlm"
+MODEL = "slm"
 
 OUTPUT_DIR = ROOT_DIR + "artefacts/examples_4"
 TMP_DIR = ROOT_DIR + "artefacts/tmp"
@@ -36,10 +36,6 @@ model = (
 print(model.standard_mlm_forward)
 
 print(model.hparams)
-#%%
-
-
-
 
 
 #%%
@@ -48,13 +44,15 @@ print(model.hparams)
 
 a = model.format_mask[None, ...].to(model.device)
 c = model.tokenizer.constraint_mask(
-    tags=["pop"],
+    tags=["classical"],
     # tags=["other"],
-    instruments=["Drums", "Pipe","Chromatic Percussion"],
-    tempos=["138"],
+    instruments=["Pipe"],
+    # tempos=["138"],
+    pitches=["pitch:{i}" for i in range(60, 108)],
     # scale="G major",
     min_notes=10,
-    max_notes=290,
+    max_notes=30,
+    min_notes_per_instrument=10
 )[None, ...].to(model.device)
 a = c * a
 

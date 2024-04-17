@@ -105,17 +105,80 @@ class BFNModel(pl.LightningModule):
         batch = noise.argmax(dim=-1)
         loss = self.step(batch, 0)
         return loss
+    
+    def preview_beta(self,batch):
+        betas = [0.05,0.06,0.065,0.075,0.1,0.15,0.2]
+        T = 20
 
-    def step(self, batch, batch_idx):
+        # linspace from 0 to 1 and includes 0 and 1
+        t = torch.linspace(0,1,T) 
+        assert t[0] == 0 # append 0
+        assert t[-1] == 1
+
+        # append 1
+        
+
+        BETAS = len(betas)
+
+        # make subplot for each t, each beta
+        fig, axs = plt.subplots(T,BETAS,figsize=(12,8))
+
+        # no axis labels
+
+        
+        entropies = torch.zeros((T,BETAS))
+        for beta_idx, beta in enumerate(betas):
+            for i in range(T):
+                theta = self.step(batch,0, tmp_beta1=beta,tmp_t=t[i], preview_input_dist=True)
+                # calculate entropy
+                entropies[i,beta_idx] = -torch.sum(theta * torch.log(theta + 1e-12),dim=-1).mean()
+
+                # plot
+                #plt.plot(theta[0,:self.n_attributes].cpu().detach().numpy().T)
+                #plt.show()
+                # plot
+                # no axis labels
+                axs[i,beta_idx].axis("off")
+                axs[i,beta_idx].plot(theta[0,:self.n_attributes].cpu().detach().numpy().T)
+
+        # label rows and columns
+        for i in range(T):
+            axs[i,0].set_ylabel(f"t={t[i]:.2f}")
+        for i in range(BETAS):
+            axs[0,i].set_title(f"beta={betas[i]}")
+        plt.show()
+        print("done")
+
+        # plot entropies
+        fig, ax = plt.subplots(1,1,figsize=(12,8))
+        for i in range(BETAS):
+            ax.plot(entropies[:,i].cpu().detach().numpy(),label=f"beta={betas[i]}")
+        # labels
+        plt.legend()
+        plt.show()
+
+
+
+
+    def step(self, batch, batch_idx, tmp_beta1=None, preview_input_dist=False, tmp_t=None):
         if self.one_hot_input:
             x = batch
         else:
             x = torch.nn.functional.one_hot(batch, num_classes=len(self.vocab)).float()
 
-        K = x.shape[-1]
+        if tmp_beta1 is not None:
+            beta1 = tmp_beta1
+        else:
+            beta1 = self.beta1
+        if tmp_t is not None:
+            t = tmp_t
+        else:
+            t = torch.rand((x.shape[0], 1, 1), device=x.device)
+
+        K = x.shape[-1] 
         # get one t in [0, 1] per sample in batch
-        t = torch.rand((x.shape[0], 1, 1), device=x.device)
-        beta = self.beta1 * (t**2)
+
+        beta = beta1 * (t**2)
         # na_k = format_mask.sum(dim=-1, keepdim=True)
         na_k = K
         y_mean = beta * (na_k * x - 1)
@@ -129,9 +192,12 @@ class BFNModel(pl.LightningModule):
         # normalize
         theta = theta / theta.sum(dim=-1, keepdim=True)
 
+        if preview_input_dist:
+            return theta
+
         output_probs = self.discrete_output_distribution(theta, t)
         ehat = output_probs
-        loss = na_k * self.beta1 * t * ((x - ehat) ** 2)
+        loss = na_k * beta1 * t * ((x - ehat) ** 2)
 
         metrics = {}
         metrics["l_inf_loss"] = loss.mean()
@@ -163,9 +229,8 @@ class BFNModel(pl.LightningModule):
         if mask is not None:
             mask = mask[None, ...].to(theta.device)
             theta = theta * mask
-
-        # normalize
-        theta = theta / theta.sum(dim=-1, keepdim=True)
+            # normalize
+            theta = theta / theta.sum(dim=-1, keepdim=True)
 
         K = theta.shape[-1]
         for i in tqdm(range(1, nb_steps + 1)):
@@ -197,6 +262,10 @@ class BFNModel(pl.LightningModule):
             y = mean + std * eps  # (B, D, K)
 
             theta = F.softmax(y + torch.log(theta + eps_), dim=-1)
+
+            theta = theta * self.format_mask[None, ...].to(theta.device)
+
+            theta = theta / theta.sum(dim=-1, keepdim=True)
 
         k_probs_final = self.discrete_output_distribution(theta, torch.ones_like(t))
 
@@ -332,10 +401,10 @@ if __name__ == "__main__":
         tokenizer_config=tokenizer_config,
         learning_rate_gamma=0.99,
         norm_first=True,
-        beta1=0.5,
+        beta1=0.075,
     )
 
-    BATCH_SIZE = 50
+    BATCH_SIZE = 80
 
     # model.test_step(batch_size=60)
 
@@ -387,7 +456,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[1],
+        devices=[2,3,5,6],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[

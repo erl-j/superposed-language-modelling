@@ -1,6 +1,7 @@
 artefacts/
 paper_assets/
 wandb/
+bfn-checkpoints/
 checkpoints/
 # Byte-compiled / optimized / DLL files
 __pycache__/

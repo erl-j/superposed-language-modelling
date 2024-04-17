@@ -1,6 +1,6 @@
 checkpoints = {
-    "mlm": "paper_assets/mlm_magic_forest_321_epoch_78.ckpt",
-    "slm": "paper_assets/slm_easy_night_320_epoch_102.ckpt",
+    "mlm": "paper_assets/mlm_.ckpt",
+    "slm": "paper_assets/slm_.ckpt",
 }
 
 MLM_CKPT_PTH = (
