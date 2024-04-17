@@ -2,7 +2,7 @@
 device = "cuda:7"
 from bfn import BFNModel
 
-checkpoint = "../checkpoints/upbeat-dawn-53/epoch=1-step=3244-val/loss_epoch=0.00907.ckpt"
+checkpoint = "../checkpoints/upbeat-dawn-53/epoch=2-step=4866-val/loss_epoch=0.00629.ckpt"
 
 model = BFNModel.load_from_checkpoint(checkpoint, map_location=device)
 
@@ -53,7 +53,7 @@ mask = tokenizer.constraint_mask(
 )
 
 BATCH_SIZE = 10
-N_STEPS = 100
+N_STEPS = 10
 y = model.sample(None,BATCH_SIZE,N_STEPS,device=device,argmax=True)
 
 import matplotlib.pyplot as plt
