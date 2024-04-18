@@ -107,8 +107,8 @@ class BFNModel(pl.LightningModule):
         return loss
     
     def preview_beta(self,batch):
-        betas = [0.05,0.06,0.065,0.075,0.1,0.15,0.2]
-        T = 20
+        betas = [0.05,0.1,0.2,0.5]
+        T = 10
 
         # linspace from 0 to 1 and includes 0 and 1
         t = torch.linspace(0,1,T) 
@@ -122,9 +122,6 @@ class BFNModel(pl.LightningModule):
 
         # make subplot for each t, each beta
         fig, axs = plt.subplots(T,BETAS,figsize=(12,8))
-
-        # no axis labels
-
         
         entropies = torch.zeros((T,BETAS))
         for beta_idx, beta in enumerate(betas):
@@ -141,21 +138,57 @@ class BFNModel(pl.LightningModule):
                 axs[i,beta_idx].axis("off")
                 axs[i,beta_idx].plot(theta[0,:self.n_attributes].cpu().detach().numpy().T)
 
-        # label rows and columns
+          # label rows and columns
         for i in range(T):
             axs[i,0].set_ylabel(f"t={t[i]:.2f}")
         for i in range(BETAS):
             axs[0,i].set_title(f"beta={betas[i]}")
+        plt.title("All attributes")
         plt.show()
         print("done")
 
+              
         # plot entropies
         fig, ax = plt.subplots(1,1,figsize=(12,8))
         for i in range(BETAS):
             ax.plot(entropies[:,i].cpu().detach().numpy(),label=f"beta={betas[i]}")
         # labels
+        plt.title("Entropy (all attributes)")
         plt.legend()
         plt.show()
+
+
+        for attr_idx, attr_name in enumerate(self.tokenizer.note_attribute_order):
+            attr_entropies = torch.zeros((T,BETAS))
+            # make subplot for each t, each beta
+            fig, axs = plt.subplots(T,BETAS,figsize=(12,8))
+
+            for beta_idx, beta in enumerate(betas):
+                for i in range(T):
+                    theta = self.step(batch,0, tmp_beta1=beta,tmp_t=t[i], preview_input_dist=True)
+                    # only consider attribute
+                    attr_theta = theta[0,attr_idx::self.n_attributes]
+                    # calculate entropy
+                    attr_entropies[i,beta_idx] = -torch.sum(attr_theta * torch.log(attr_theta + 1e-12),dim=-1).mean()
+
+                    axs[i,beta_idx].axis("off")
+                    axs[i,beta_idx].plot(theta[0,attr_idx].cpu().detach().numpy().T)
+            for i in range(T):
+                axs[i,0].set_ylabel(f"t={t[i]:.2f}")
+            for i in range(BETAS):
+                axs[0,i].set_title(f"beta={betas[i]}")
+            plt.title(f"Attribute {attr_name}")
+            plt.show()
+            print("done")
+
+            # plot entropies
+            fig, ax = plt.subplots(1,1,figsize=(12,8))
+            for i in range(BETAS):
+                ax.plot(attr_entropies[:,i].cpu().detach().numpy(),label=f"beta={betas[i]}")
+            # labels
+            plt.title(f"Entropy of attribute {attr_name}")
+            plt.legend()
+            plt.show()
 
 
 
@@ -424,11 +457,11 @@ if __name__ == "__main__":
         n_layers=12,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
-        learning_rate=1e-5,
+        learning_rate=2e-5,
         tokenizer_config=tokenizer_config,
         learning_rate_gamma=0.99,
         norm_first=True,
-        beta1=0.15,
+        beta1=0.3,
     )
 
     BATCH_SIZE = 80
@@ -483,7 +516,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[5,6],
+        devices=[0,1],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[

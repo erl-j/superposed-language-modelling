@@ -1,10 +1,17 @@
 #%%
 device = "cuda:7"
 from bfn import BFNModel
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
 
-checkpoint = "../checkpoints/upbeat-dawn-53/epoch=12-step=21086-val/loss_epoch=0.00282.ckpt"
+
+#checkpoint = "../checkpoints/valiant-butterfly-54/last.ckpt"
+checkpoint ="../checkpoints/still-universe-56/last.ckpt"
 
 model = BFNModel.load_from_checkpoint(checkpoint, map_location=device)
+
+#%% no grid
 
 
 #%%
@@ -30,10 +37,6 @@ RESAMPLE_IDX = 50
 x = ds[RESAMPLE_IDX]
 x_sm = model.tokenizer.decode(x)
 
-
-
-
-
 #%%
 batch = x.unsqueeze(0).to(device)
 model.preview_beta(batch)
@@ -45,16 +48,16 @@ print(model.beta1)
 tokenizer = model.tokenizer
 
 mask = tokenizer.constraint_mask(
-    scale="C major",
-    instruments = ["Piano","Drums","Bass"],
+    # scale="C major",
+    instruments = ["Drums"],
     min_notes = 50,
-    max_notes = 100,
+    max_notes = 200,
     min_notes_per_instrument=30,
 )
 
 BATCH_SIZE = 2
 N_STEPS = 300
-y = model.sample(mask,BATCH_SIZE,N_STEPS,device=device,argmax=False)
+y = model.sample(None,BATCH_SIZE,N_STEPS,device=device,argmax=True)
 
 import matplotlib.pyplot as plt
 import torch
@@ -82,5 +85,75 @@ plt.show()
 # play audio of last 
 preview(y_sm, tmp_dir="artefacts/tmp", audio=True)
     
+
+# %%
+
+
+# get the embedding
+embedding = model.embedding_layer.weight.detach().cpu().numpy().T
+projection = model.decoder_output_layer.weight.detach().cpu().numpy()
+
+# get vocab
+vocab = model.tokenizer.vocab
+
+embedding_norm = np.linalg.norm(embedding, axis=1, keepdims=True)
+projection_norm = np.linalg.norm(projection, axis=0, keepdims=True)
+
+# normalize the embedding
+embedding = embedding / embedding_norm
+projection = projection / projection_norm
+
+# compute the cosine similarity
+embedding_similarity = embedding @ embedding.T
+projection_similarity = projection @ projection.T
+
+
+# plot the similarity matrix
+# make large figure
+plt.figure(figsize=(50, 50))
+# set small font
+sns.set(font_scale=0.5)
+sns.heatmap(embedding_similarity, cmap="magma", xticklabels=vocab, yticklabels=vocab, mask = np.eye(len(vocab)))
+plt.show()
+
+# plot the similarity matrix
+# make large figure
+plt.figure(figsize=(50, 50))
+# set small font
+sns.set(font_scale=0.5)
+sns.heatmap(projection_similarity, cmap="magma", xticklabels=vocab, yticklabels=vocab, mask = np.eye(len(vocab)))
+plt.show()
+
+#%%
+
+# per attribute embedding_similarity
+for attr in model.tokenizer.note_attribute_order:
+
+    tokens = [token for token in vocab if attr+":" in token]
+    indices = [model.tokenizer.token2idx[token] for token in tokens]
+    # get the indices of the attribute
+    # get the embedding
+    emb = embedding[indices,:]
+
+    pro = projection[indices,:]
+
+    # compute the cosine embedding_similarity
+    embedding_similarity = emb @ emb.T
+
+    projection_similarity = pro @ pro.T
+
+    # plot the embedding_similarity matrix
+    plt.figure(figsize=(10, 10))
+    sns.heatmap(embedding_similarity, cmap="magma", xticklabels=tokens, yticklabels=tokens, mask = np.eye(len(tokens)))
+    plt.title(attr)
+    plt.show()
+
+    # plot the embedding_similarity matrix
+    plt.figure(figsize=(10, 10))
+    sns.heatmap(projection_similarity, cmap="magma", xticklabels=tokens, yticklabels=tokens, mask = np.eye(len(tokens)))
+    plt.title(attr)
+    plt.show()
+
+
 
 # %%
