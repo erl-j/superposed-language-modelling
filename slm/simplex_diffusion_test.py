@@ -1,20 +1,14 @@
 #%%
 device = "cuda:7"
-from bfn import BFNModel
+from simplex_diffusion import SimplexDiffusionModel
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 
 
-# checkpoint = "../checkpoints/valiant-butterfly-54/last.ckpt"
-# checkpoint ="../checkpoints/still-universe-56/last.ckpt"
-# checkpoint = "../checkpoints/sparkling-paper-58/last.ckpt"
-# checkpoint ="../checkpoints/worldly-music-61/last.ckpt"
-checkpoint = "../checkpoints/kind-oath-66/last.ckpt"
-# checkpoint = "../checkpoints/golden-capybara-67/last.ckpt"
-# checkpoint = "../checkpoints/avid-durian-68/last.ckpt"
+checkpoint = "../checkpoints/denim-terrain-2/last.ckpt"
 
-model = BFNModel.load_from_checkpoint(checkpoint, map_location=device)
+model = SimplexDiffusionModel.load_from_checkpoint(checkpoint, map_location=device)
 
 # print model
 print(model)
@@ -134,7 +128,7 @@ mask = tokenizer.constraint_mask(
 )
 
 BATCH_SIZE = 2
-N_STEPS = 300
+N_STEPS = 500
 y = model.sample(mask,BATCH_SIZE,N_STEPS,device=device,argmax=True)
 
 import matplotlib.pyplot as plt

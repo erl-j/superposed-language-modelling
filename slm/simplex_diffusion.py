@@ -15,9 +15,9 @@ from augmentation import transpose_sm
 import einops
 from tqdm import tqdm
 from util import top_k_top_p_filtering
+import numpy as np
 
-
-class BFNModel(pl.LightningModule):
+class SimplexDiffusionModel(pl.LightningModule):
     def __init__(
         self,
         hidden_size,
@@ -32,8 +32,8 @@ class BFNModel(pl.LightningModule):
         normalize_by_masking_ratio=False,
         learning_rate_gamma=0.9,
         norm_first=False,
-        beta1=1.0,
-        vocab_theta=True,
+        k=5.0,
+        beta_schedule="linear",
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -64,15 +64,18 @@ class BFNModel(pl.LightningModule):
 
         self.t_embedding = torch.nn.Linear(1, hidden_size)
 
-        self.beta1 = beta1
+        self.k = k
 
-        self.vocab_theta = vocab_theta
+        self.beta_schedule = beta_schedule
 
-    def forward(self, theta, t):
+
+    def forward(self, s, t):
         t_z = self.t_embedding(t)
-        format_mask = self.format_mask[None, ...].to(theta.device)
-        theta = theta * format_mask
-        x = theta
+        format_mask = self.format_mask[None, ...].to(s.device)
+        x = s
+        x[format_mask.expand_as(x) < 0.5] = -self.k
+        # softmax mask
+        x = torch.nn.functional.softmax(x, dim=-1)
 
         x = einops.rearrange(x, "b (t a) v -> b t a v", a=self.n_attributes)
         ze = self.embedding_layer(x)
@@ -90,7 +93,7 @@ class BFNModel(pl.LightningModule):
         decoder_logits = einops.rearrange(
             decoder_logits, "b t a v -> b (t a) v", a=self.n_attributes
         )
-        decoder_logits[format_mask.expand_as(decoder_logits) <0.5] = -1e9
+        decoder_logits[format_mask.expand_as(decoder_logits) <0.5] = -self.k
         return decoder_logits
 
     def discrete_output_distribution(self, theta, t):
@@ -109,135 +112,42 @@ class BFNModel(pl.LightningModule):
         loss = self.step(batch, 0)
         return loss
     
-    def preview_beta(self,batch):
-        betas = [0.05,0.1,0.2,0.5]
-        T = 10
+    def schedule(self, t):
+        if self.beta_schedule == "linear":
+            return (1-t)
+        elif self.beta_schedule == "cosine":
+            s = 1e-4
+            f_t = lambda tx : torch.cos(((tx+s)/(1+s))*(np.pi/2))**2
+            return f_t(t)/f_t(torch.zeros_like(t))
 
-        # linspace from 0 to 1 and includes 0 and 1
-        t = torch.linspace(0,1,T) 
-        assert t[0] == 0 # append 0
-        assert t[-1] == 1
-
-        # append 1
-        
-
-        BETAS = len(betas)
-
-        # make subplot for each t, each beta
-        fig, axs = plt.subplots(T,BETAS,figsize=(12,8))
-        
-        entropies = torch.zeros((T,BETAS))
-        for beta_idx, beta in enumerate(betas):
-            for i in range(T):
-                theta = self.step(batch,0, tmp_beta1=beta,tmp_t=t[i], preview_input_dist=True)
-                # calculate entropy
-                entropies[i,beta_idx] = -torch.sum(theta * torch.log(theta + 1e-12),dim=-1).mean()
-
-                # plot
-                #plt.plot(theta[0,:self.n_attributes].cpu().detach().numpy().T)
-                #plt.show()
-                # plot
-                # no axis labels
-                axs[i,beta_idx].axis("off")
-                axs[i,beta_idx].plot(theta[0,:self.n_attributes].cpu().detach().numpy().T)
-
-          # label rows and columns
-        for i in range(T):
-            axs[i,0].set_ylabel(f"t={t[i]:.2f}")
-        for i in range(BETAS):
-            axs[0,i].set_title(f"beta={betas[i]}")
-        plt.title("All attributes")
-        plt.show()
-        print("done")
-
-              
-        # plot entropies
-        fig, ax = plt.subplots(1,1,figsize=(12,8))
-        for i in range(BETAS):
-            ax.plot(entropies[:,i].cpu().detach().numpy(),label=f"beta={betas[i]}")
-        # labels
-        plt.title("Entropy (all attributes)")
-        plt.legend()
-        plt.show()
-
-
-        for attr_idx, attr_name in enumerate(self.tokenizer.note_attribute_order):
-            attr_entropies = torch.zeros((T,BETAS))
-            # make subplot for each t, each beta
-            fig, axs = plt.subplots(T,BETAS,figsize=(12,8))
-
-            for beta_idx, beta in enumerate(betas):
-                for i in range(T):
-                    theta = self.step(batch,0, tmp_beta1=beta,tmp_t=t[i], preview_input_dist=True)
-                    # only consider attribute
-                    attr_theta = theta[0,attr_idx::self.n_attributes]
-                    # calculate entropy
-                    attr_entropies[i,beta_idx] = -torch.sum(attr_theta * torch.log(attr_theta + 1e-12),dim=-1).mean()
-
-                    axs[i,beta_idx].axis("off")
-                    axs[i,beta_idx].plot(theta[0,attr_idx].cpu().detach().numpy().T)
-            for i in range(T):
-                axs[i,0].set_ylabel(f"t={t[i]:.2f}")
-            for i in range(BETAS):
-                axs[0,i].set_title(f"beta={betas[i]}")
-            plt.title(f"Attribute {attr_name}")
-            plt.show()
-            print("done")
-
-            # plot entropies
-            fig, ax = plt.subplots(1,1,figsize=(12,8))
-            for i in range(BETAS):
-                ax.plot(attr_entropies[:,i].cpu().detach().numpy(),label=f"beta={betas[i]}")
-            # labels
-            plt.title(f"Entropy of attribute {attr_name}")
-            plt.legend()
-            plt.show()
-
-
-
-
-    def step(self, batch, batch_idx, tmp_beta1=None, preview_input_dist=False, tmp_t=None):
+    def step(self, batch, batch_idx):
         if self.one_hot_input:
             x = batch
         else:
+            target = batch
             x = torch.nn.functional.one_hot(batch, num_classes=len(self.vocab)).float()
 
-        if tmp_beta1 is not None:
-            beta1 = tmp_beta1
-        else:
-            beta1 = self.beta1
-        if tmp_t is not None:
-            t = tmp_t
-        else:
-            t = torch.rand((x.shape[0], 1, 1), device=x.device)
+        s = (x * 2 - 1)* self.k
 
-        K = x.shape[-1] 
-        # get one t in [0, 1] per sample in batch
+        batch_size, note_attr, vocab_size = s.shape
 
-        beta = beta1 * (t**2)
-        # na_k = format_mask.sum(dim=-1, keepdim=True)
-        na_k = K
-        y_mean = beta * (na_k * x - 1)
-        y_std = (beta * na_k).sqrt()
-        y = torch.randn(x.shape, device=x.device) * y_std + y_mean
-        # if format mask is not 1 set to -ifn
-        theta = torch.nn.functional.softmax(y, dim=-1)
+        t = torch.rand((batch_size, 1, 1), device=s.device)
 
-        if self.vocab_theta:
-            # multiply with format mask
-            theta = theta * self.format_mask[None, ...].to(theta.device)
-            # normalize
-            theta = theta / theta.sum(dim=-1, keepdim=True)
+        alpha = self.schedule(t)
 
-        if preview_input_dist:
-            return theta
+        noise = torch.randn(s.shape, device=s.device)*self.k
+        s_n =  torch.sqrt(alpha) * s + torch.sqrt(1 - alpha) * noise
 
-        output_probs = self.discrete_output_distribution(theta, t)
-        ehat = output_probs
-        loss = na_k * beta1 * t * ((x - ehat) ** 2)
+        # forward pass
+        s_hat = self.forward(s_n, t)
 
-        metrics = {}
-        metrics["l_inf_loss"] = loss.mean()
+        cross_entropy = torch.nn.functional.cross_entropy(
+            s_hat.reshape(-1,vocab_size),
+            target.flatten()
+        )
+
+        metrics = {"ce":cross_entropy}
+      
         return metrics
 
     def sample(
@@ -246,116 +156,43 @@ class BFNModel(pl.LightningModule):
         batch_size=1,
         nb_steps=10,
         device="cpu",
-        eps_=1e-10,
         plot_interval=-1,
         argmax=False,
     ):
         self.eval()
+        with torch.no_grad():
+            # repeat to batch_size
+            mask = mask.repeat(batch_size,1,1).to(self.device)
+            mask_simplex = (mask*2-1)*self.k
 
-        theta = torch.ones(
-            (batch_size, self.n_events * self.n_attributes, len(self.vocab)),
-            device=device,
-        )  
+            t = torch.ones((batch_size,1,1),device=self.device)
 
-        if self.vocab_theta:
-            theta = theta * self.format_mask[None, ...].to(theta.device)
-            # turn into uniform prior
-            theta = theta / theta.sum(dim=-1, keepdim=True)
+            alpha = self.schedule(t)
+            st = torch.randn((batch_size, self.n_events*self.n_attributes,len(self.vocab)),device=self.device) * self.k
+            #st = mask_simplex
+            sts = []
+            alphas = []
+            for step in tqdm(range(nb_steps-1,-1,-1)):
+                tprev = ((step+1)/nb_steps)*torch.ones((batch_size,1,1),device=self.device)
+                t = (step / nb_steps)*torch.ones((batch_size,1,1),device=self.device)
+                alpha = self.schedule(t)
+                alphas.append(alpha[0][0][0].detach().cpu())
+                noise = torch.randn((batch_size, self.n_events*self.n_attributes,len(self.vocab)),device=self.device) * self.k
+                st = torch.sqrt(alpha) * self.forward(st,tprev) + torch.sqrt(1-alpha)*noise
+                sts.append(st)
+            
+            sts = torch.stack(sts)
 
-        # mult with mask
-        if mask is not None:
-            mask = mask[None, ...].to(theta.device)
-            theta = theta * mask
-            # normalize
-            theta = theta / theta.sum(dim=-1, keepdim=True)
-
-        K = theta.shape[-1]
-
-        entropies = []
-    
-        first_event_probs = []
-        first_event_thetas = []
-
-        first_event_thetas.append(theta[0, : self.n_attributes, :].detach().cpu())
-
-
-        for i in tqdm(range(1, nb_steps + 1)):
-            t = (i - 1) / nb_steps
-            t = t * torch.ones(
-                (theta.shape[0], 1, 1), device=theta.device, dtype=theta.dtype
-            )
-
-            k_probs = self.discrete_output_distribution(theta, t)  # (B, D, K)
-            if plot_interval > 0 and i % plot_interval == 0:
-                # plt.imshow(k_probs[0].cpu().detach().numpy().T, aspect="auto", interpolation="none")
-                # plt.show()
-                # create subplot for each attribute
-                fig, axs = plt.subplots(self.n_attributes, 1, figsize=(12, 8))
-                for j in range(self.n_attributes):
-                    # axs[j].plot(k_probs[0, j].cpu().detach().numpy().T)
-                    # bar plot
-                    axs[j].bar(range(K), k_probs[0, j].cpu().detach().numpy().T)
+            for aidx,a in enumerate(self.tokenizer.note_attribute_order):
+                plt.imshow(sts[:,0,aidx].cpu().numpy().T, aspect="auto",interpolation="none")
+                plt.title(f"Attribute {a}")
                 plt.show()
 
-            k = torch.distributions.Categorical(probs=k_probs).sample()  # (B, D)
-            alpha = self.beta1 * (2 * i - 1) / (nb_steps**2)
-
-            e_k = F.one_hot(k, num_classes=K).float()  # (B, D, K)
-            mean = alpha * (K * e_k - 1)
-            var = alpha * K
-            std = torch.full_like(mean, fill_value=var).sqrt()
-            eps = torch.randn_like(e_k)
-            y = mean + std * eps  # (B, D, K)
-
-            theta = F.softmax(y + torch.log(theta + eps_), dim=-1)
-
-            if mask is not None:
-                theta = theta * mask
-                # normalize
-                theta = theta / theta.sum(dim=-1, keepdim=True)
-
-            if self.vocab_theta:
-                theta = theta * self.format_mask[None, ...].to(theta.device)
-                theta = theta / theta.sum(dim=-1, keepdim=True)
-
-            # add theta entropy
-            entropies.append(-torch.sum(k_probs * torch.log(k_probs + eps_), dim=-1).mean().detach().cpu())
-            first_event_probs.append(k_probs[0, : self.n_attributes, :].detach().cpu())
-
-            first_event_thetas.append(theta[0, : self.n_attributes, :].detach().cpu())
-
-        k_probs_final = self.discrete_output_distribution(theta, torch.ones_like(t))
-
-        if argmax:
-            k_final = k_probs_final.argmax(dim=-1)
-        else:
-            k_final = torch.distributions.Categorical(probs=k_probs_final).sample()
-
-        # plot entropies
-        plt.plot(entropies)
-        plt.show()
-
-        # plot first event probs
-        first_event_probs = torch.stack(first_event_probs, dim=0)
-
-        # first_event_probs = torch.log(first_event_probs + eps_)
-
-        first_event_thetas = torch.stack(first_event_thetas, dim=0)
-
-
-        for i in range(self.n_attributes):
-            # plot first event thetas
-            plt.imshow(first_event_thetas[:,i].T, aspect="auto", interpolation="none")
-            plt.title(f"Thetas for attribute {self.tokenizer.note_attribute_order[i]}")
+            plt.plot(alphas)
+            plt.title("Alpha")
             plt.show()
 
-            plt.imshow(first_event_probs[:,i].T, aspect="auto", interpolation="none")
-            plt.title(f"Probs for attribute {self.tokenizer.note_attribute_order[i]}")
-            plt.show()
-
-
-
-        return k_final
+            return st.argmax(dim=-1)
 
     def training_step(self, batch, batch_idx):
         metrics = self.step(batch, batch_idx)
@@ -368,7 +205,7 @@ class BFNModel(pl.LightningModule):
                 prog_bar=True,
                 sync_dist=True,
             )
-        loss = metrics["l_inf_loss"]
+        loss = metrics["ce"]
         self.log(
             "trn/loss", loss, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True
         )
@@ -388,7 +225,7 @@ class BFNModel(pl.LightningModule):
                 on_epoch=True,
                 sync_dist=True,
             )
-        loss = metrics["l_inf_loss"]
+        loss = metrics["ce"]
         self.log(
             "val/loss", loss, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True
         )
@@ -471,24 +308,24 @@ if __name__ == "__main__":
 
     tokenizer = MergedTokenizer(tokenizer_config)
 
-    model = BFNModel(
-        hidden_size=128,
+    model = SimplexDiffusionModel(
+        hidden_size=512,
         n_heads=8,
-        feed_forward_size=4 * 128,
-        n_layers=4,
+        feed_forward_size=4 * 512,
+        n_layers=6,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
         learning_rate=1e-4,
         tokenizer_config=tokenizer_config,
         learning_rate_gamma=0.99,
         norm_first=True,
-        beta1=0.3,
-        vocab_theta=False,
+        k=5.0,
+        beta_schedule="cosine",       
     )
     # 80
-    BATCH_SIZE = 512
+    BATCH_SIZE = 80
 
-    # model.test_step(batch_size=60)
+    model.test_step(batch_size=60)
 
     trn_ds = MidiDataset(
         cache_path="./paper_assets/trn_midi_records_unique_pr.pt",
@@ -527,7 +364,7 @@ if __name__ == "__main__":
         pin_memory=True,
     )
 
-    wandb_logger = WandbLogger(log_model="all", project="bfn")
+    wandb_logger = WandbLogger(log_model="all", project="simplex-diffusion")
     # get name
     name = wandb_logger.experiment.name
 
