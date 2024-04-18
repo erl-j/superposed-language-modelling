@@ -17,6 +17,10 @@ from tqdm import tqdm
 from util import top_k_top_p_filtering
 import numpy as np
 
+import warnings
+
+warnings.filterwarnings("ignore", category=ResourceWarning)
+
 class SimplexDiffusionModel(pl.LightningModule):
     def __init__(
         self,
@@ -162,8 +166,8 @@ class SimplexDiffusionModel(pl.LightningModule):
         self.eval()
         with torch.no_grad():
             # repeat to batch_size
-            mask = mask.repeat(batch_size,1,1).to(self.device)
-            mask_simplex = (mask*2-1)*self.k
+            if mask is not None:
+                mask = mask.repeat(batch_size,1,1).to(self.device)
 
             t = torch.ones((batch_size,1,1),device=self.device)
 
@@ -179,6 +183,12 @@ class SimplexDiffusionModel(pl.LightningModule):
                 alphas.append(alpha[0][0][0].detach().cpu())
                 noise = torch.randn((batch_size, self.n_events*self.n_attributes,len(self.vocab)),device=self.device) * self.k
                 st = torch.sqrt(alpha) * self.forward(st,tprev) + torch.sqrt(1-alpha)*noise
+                pt = torch.nn.functional.softmax(st, dim=-1)
+                if mask is not None:
+                    pt = pt * mask
+                    pt = pt / pt.sum(dim=-1, keepdim=True)
+                # return to simplex
+                st = ((pt*2)-1)*self.k
                 sts.append(st)
             
             sts = torch.stack(sts)

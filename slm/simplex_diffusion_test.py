@@ -121,14 +121,14 @@ tokenizer = model.tokenizer
 
 mask = tokenizer.constraint_mask(
     # scale="C major",
-    instruments = ["Drums"],
+    instruments = ["Drums","Bass"],
     min_notes = 50,
     max_notes = 100,
     min_notes_per_instrument=30,
 )
 
 BATCH_SIZE = 2
-N_STEPS = 500
+N_STEPS = 100
 y = model.sample(mask,BATCH_SIZE,N_STEPS,device=device,argmax=True)
 
 import matplotlib.pyplot as plt
