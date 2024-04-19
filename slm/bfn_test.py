@@ -134,8 +134,8 @@ mask = tokenizer.constraint_mask(
 )
 
 BATCH_SIZE = 2
-N_STEPS = 300
-y = model.sample(mask,BATCH_SIZE,N_STEPS,device=device,argmax=True)
+N_STEPS = 100
+y = model.sample(None,BATCH_SIZE,N_STEPS,device=device,argmax=True)
 
 import matplotlib.pyplot as plt
 import torch

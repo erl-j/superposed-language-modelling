@@ -298,9 +298,10 @@ class BFNModel(pl.LightningModule):
                 plt.show()
 
             k = torch.distributions.Categorical(probs=k_probs).sample()  # (B, D)
+            assert k.shape == k_probs
             alpha = self.beta1 * (2 * i - 1) / (nb_steps**2)
 
-            e_k = F.one_hot(k, num_classes=K).float()  # (B, D, K)
+            # e_k = F.one_hot(k, num_classes=K).float()  # (B, D, K)
             mean = alpha * (K * e_k - 1)
             var = alpha * K
             std = torch.full_like(mean, fill_value=var).sqrt()
@@ -446,7 +447,7 @@ if __name__ == "__main__":
         "best of british",
     ]
 
-    N_BARS = 2
+    N_BARS = 4
 
     tokenizer_config = {
         "ticks_per_beat": 24,
@@ -472,13 +473,13 @@ if __name__ == "__main__":
     tokenizer = MergedTokenizer(tokenizer_config)
 
     model = BFNModel(
-        hidden_size=128,
-        n_heads=8,
-        feed_forward_size=4 * 128,
-        n_layers=4,
+        hidden_size=768,
+        n_heads=12,
+        feed_forward_size=4 * 768,
+        n_layers=12,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
-        learning_rate=1e-4,
+        learning_rate=2e-5,
         tokenizer_config=tokenizer_config,
         learning_rate_gamma=0.99,
         norm_first=True,
@@ -486,7 +487,7 @@ if __name__ == "__main__":
         vocab_theta=False,
     )
     # 80
-    BATCH_SIZE = 512
+    BATCH_SIZE = 80
 
     # model.test_step(batch_size=60)
 

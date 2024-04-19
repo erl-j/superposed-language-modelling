@@ -6,7 +6,8 @@ import seaborn as sns
 import numpy as np
 
 
-checkpoint = "../checkpoints/denim-terrain-2/last.ckpt"
+# checkpoint = "../checkpoints/fanciful-planet-7/last.ckpt"
+checkpoint = "../checkpoints/super-mountain-5/last.ckpt"
 
 model = SimplexDiffusionModel.load_from_checkpoint(checkpoint, map_location=device)
 
@@ -36,7 +37,7 @@ embedding_similarity = embedding @ embedding.T
 projection_similarity = projection @ projection.T
 
 
-cmap = "Spectral_r"
+cmap = "magma"
 # plot the similarity matrix
 # make large figure
 plt.figure(figsize=(50, 50))
@@ -109,9 +110,14 @@ RESAMPLE_IDX = 50
 x = ds[RESAMPLE_IDX]
 x_sm = model.tokenizer.decode(x)
 
+
 #%%
-batch = x.unsqueeze(0).to(device)
-model.preview_beta(batch)
+model.beta_schedule = "cosine"
+import torch
+for k in [1.0,2.0,3.0,4.0,5.0,7.5,10.0,20.0]:
+    torch.manual_seed(0)
+    model.plot_ce_curve(x.unsqueeze(0).to(device),0,tmp_k=k)
+
 
 # %%
 sns.set_style("whitegrid", {'axes.grid' : False})
@@ -120,16 +126,24 @@ sns.set_style("whitegrid", {'axes.grid' : False})
 tokenizer = model.tokenizer
 
 mask = tokenizer.constraint_mask(
-    # scale="C major",
-    instruments = ["Drums","Bass"],
-    min_notes = 50,
-    max_notes = 100,
-    min_notes_per_instrument=30,
+    scale="C major",
+    tags=["pop"],
+    tempos=["138"],
+    instruments = ["Drums","Piano","Bass"],
+    min_notes = 100,
+    max_notes = 150,
+    min_notes_per_instrument=50,
 )
 
 BATCH_SIZE = 2
-N_STEPS = 100
-y = model.sample(mask,BATCH_SIZE,N_STEPS,device=device,argmax=True)
+N_STEPS = 50
+y = model.sample(mask,
+                 BATCH_SIZE,
+                 N_STEPS,
+                 device=device,
+                 argmax=True,
+                 temperature=1.0
+                 )
 
 import matplotlib.pyplot as plt
 import torch

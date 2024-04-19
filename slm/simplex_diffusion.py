@@ -123,6 +123,61 @@ class SimplexDiffusionModel(pl.LightningModule):
             s = 1e-4
             f_t = lambda tx : torch.cos(((tx+s)/(1+s))*(np.pi/2))**2
             return f_t(t)/f_t(torch.zeros_like(t))
+        
+    def plot_ce_curve(self, batch, batch_idx, tmp_k):
+        if self.one_hot_input:
+            x = batch
+        else:
+            target = batch
+            x = torch.nn.functional.one_hot(batch, num_classes=len(self.vocab)).float()
+
+        BATCH_SIZE = 300
+        t = torch.linspace(0,1,BATCH_SIZE).unsqueeze(1).unsqueeze(1).to(self.device)
+        alpha = self.schedule(t)
+
+        k = tmp_k if tmp_k is not None else self.k
+
+        s = (x * 2 - 1) * k
+
+        batch_size, note_attr, vocab_size = s.shape
+
+
+        noise = torch.randn((BATCH_SIZE, note_attr,vocab_size), device=s.device)*k
+
+        s_n =  torch.sqrt(alpha) * s + torch.sqrt(1 - alpha) * noise
+
+        # softmax
+        p_n = torch.nn.functional.softmax(s_n, dim=-1)
+
+        # get cross entropy
+        cross_entropy = -(x * torch.log(p_n)).sum(dim=-1).sum(dim=-1)
+        # surpisal
+
+        entropy = -(p_n*torch.log(p_n)).sum(dim=-1).sum(dim=-1)
+        
+        plt.plot(cross_entropy.cpu().numpy())
+        plt.ylim(0,torch.max(cross_entropy).cpu().numpy())
+        plt.title(f"Cross Entropy for k={k}")
+        plt.show()
+
+        plt.plot(entropy.cpu().numpy())
+        plt.ylim(0,torch.max(entropy).cpu().numpy())
+        plt.title(f"Entropy for k={k}")
+        plt.show()
+
+        note_probs = p_n[:,:self.n_attributes]
+
+        # create subplots
+        fig, axs = plt.subplots(self.n_attributes,1, figsize=(4,2*self.n_attributes))
+
+        for aidx,a in enumerate(self.tokenizer.note_attribute_order):
+            axs[aidx].imshow(note_probs[:,aidx].cpu().numpy().T, aspect="auto",interpolation="none",vmin=0,vmax=1)
+            # put subplot title
+            axs[aidx].set_title(f"Attribute {a} for k={k}")
+        plt.show()
+
+
+
 
     def step(self, batch, batch_idx):
         if self.one_hot_input:
@@ -162,6 +217,7 @@ class SimplexDiffusionModel(pl.LightningModule):
         device="cpu",
         plot_interval=-1,
         argmax=False,
+        temperature=1.0
     ):
         self.eval()
         with torch.no_grad():
@@ -175,6 +231,7 @@ class SimplexDiffusionModel(pl.LightningModule):
             st = torch.randn((batch_size, self.n_events*self.n_attributes,len(self.vocab)),device=self.device) * self.k
             #st = mask_simplex
             sts = []
+            pts = []
             alphas = []
             for step in tqdm(range(nb_steps-1,-1,-1)):
                 tprev = ((step+1)/nb_steps)*torch.ones((batch_size,1,1),device=self.device)
@@ -183,13 +240,14 @@ class SimplexDiffusionModel(pl.LightningModule):
                 alphas.append(alpha[0][0][0].detach().cpu())
                 noise = torch.randn((batch_size, self.n_events*self.n_attributes,len(self.vocab)),device=self.device) * self.k
                 st = torch.sqrt(alpha) * self.forward(st,tprev) + torch.sqrt(1-alpha)*noise
-                pt = torch.nn.functional.softmax(st, dim=-1)
+                pt = torch.nn.functional.softmax(st/temperature, dim=-1)
                 if mask is not None:
                     pt = pt * mask
                     pt = pt / pt.sum(dim=-1, keepdim=True)
                 # return to simplex
                 st = ((pt*2)-1)*self.k
-                sts.append(st)
+                sts.append(st.detach())
+                pts.append(pt.detach())
             
             sts = torch.stack(sts)
 
@@ -202,7 +260,14 @@ class SimplexDiffusionModel(pl.LightningModule):
             plt.title("Alpha")
             plt.show()
 
-            return st.argmax(dim=-1)
+            pts = torch.stack(pts)
+            entropy = -torch.sum(pts*torch.log(pts),dim=-1).mean(dim=1).mean(dim=1)
+            plt.plot(entropy.cpu().numpy())
+            plt.title("Entropy")
+            plt.show()
+
+            # sample categorical
+            return pt.argmax(dim=-1)
 
     def training_step(self, batch, batch_idx):
         metrics = self.step(batch, batch_idx)
@@ -293,7 +358,7 @@ if __name__ == "__main__":
         "best of british",
     ]
 
-    N_BARS = 2
+    N_BARS = 4
 
     tokenizer_config = {
         "ticks_per_beat": 24,
@@ -319,10 +384,10 @@ if __name__ == "__main__":
     tokenizer = MergedTokenizer(tokenizer_config)
 
     model = SimplexDiffusionModel(
-        hidden_size=512,
-        n_heads=8,
-        feed_forward_size=4 * 512,
-        n_layers=6,
+        hidden_size=768,
+        n_heads=12,
+        feed_forward_size=4 * 768,
+        n_layers=12,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
         learning_rate=1e-4,
@@ -385,7 +450,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[6],
+        devices=[5],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[
