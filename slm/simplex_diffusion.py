@@ -167,11 +167,13 @@ class SimplexDiffusionModel(pl.LightningModule):
 
         note_probs = p_n[:,:self.n_attributes]
 
+        note_probs = torch.log(note_probs)
+
         # create subplots
         fig, axs = plt.subplots(self.n_attributes,1, figsize=(4,2*self.n_attributes))
 
         for aidx,a in enumerate(self.tokenizer.note_attribute_order):
-            axs[aidx].imshow(note_probs[:,aidx].cpu().numpy().T, aspect="auto",interpolation="none",vmin=0,vmax=1)
+            axs[aidx].imshow(note_probs[:,aidx].cpu().numpy().T, aspect="auto",interpolation="none")
             # put subplot title
             axs[aidx].set_title(f"Attribute {a} for k={k}")
         plt.show()
@@ -251,16 +253,32 @@ class SimplexDiffusionModel(pl.LightningModule):
             
             sts = torch.stack(sts)
 
+
+            pts = torch.stack(pts)
+
+
             for aidx,a in enumerate(self.tokenizer.note_attribute_order):
-                plt.imshow(sts[:,0,aidx].cpu().numpy().T, aspect="auto",interpolation="none")
+                attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
+                attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
+                # set attribute token indices on y axis
+                plt.imshow(pts[:,0,aidx,attribute_token_idxs].cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
+                plt.yticks(range(len(attribute_tokens)),attribute_tokens)
                 plt.title(f"Attribute {a}")
+                plt.show()
+
+            for aidx,a in enumerate(self.tokenizer.note_attribute_order):
+                attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
+                attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
+                # set attribute token indices on y axis
+                plt.imshow(pts[:,0,aidx::self.n_attributes,attribute_token_idxs].mean(-2).cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
+                plt.yticks(range(len(attribute_tokens)),attribute_tokens)
+                plt.title(f"Attribute {a}, all notes")
                 plt.show()
 
             plt.plot(alphas)
             plt.title("Alpha")
             plt.show()
 
-            pts = torch.stack(pts)
             entropy = -torch.sum(pts*torch.log(pts),dim=-1).mean(dim=1).mean(dim=1)
             plt.plot(entropy.cpu().numpy())
             plt.title("Entropy")
@@ -390,7 +408,7 @@ if __name__ == "__main__":
         n_layers=12,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
-        learning_rate=1e-4,
+        learning_rate=2e-5,
         tokenizer_config=tokenizer_config,
         learning_rate_gamma=0.99,
         norm_first=True,
@@ -448,9 +466,11 @@ if __name__ == "__main__":
 
     progress_bar_callback = RichProgressBar(refresh_rate=1)
 
+    DEVICES = [2]
+
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[5],
+        devices=DEVICES,
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[
@@ -469,9 +489,11 @@ if __name__ == "__main__":
         gradient_clip_val=1.0,
     )
 
+
     trainer.fit(
                 model,
                 trn_dl, 
                 val_dl,
+                ckpt_path = "./checkpoints/fanciful-planet-7/last.ckpt"
     )
                 # ckpt_path="checkpoints/upbeat-dawn-53/epoch=14-step=24330-val/loss_epoch=0.00273.ckpt")

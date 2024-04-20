@@ -7,6 +7,19 @@ import seaborn as sns
 import os
 import IPython.display as ipd
 import symusic
+from midi_player import MIDIPlayer
+from midi_player.stylers import basic, cifka_advanced
+import IPython.display as ipd
+import math
+def preview_sm(x_sm):
+    # rand int
+    rand_int = np.random.randint(0, 1000000)
+    tmp_file_path = "sm_preview_" + str(rand_int) + ".mid"
+    x_sm.dump_midi(tmp_file_path)
+    ipd.display(MIDIPlayer(tmp_file_path, 500, styler=cifka_advanced, title='My Player'))
+    # delete file
+    os.remove(tmp_file_path)
+
 
 def has_drum(sm):
     for track in sm.tracks:

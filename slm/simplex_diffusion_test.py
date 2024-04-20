@@ -4,19 +4,20 @@ from simplex_diffusion import SimplexDiffusionModel
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
+from util import preview_sm,piano_roll
 
 
-# checkpoint = "../checkpoints/fanciful-planet-7/last.ckpt"
-checkpoint = "../checkpoints/super-mountain-5/last.ckpt"
+checkpoint = "../checkpoints/fanciful-planet-7/last.ckpt"
+# checkpoint = "../checkpoints/super-mountain-5/last.ckpt"
 
 model = SimplexDiffusionModel.load_from_checkpoint(checkpoint, map_location=device)
 
 # print model
 print(model)
+#%%
+import seaborn as sns
 
 #%% no grid
-
-
 
 # get the embedding
 embedding = model.embedding_layer.weight.detach().cpu().numpy().T
@@ -37,7 +38,7 @@ embedding_similarity = embedding @ embedding.T
 projection_similarity = projection @ projection.T
 
 
-cmap = "magma"
+cmap = "Spectral"
 # plot the similarity matrix
 # make large figure
 plt.figure(figsize=(50, 50))
@@ -110,7 +111,10 @@ RESAMPLE_IDX = 50
 x = ds[RESAMPLE_IDX]
 x_sm = model.tokenizer.decode(x)
 
+#%%
+from util import preview_sm
 
+preview_sm(x_sm)
 #%%
 model.beta_schedule = "cosine"
 import torch
@@ -136,8 +140,8 @@ mask = tokenizer.constraint_mask(
 )
 
 BATCH_SIZE = 2
-N_STEPS = 50
-y = model.sample(mask,
+N_STEPS = 100
+y = model.sample(None,
                  BATCH_SIZE,
                  N_STEPS,
                  device=device,
@@ -155,7 +159,7 @@ y1h = torch.nn.functional.one_hot(y, num_classes=len(model.tokenizer.vocab)).flo
 plt.imshow(y1h[0].cpu().numpy().T, aspect="auto",interpolation="none")
 plt.show()
 
-from util import preview, piano_roll
+#%%
 
 # plot piano rolls,
 # use a 16:9 aspect ratio for each plot
@@ -170,13 +174,13 @@ for i in range(BATCH_SIZE):
     axs[i].imshow(pr, aspect="auto",interpolation="none")
 plt.show()
 
+
+preview_sm(y_sm)
+
 #%%
 # play audio of last 
 print(f"Number of notes: {y_sm.note_num()}")
 preview(y_sm, tmp_dir="artefacts/tmp", audio=True)
     
-
-# %%
-
 
 # %%
