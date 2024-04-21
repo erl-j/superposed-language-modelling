@@ -7,8 +7,12 @@ import numpy as np
 from util import preview_sm,piano_roll
 
 
+# checkpoint = "../checkpoints/quiet-puddle-18/last.ckpt"
 checkpoint = "../checkpoints/fanciful-planet-7/last.ckpt"
 # checkpoint = "../checkpoints/super-mountain-5/last.ckpt"
+# checkpoint = "../checkpoints/dauntless-aardvark-20/last.ckpt"
+# checkpoint = "../checkpoints/twilight-haze-21/last.ckpt"
+# checkpoint = "../checkpoints/zany-waterfall-23/last.ckpt"
 
 model = SimplexDiffusionModel.load_from_checkpoint(checkpoint, map_location=device)
 
@@ -38,7 +42,7 @@ embedding_similarity = embedding @ embedding.T
 projection_similarity = projection @ projection.T
 
 
-cmap = "Spectral"
+cmap = "magma"
 # plot the similarity matrix
 # make large figure
 plt.figure(figsize=(50, 50))
@@ -140,13 +144,14 @@ mask = tokenizer.constraint_mask(
 )
 
 BATCH_SIZE = 2
-N_STEPS = 100
+N_STEPS = 50
 y = model.sample(None,
                  BATCH_SIZE,
                  N_STEPS,
                  device=device,
                  argmax=True,
-                 temperature=1.0
+                 temperature=1.0,
+                 self_condtioning=False
                  )
 
 import matplotlib.pyplot as plt
@@ -159,7 +164,6 @@ y1h = torch.nn.functional.one_hot(y, num_classes=len(model.tokenizer.vocab)).flo
 plt.imshow(y1h[0].cpu().numpy().T, aspect="auto",interpolation="none")
 plt.show()
 
-#%%
 
 # plot piano rolls,
 # use a 16:9 aspect ratio for each plot
@@ -177,10 +181,6 @@ plt.show()
 
 preview_sm(y_sm)
 
-#%%
-# play audio of last 
-print(f"Number of notes: {y_sm.note_num()}")
-preview(y_sm, tmp_dir="artefacts/tmp", audio=True)
-    
+
 
 # %%

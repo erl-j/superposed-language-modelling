@@ -16,8 +16,15 @@ import einops
 from tqdm import tqdm
 from util import top_k_top_p_filtering
 import numpy as np
-
+from lightning.pytorch.utilities import grad_norm
 import warnings
+
+def _cleanup_handler():
+    for f in _cleanups:
+        f()
+
+import atexit as _atexit
+_atexit.register(_cleanup_handler)
 
 warnings.filterwarnings("ignore", category=ResourceWarning)
 
@@ -38,6 +45,8 @@ class SimplexDiffusionModel(pl.LightningModule):
         norm_first=False,
         k=5.0,
         beta_schedule="linear",
+        activation = "relu",
+        output_bias = True
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -58,10 +67,11 @@ class SimplexDiffusionModel(pl.LightningModule):
                 norm_first=norm_first,
                 dropout=0.1,
                 batch_first=True,
+                activation=activation
             ),
             num_layers=n_layers,
         )
-        self.decoder_output_layer = nn.Linear(hidden_size, vocab_size)
+        self.decoder_output_layer = nn.Linear(hidden_size, vocab_size, bias=output_bias)
         self.n_attributes = len(self.tokenizer.note_attribute_order)
         self.n_events = self.tokenizer.config["max_notes"]
         self.learning_rate_gamma = learning_rate_gamma
@@ -178,9 +188,6 @@ class SimplexDiffusionModel(pl.LightningModule):
             axs[aidx].set_title(f"Attribute {a} for k={k}")
         plt.show()
 
-
-
-
     def step(self, batch, batch_idx):
         if self.one_hot_input:
             x = batch
@@ -210,6 +217,9 @@ class SimplexDiffusionModel(pl.LightningModule):
         metrics = {"ce":cross_entropy}
       
         return metrics
+    
+
+    
 
     def sample(
         self,
@@ -219,7 +229,8 @@ class SimplexDiffusionModel(pl.LightningModule):
         device="cpu",
         plot_interval=-1,
         argmax=False,
-        temperature=1.0
+        temperature=1.0,
+        self_condtioning=False
     ):
         self.eval()
         with torch.no_grad():
@@ -241,8 +252,12 @@ class SimplexDiffusionModel(pl.LightningModule):
                 alpha = self.schedule(t)
                 alphas.append(alpha[0][0][0].detach().cpu())
                 noise = torch.randn((batch_size, self.n_events*self.n_attributes,len(self.vocab)),device=self.device) * self.k
-                st = torch.sqrt(alpha) * self.forward(st,tprev) + torch.sqrt(1-alpha)*noise
+                s0 = self.forward(st,tprev)
+                st = torch.sqrt(alpha) * s0 + torch.sqrt(1-alpha)*noise
                 pt = torch.nn.functional.softmax(st/temperature, dim=-1)
+                if self_condtioning:
+                    p0 = torch.nn.functional.softmax(s0/temperature, dim=-1)
+                    pt = (pt + p0)/2
                 if mask is not None:
                     pt = pt * mask
                     pt = pt / pt.sum(dim=-1, keepdim=True)
@@ -332,7 +347,6 @@ class SimplexDiffusionModel(pl.LightningModule):
         )
         return [optimizer], [scheduler]
 
-
 if __name__ == "__main__":
     genre_list = [
         "other",
@@ -408,17 +422,26 @@ if __name__ == "__main__":
         n_layers=12,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
-        learning_rate=2e-5,
+        learning_rate=1e-3,
         tokenizer_config=tokenizer_config,
         learning_rate_gamma=0.99,
         norm_first=True,
         k=5.0,
-        beta_schedule="cosine",       
+        beta_schedule="cosine",
+        activation="gelu",
+        output_bias=False
     )
+
+    # model = SimplexDiffusionModel.load_from_checkpoint(
+    #             checkpoint_path = "./checkpoints/quiet-puddle-18/last.ckpt",
+    #             learning_rate=2e-5,
+    #             activation="gelu",
+    #             map_location="cpu"
+    # )
     # 80
     BATCH_SIZE = 80
 
-    model.test_step(batch_size=60)
+    # model.test_step(batch_size=60)
 
     trn_ds = MidiDataset(
         cache_path="./paper_assets/trn_midi_records_unique_pr.pt",
@@ -463,14 +486,14 @@ if __name__ == "__main__":
 
     logger = logging.getLogger("wandb")
     logger.setLevel(logging.ERROR)
+    wandb_logger.watch(model,log="all", log_freq=500)
 
     progress_bar_callback = RichProgressBar(refresh_rate=1)
 
-    DEVICES = [2]
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=DEVICES,
+        devices=[2,3],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[
@@ -487,13 +510,15 @@ if __name__ == "__main__":
         ],
         logger=wandb_logger,
         gradient_clip_val=1.0,
+        # accumulate_grad_batches=1,
     )
 
+ 
 
     trainer.fit(
                 model,
                 trn_dl, 
                 val_dl,
-                ckpt_path = "./checkpoints/fanciful-planet-7/last.ckpt"
+                # ckpt_path = "./checkpoints/fanciful-planet-7/last.ckpt"
     )
                 # ckpt_path="checkpoints/upbeat-dawn-53/epoch=14-step=24330-val/loss_epoch=0.00273.ckpt")
