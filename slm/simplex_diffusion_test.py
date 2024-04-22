@@ -13,6 +13,7 @@ from util import preview_sm,piano_roll
 # checkpoint = "../checkpoints/twilight-haze-21/last.ckpt"
 # checkpoint = "../checkpoints/zany-waterfall-23/last.ckpt"
 checkpoint = "../checkpoints/effortless-resonance-33/last.ckpt"
+# checkpoint = "../checkpoints/ethereal-disco-37/last.ckpt"
 model = SimplexDiffusionModel.load_from_checkpoint(checkpoint, map_location=device)
 
 # print model
@@ -96,7 +97,7 @@ ROOT_DIR = "../"
 TMP_DIR = ROOT_DIR + "artefacts/tmp"
 OUTPUT_DIR = ROOT_DIR + "artefacts/output"
 
-MODEL_BARS = 2
+MODEL_BARS = 4
 # Load the dataset
 ds = MidiDataset(
     cache_path=ROOT_DIR+"paper_assets/tst_midi_records_unique_pr.pt",
@@ -107,17 +108,16 @@ ds = MidiDataset(
     max_notes=model.tokenizer.config["max_notes"],
 )
 
-RESAMPLE_IDX = 50
+
+#%%
+RESAMPLE_IDX = 800
 
 x = ds[RESAMPLE_IDX]
 x_sm = model.tokenizer.decode(x)
 
+preview_sm(x_sm)
+
 #%%
-import torch
-model.beta_schedule = "cosine"
-for k in [5.0]:
-    torch.manual_seed(0)
-    model.plot_ce_curve(x.unsqueeze(0).to(device),0,tmp_k=k)
 
 # %%
 sns.set_style("whitegrid", {'axes.grid' : False})
@@ -125,18 +125,26 @@ sns.set_style("whitegrid", {'axes.grid' : False})
 
 tokenizer = model.tokenizer
 
-mask = tokenizer.constraint_mask(
-    scale="C major",
-    tags=["classical"],
-    tempos=["126"],
-    instruments = ["Piano"],
-    min_notes = 50,
-    max_notes = 290,
-    min_notes_per_instrument=10,
+# mask = tokenizer.constraint_mask(
+#     scale="C major",
+#     tags=["classical"],
+#     tempos=["126"],
+#     instruments = ["Piano"],
+#     min_notes = 50,
+#     max_notes = 150,
+#     min_notes_per_instrument=10,
+# )
+
+mask = tokenizer.infilling_mask(
+    x=x,
+    beat_range=(0, 8),
+    min_notes=50,
+    max_notes=290,
 )
 
+
 BATCH_SIZE = 2
-N_STEPS = 100
+N_STEPS = 300
 y = model.sample(mask,
                  BATCH_SIZE,
                  N_STEPS,
