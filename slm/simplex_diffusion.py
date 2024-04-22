@@ -18,6 +18,7 @@ from util import top_k_top_p_filtering
 import numpy as np
 from lightning.pytorch.utilities import grad_norm
 import warnings
+from train import EncoderOnlyModel
 
 def _cleanup_handler():
     for f in _cleanups:
@@ -46,7 +47,8 @@ class SimplexDiffusionModel(pl.LightningModule):
         k=5.0,
         beta_schedule="linear",
         activation = "relu",
-        output_bias = True
+        output_bias = True,
+        format_mask_on_probs=False,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -82,14 +84,23 @@ class SimplexDiffusionModel(pl.LightningModule):
 
         self.beta_schedule = beta_schedule
 
+        self.format_mask_on_probs = format_mask_on_probs
 
     def forward(self, s, t):
         t_z = self.t_embedding(t)
         format_mask = self.format_mask[None, ...].to(s.device)
         x = s
-        x[format_mask.expand_as(x) < 0.5] = -self.k
-        # softmax mask
-        x = torch.nn.functional.softmax(x, dim=-1)
+        if self.format_mask_on_probs:
+            x = torch.nn.functional.softmax(x, dim=-1)
+            # set format mask to zeros
+            x[format_mask.expand_as(x) < 0.5] = 0
+            # renormalize
+            x = x / x.sum(dim=-1, keepdim=True)
+
+        else:
+            x[format_mask.expand_as(x) < 0.5] = -self.k
+            # softmax mask
+            x = torch.nn.functional.softmax(x, dim=-1)
 
         x = einops.rearrange(x, "b (t a) v -> b t a v", a=self.n_attributes)
         ze = self.embedding_layer(x)
@@ -107,7 +118,10 @@ class SimplexDiffusionModel(pl.LightningModule):
         decoder_logits = einops.rearrange(
             decoder_logits, "b t a v -> b (t a) v", a=self.n_attributes
         )
-        decoder_logits[format_mask.expand_as(decoder_logits) <0.5] = -self.k
+        if self.format_mask_on_probs:
+            decoder_logits[format_mask.expand_as(decoder_logits) < 0.5] = -1e12
+        else:
+            decoder_logits[format_mask.expand_as(decoder_logits) < 0.5] = -self.k
         return decoder_logits
 
     def discrete_output_distribution(self, theta, t):
@@ -151,7 +165,6 @@ class SimplexDiffusionModel(pl.LightningModule):
 
         batch_size, note_attr, vocab_size = s.shape
 
-
         noise = torch.randn((BATCH_SIZE, note_attr,vocab_size), device=s.device)*k
 
         s_n =  torch.sqrt(alpha) * s + torch.sqrt(1 - alpha) * noise
@@ -161,9 +174,9 @@ class SimplexDiffusionModel(pl.LightningModule):
 
         # get cross entropy
         cross_entropy = -(x * torch.log(p_n)).sum(dim=-1).sum(dim=-1)
-        # surpisal
-
         entropy = -(p_n*torch.log(p_n)).sum(dim=-1).sum(dim=-1)
+
+        # cross entropy
         
         plt.plot(cross_entropy.cpu().numpy())
         plt.ylim(0,torch.max(cross_entropy).cpu().numpy())
@@ -174,6 +187,17 @@ class SimplexDiffusionModel(pl.LightningModule):
         plt.ylim(0,torch.max(entropy).cpu().numpy())
         plt.title(f"Entropy for k={k}")
         plt.show()
+
+        for aidx,a in enumerate(self.tokenizer.note_attribute_order):
+            plt.plot(p_n[:,aidx,:].mean(dim=0).cpu().numpy())
+            plt.title(f"Attribute {a} for k={k}")
+            plt.show()
+
+        for aidx,a in enumerate(self.tokenizer.note_attribute_order):
+            ce = -(x[:,aidx::self.n_attributes,:] * torch.log(p_n[:,aidx::self.n_attributes,:])).sum(dim=-1).sum(dim=-1)
+            plt.plot(ce.detach().cpu().numpy())
+            plt.title(f"Entropy & attribute {a} for k={k}")
+            plt.show()
 
         note_probs = p_n[:,:self.n_attributes]
 
@@ -218,9 +242,6 @@ class SimplexDiffusionModel(pl.LightningModule):
       
         return metrics
     
-
-    
-
     def sample(
         self,
         mask=None,
@@ -230,77 +251,105 @@ class SimplexDiffusionModel(pl.LightningModule):
         plot_interval=-1,
         argmax=False,
         temperature=1.0,
-        self_condtioning=False
+        top_p=1.0,
     ):
         self.eval()
         with torch.no_grad():
             # repeat to batch_size
             if mask is not None:
                 mask = mask.repeat(batch_size,1,1).to(self.device)
+                mask_flat = einops.rearrange(mask, "b s v -> (b s) v")
+
 
             t = torch.ones((batch_size,1,1),device=self.device)
-
             alpha = self.schedule(t)
-            st = torch.randn((batch_size, self.n_events*self.n_attributes,len(self.vocab)),device=self.device) * self.k
-            #st = mask_simplex
+            wt = torch.randn((batch_size, self.n_events*self.n_attributes,len(self.vocab)),device=self.device) * self.k
             sts = []
             pts = []
             alphas = []
-            for step in tqdm(range(nb_steps-1,-1,-1)):
-                tprev = ((step+1)/nb_steps)*torch.ones((batch_size,1,1),device=self.device)
-                t = (step / nb_steps)*torch.ones((batch_size,1,1),device=self.device)
-                alpha = self.schedule(t)
-                alphas.append(alpha[0][0][0].detach().cpu())
-                noise = torch.randn((batch_size, self.n_events*self.n_attributes,len(self.vocab)),device=self.device) * self.k
-                s0 = self.forward(st,tprev)
-                st = torch.sqrt(alpha) * s0 + torch.sqrt(1-alpha)*noise
-                pt = torch.nn.functional.softmax(st/temperature, dim=-1)
-                if self_condtioning:
-                    p0 = torch.nn.functional.softmax(s0/temperature, dim=-1)
-                    pt = (pt + p0)/2
+
+            for step in tqdm(range(nb_steps,-1,-1)):
+
+                t = torch.ones((batch_size,1,1),device=self.device) * (step/nb_steps)
+
+                wl = self.forward(wt,t)
+
+                wl = einops.rearrange(wl, "b s v -> (b s) v", s = self.n_events*self.n_attributes)
+
                 if mask is not None:
-                    pt = pt * mask
-                    pt = pt / pt.sum(dim=-1, keepdim=True)
-                # return to simplex
-                st = ((pt*2)-1)*self.k
-                sts.append(st.detach())
-                pts.append(pt.detach())
+                    wl[mask_flat < 0.5] = -torch.inf
+
+                wl = top_k_top_p_filtering(wl, top_p=top_p)
+
+                # sample
+                w0p = torch.nn.functional.softmax(wl/temperature, dim=-1)
+
+                # if mask is not None:
+                #     w0p = w0p * mask_flat
+                #     # plot
+                  
+                #     w0p_sum = w0p.sum(dim=-1, keepdim=True)
+                #     plt.plot(w0p_sum[0].cpu().numpy())
+                #     plt.title(f"Step {step}")
+                #     plt.show()
+                #     assert torch.all(w0p_sum > 0)
+                #     w0p = w0p / w0p_sum
+
+                # sample
+                w0 = torch.multinomial(w0p, 1).squeeze(-1)
+
+                w0 = einops.rearrange(w0, "(b s) -> b s", s = self.n_events*self.n_attributes)
+
+                # convert back to simplex
+                w0 = torch.nn.functional.one_hot(w0, num_classes=len(self.vocab)).float()
+
+                w0 = (w0 * 2 - 1) * self.k
+
+                noise = torch.randn((batch_size, self.n_events*self.n_attributes,len(self.vocab)),device=self.device) * self.k
+                
+                t_minus_1 = torch.ones((batch_size,1,1),device=self.device) * ((step-1)/nb_steps)
+                alpha = self.schedule(t_minus_1)
+                wt = torch.sqrt(alpha) * w0 + torch.sqrt(1 - alpha) * noise
+         
+                # if mask is not None:
+                #     pt = pt * mask
+                #     pt = pt / pt.sum(dim=-1, keepdim=True)
+             
+            #     sts.append(st.detach())
+            #     pts.append(pt.detach())
             
-            sts = torch.stack(sts)
+            # sts = torch.stack(sts)
+            # pts = torch.stack(pts)
 
+            # for aidx,a in enumerate(self.tokenizer.note_attribute_order):
+            #     attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
+            #     attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
+            #     # set attribute token indices on y axis
+            #     plt.imshow(pts[:,0,aidx,attribute_token_idxs].cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
+            #     plt.yticks(range(len(attribute_tokens)),attribute_tokens)
+            #     plt.title(f"Attribute {a}")
+            #     plt.show()
 
-            pts = torch.stack(pts)
+            # for aidx,a in enumerate(self.tokenizer.note_attribute_order):
+            #     attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
+            #     attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
+            #     # set attribute token indices on y axis
+            #     plt.imshow(pts[:,0,aidx::self.n_attributes,attribute_token_idxs].mean(-2).cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
+            #     plt.yticks(range(len(attribute_tokens)),attribute_tokens)
+            #     plt.title(f"Attribute {a}, all notes")
+            #     plt.show()
 
+            # plt.plot(alphas)
+            # plt.title("Alpha")
+            # plt.show()
 
-            for aidx,a in enumerate(self.tokenizer.note_attribute_order):
-                attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
-                attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
-                # set attribute token indices on y axis
-                plt.imshow(pts[:,0,aidx,attribute_token_idxs].cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
-                plt.yticks(range(len(attribute_tokens)),attribute_tokens)
-                plt.title(f"Attribute {a}")
-                plt.show()
-
-            for aidx,a in enumerate(self.tokenizer.note_attribute_order):
-                attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
-                attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
-                # set attribute token indices on y axis
-                plt.imshow(pts[:,0,aidx::self.n_attributes,attribute_token_idxs].mean(-2).cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
-                plt.yticks(range(len(attribute_tokens)),attribute_tokens)
-                plt.title(f"Attribute {a}, all notes")
-                plt.show()
-
-            plt.plot(alphas)
-            plt.title("Alpha")
-            plt.show()
-
-            entropy = -torch.sum(pts*torch.log(pts),dim=-1).mean(dim=1).mean(dim=1)
-            plt.plot(entropy.cpu().numpy())
-            plt.title("Entropy")
-            plt.show()
+            # entropy = -torch.sum(pts*torch.log(pts),dim=-1).mean(dim=1).mean(dim=1)
+            # plt.plot(entropy.cpu().numpy())
+            # plt.title("Entropy")
+            # plt.show()
 
             # sample categorical
-            return pt.argmax(dim=-1)
+            return wt.argmax(dim=-1)
 
     def training_step(self, batch, batch_idx):
         metrics = self.step(batch, batch_idx)
@@ -338,6 +387,13 @@ class SimplexDiffusionModel(pl.LightningModule):
             "val/loss", loss, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True
         )
         return loss
+    
+    def transplant_weights(self, other_model):
+        self.embedding_layer.weight.data = other_model.embedding_layer.weight.data
+        self.decoder_output_layer.weight.data = other_model.decoder_output_layer.weight.data
+        if self.decoder_output_layer.bias is not None:
+            self.decoder_output_layer.bias.data = other_model.decoder_output_layer.bias.data
+        self.transformer.load_state_dict(other_model.transformer.state_dict())
 
     def configure_optimizers(self):
         # learning rate decay
@@ -429,7 +485,17 @@ if __name__ == "__main__":
         k=5.0,
         beta_schedule="cosine",
         activation="gelu",
-        output_bias=False
+        output_bias=False,
+        format_mask_on_probs=True
+    )
+
+    other_model = EncoderOnlyModel.load_from_checkpoint(
+        checkpoint_path = "./checkpoints/magic-forest-321/last.ckpt",
+        device="cpu"
+    )
+
+    model.transplant_weights(
+        other_model
     )
 
     # model = SimplexDiffusionModel.load_from_checkpoint(
@@ -440,7 +506,6 @@ if __name__ == "__main__":
     # )
     # 80
     BATCH_SIZE = 80
-
     # model.test_step(batch_size=60)
 
     trn_ds = MidiDataset(
@@ -463,7 +528,6 @@ if __name__ == "__main__":
     )
 
     # desert capy uses batch size 80
-
     trn_dl = torch.utils.data.DataLoader(
         trn_ds,
         batch_size=BATCH_SIZE,
@@ -493,7 +557,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[2,3],
+        devices=[1],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[
@@ -510,10 +574,8 @@ if __name__ == "__main__":
         ],
         logger=wandb_logger,
         gradient_clip_val=1.0,
-        # accumulate_grad_batches=1,
+        accumulate_grad_batches=4,
     )
-
- 
 
     trainer.fit(
                 model,

@@ -6,20 +6,21 @@ import seaborn as sns
 import numpy as np
 from util import preview_sm,piano_roll
 
-
 # checkpoint = "../checkpoints/quiet-puddle-18/last.ckpt"
-checkpoint = "../checkpoints/fanciful-planet-7/last.ckpt"
+# checkpoint = "../checkpoints/fanciful-planet-7/last.ckpt"
 # checkpoint = "../checkpoints/super-mountain-5/last.ckpt"
 # checkpoint = "../checkpoints/dauntless-aardvark-20/last.ckpt"
 # checkpoint = "../checkpoints/twilight-haze-21/last.ckpt"
 # checkpoint = "../checkpoints/zany-waterfall-23/last.ckpt"
-
+checkpoint = "../checkpoints/effortless-resonance-33/last.ckpt"
 model = SimplexDiffusionModel.load_from_checkpoint(checkpoint, map_location=device)
 
 # print model
 print(model)
 #%%
 import seaborn as sns
+#%%
+# get the embedding
 
 #%% no grid
 
@@ -89,9 +90,6 @@ for attr in model.tokenizer.note_attribute_order:
     plt.title(attr)
     plt.show()
 
-
-
-
 #%%
 from data import MidiDataset
 ROOT_DIR = "../"
@@ -109,23 +107,17 @@ ds = MidiDataset(
     max_notes=model.tokenizer.config["max_notes"],
 )
 
-
 RESAMPLE_IDX = 50
 
 x = ds[RESAMPLE_IDX]
 x_sm = model.tokenizer.decode(x)
 
 #%%
-from util import preview_sm
-
-preview_sm(x_sm)
-#%%
-model.beta_schedule = "cosine"
 import torch
-for k in [1.0,2.0,3.0,4.0,5.0,7.5,10.0,20.0]:
+model.beta_schedule = "cosine"
+for k in [5.0]:
     torch.manual_seed(0)
     model.plot_ce_curve(x.unsqueeze(0).to(device),0,tmp_k=k)
-
 
 # %%
 sns.set_style("whitegrid", {'axes.grid' : False})
@@ -135,23 +127,23 @@ tokenizer = model.tokenizer
 
 mask = tokenizer.constraint_mask(
     scale="C major",
-    tags=["pop"],
-    tempos=["138"],
-    instruments = ["Drums","Piano","Bass"],
-    min_notes = 100,
-    max_notes = 150,
-    min_notes_per_instrument=50,
+    tags=["classical"],
+    tempos=["126"],
+    instruments = ["Piano"],
+    min_notes = 50,
+    max_notes = 290,
+    min_notes_per_instrument=10,
 )
 
 BATCH_SIZE = 2
-N_STEPS = 50
-y = model.sample(None,
+N_STEPS = 100
+y = model.sample(mask,
                  BATCH_SIZE,
                  N_STEPS,
                  device=device,
                  argmax=True,
                  temperature=1.0,
-                 self_condtioning=False
+                 top_p=1.0,
                  )
 
 import matplotlib.pyplot as plt
