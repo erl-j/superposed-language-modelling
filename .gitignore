@@ -11,7 +11,7 @@ __pycache__/
 # all DS_Store files, recursively
 .DS_Store
 **/.DS_Store
-
+data/
 # C extensions
 *.so
 
