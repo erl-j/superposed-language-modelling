@@ -252,6 +252,7 @@ class SimplexDiffusionModel(pl.LightningModule):
         argmax=False,
         temperature=1.0,
         top_p=1.0,
+        mask_noise_factor=0.1
     ):
         self.eval()
         with torch.no_grad():
@@ -264,9 +265,8 @@ class SimplexDiffusionModel(pl.LightningModule):
             t = torch.ones((batch_size,1,1),device=self.device)
             alpha = self.schedule(t)
             wt = torch.randn((batch_size, self.n_events*self.n_attributes,len(self.vocab)),device=self.device) * self.k
-            sts = []
-            pts = []
-            alphas = []
+            
+            w0ps = []
 
             for step in tqdm(range(nb_steps,-1,-1)):
 
@@ -284,16 +284,7 @@ class SimplexDiffusionModel(pl.LightningModule):
                 # sample
                 w0p = torch.nn.functional.softmax(wl/temperature, dim=-1)
 
-                # if mask is not None:
-                #     w0p = w0p * mask_flat
-                #     # plot
-                  
-                #     w0p_sum = w0p.sum(dim=-1, keepdim=True)
-                #     plt.plot(w0p_sum[0].cpu().numpy())
-                #     plt.title(f"Step {step}")
-                #     plt.show()
-                #     assert torch.all(w0p_sum > 0)
-                #     w0p = w0p / w0p_sum
+                w0ps.append(einops.rearrange(w0p, "(b s) v -> b s v", s = self.n_events*self.n_attributes))
 
                 # sample
                 w0 = torch.multinomial(w0p, 1).squeeze(-1)
@@ -306,14 +297,15 @@ class SimplexDiffusionModel(pl.LightningModule):
                 w0 = (w0 * 2 - 1) * self.k
 
                 noise = torch.randn((batch_size, self.n_events*self.n_attributes,len(self.vocab)),device=self.device) * self.k
+
+                # multiply noise w mask
+                if mask is not None and mask_noise_factor:
+                    noise[mask < 0.5]*=mask_noise_factor
                 
                 t_minus_1 = torch.ones((batch_size,1,1),device=self.device) * ((step-1)/nb_steps)
                 alpha = self.schedule(t_minus_1)
                 wt = torch.sqrt(alpha) * w0 + torch.sqrt(1 - alpha) * noise
-         
-                # if mask is not None:
-                #     pt = pt * mask
-                #     pt = pt / pt.sum(dim=-1, keepdim=True)
+
              
             #     sts.append(st.detach())
             #     pts.append(pt.detach())
@@ -321,23 +313,25 @@ class SimplexDiffusionModel(pl.LightningModule):
             # sts = torch.stack(sts)
             # pts = torch.stack(pts)
 
-            # for aidx,a in enumerate(self.tokenizer.note_attribute_order):
-            #     attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
-            #     attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
-            #     # set attribute token indices on y axis
-            #     plt.imshow(pts[:,0,aidx,attribute_token_idxs].cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
-            #     plt.yticks(range(len(attribute_tokens)),attribute_tokens)
-            #     plt.title(f"Attribute {a}")
-            #     plt.show()
+            wops = torch.stack(w0ps)
 
-            # for aidx,a in enumerate(self.tokenizer.note_attribute_order):
-            #     attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
-            #     attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
-            #     # set attribute token indices on y axis
-            #     plt.imshow(pts[:,0,aidx::self.n_attributes,attribute_token_idxs].mean(-2).cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
-            #     plt.yticks(range(len(attribute_tokens)),attribute_tokens)
-            #     plt.title(f"Attribute {a}, all notes")
-            #     plt.show()
+            for aidx,a in enumerate(self.tokenizer.note_attribute_order):
+                attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
+                attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
+                # set attribute token indices on y axis
+                plt.imshow(wops[:,0,aidx,attribute_token_idxs].cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
+                plt.yticks(range(len(attribute_tokens)),attribute_tokens)
+                plt.title(f"Attribute {a}")
+                plt.show()
+
+            for aidx,a in enumerate(self.tokenizer.note_attribute_order):
+                attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
+                attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
+                # set attribute token indices on y axis
+                plt.imshow(wops[:,0,aidx::self.n_attributes,attribute_token_idxs].mean(-2).cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
+                plt.yticks(range(len(attribute_tokens)),attribute_tokens)
+                plt.title(f"Attribute {a}, all notes")
+                plt.show()
 
             # plt.plot(alphas)
             # plt.title("Alpha")

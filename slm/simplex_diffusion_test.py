@@ -7,12 +7,12 @@ import numpy as np
 from util import preview_sm,piano_roll
 
 # checkpoint = "../checkpoints/quiet-puddle-18/last.ckpt"
-# checkpoint = "../checkpoints/fanciful-planet-7/last.ckpt"
+checkpoint = "../checkpoints/fanciful-planet-7/last.ckpt"
 # checkpoint = "../checkpoints/super-mountain-5/last.ckpt"
 # checkpoint = "../checkpoints/dauntless-aardvark-20/last.ckpt"
 # checkpoint = "../checkpoints/twilight-haze-21/last.ckpt"
 # checkpoint = "../checkpoints/zany-waterfall-23/last.ckpt"
-checkpoint = "../checkpoints/effortless-resonance-33/last.ckpt"
+# checkpoint = "../checkpoints/effortless-resonance-33/last.ckpt"
 # checkpoint = "../checkpoints/ethereal-disco-37/last.ckpt"
 model = SimplexDiffusionModel.load_from_checkpoint(checkpoint, map_location=device)
 
@@ -110,7 +110,7 @@ ds = MidiDataset(
 
 
 #%%
-RESAMPLE_IDX = 800
+RESAMPLE_IDX = 50
 
 x = ds[RESAMPLE_IDX]
 x_sm = model.tokenizer.decode(x)
@@ -144,7 +144,7 @@ mask = tokenizer.infilling_mask(
 
 
 BATCH_SIZE = 2
-N_STEPS = 300
+N_STEPS = 200
 y = model.sample(mask,
                  BATCH_SIZE,
                  N_STEPS,
@@ -152,6 +152,7 @@ y = model.sample(mask,
                  argmax=True,
                  temperature=1.0,
                  top_p=1.0,
+                 mask_noise_factor = 0.1,
                  )
 
 import matplotlib.pyplot as plt
