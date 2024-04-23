@@ -287,6 +287,7 @@ class SimplexDiffusionModel(pl.LightningModule):
             if mask is not None:
                 mask = mask.repeat(batch_size,1,1).to(self.device)
                 mask_flat = einops.rearrange(mask, "b s v -> (b s) v")
+                mask_11 = mask * 2 - 1
 
 
             t = torch.ones((batch_size,1,1),device=self.device)
@@ -294,7 +295,8 @@ class SimplexDiffusionModel(pl.LightningModule):
             noise = torch.randn((batch_size, self.n_events*self.n_attributes,len(self.vocab)),device=self.device) * self.k
 
             if mask is not None and mask_noise_factor:
-                noise[mask < 0.5]*=mask_noise_factor
+                noise+=mask_11*mask_noise_factor
+                
                 
             wt = noise
             w0ps = []
@@ -321,10 +323,10 @@ class SimplexDiffusionModel(pl.LightningModule):
                 # sample
                 w0 = torch.multinomial(w0p, 1).squeeze(-1)
 
-                w0 = einops.rearrange(w0, "(b s) -> b s", s = self.n_events*self.n_attributes)
+                w0x = einops.rearrange(w0, "(b s) -> b s", s = self.n_events*self.n_attributes)
 
                 # convert back to simplex
-                w0 = torch.nn.functional.one_hot(w0, num_classes=len(self.vocab)).float()
+                w0 = torch.nn.functional.one_hot(w0x, num_classes=len(self.vocab)).float()
 
                 w0 = (w0 * 2 - 1) * self.k
 
@@ -332,7 +334,7 @@ class SimplexDiffusionModel(pl.LightningModule):
 
                 # multiply noise w mask
                 if mask is not None and mask_noise_factor:
-                    noise[mask < 0.5]*=mask_noise_factor
+                    noise+=mask_11*mask_noise_factor
                 
                 t_minus_1 = torch.ones((batch_size,1,1),device=self.device) * ((step-1)/nb_steps)
                 alpha = self.schedule(t_minus_1)
@@ -376,7 +378,7 @@ class SimplexDiffusionModel(pl.LightningModule):
             # plt.show()
 
             # sample categorical
-            return wt.argmax(dim=-1)
+            return w0x
 
     def training_step(self, batch, batch_idx):
         metrics = self.step(batch, batch_idx)
