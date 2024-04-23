@@ -49,6 +49,7 @@ class SimplexDiffusionModel(pl.LightningModule):
         activation = "relu",
         output_bias = True,
         format_mask_on_probs=False,
+        relative_loss = False,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -85,6 +86,8 @@ class SimplexDiffusionModel(pl.LightningModule):
         self.beta_schedule = beta_schedule
 
         self.format_mask_on_probs = format_mask_on_probs
+
+        self.relative_loss = relative_loss
 
     def forward(self, s, t):
         t_z = self.t_embedding(t)
@@ -233,10 +236,34 @@ class SimplexDiffusionModel(pl.LightningModule):
         # forward pass
         s_hat = self.forward(s_n, t)
 
-        cross_entropy = torch.nn.functional.cross_entropy(
-            s_hat.reshape(-1,vocab_size),
-            target.flatten()
-        )
+        if not self.relative_loss:
+            cross_entropy = torch.nn.functional.cross_entropy(
+                s_hat.reshape(-1,vocab_size),
+                target.flatten(),
+            )
+
+        if self.relative_loss:
+            base_cross_entropy = torch.nn.functional.cross_entropy(
+                    s_n.reshape(-1,vocab_size),
+                    target.flatten(),
+                    reduction = 'none'
+            )
+
+            cross_entropy = torch.nn.functional.cross_entropy(
+                s_hat.reshape(-1,vocab_size),
+                target.flatten(),
+                reduction = 'none'
+            )
+
+            base_cross_entropy = einops.rearrange(base_cross_entropy,"(b s)-> b s", b=batch_size)
+            cross_entropy = einops.rearrange(cross_entropy,"(b s)-> b s", b=batch_size)
+
+            base_cross_entropy = base_cross_entropy.mean(dim=-1)
+            cross_entropy = cross_entropy.mean(dim=-1)
+
+            cross_entropy  = cross_entropy / (base_cross_entropy+1e-5)
+
+            cross_entropy = cross_entropy.mean()
 
         metrics = {"ce":cross_entropy}
       
@@ -248,7 +275,7 @@ class SimplexDiffusionModel(pl.LightningModule):
         batch_size=1,
         nb_steps=10,
         device="cpu",
-        plot_interval=-1,
+        plot=False,
         argmax=False,
         temperature=1.0,
         top_p=1.0,
@@ -264,8 +291,12 @@ class SimplexDiffusionModel(pl.LightningModule):
 
             t = torch.ones((batch_size,1,1),device=self.device)
             alpha = self.schedule(t)
-            wt = torch.randn((batch_size, self.n_events*self.n_attributes,len(self.vocab)),device=self.device) * self.k
-            
+            noise = torch.randn((batch_size, self.n_events*self.n_attributes,len(self.vocab)),device=self.device) * self.k
+
+            if mask is not None and mask_noise_factor:
+                noise[mask < 0.5]*=mask_noise_factor
+                
+            wt = noise
             w0ps = []
 
             for step in tqdm(range(nb_steps,-1,-1)):
@@ -284,7 +315,8 @@ class SimplexDiffusionModel(pl.LightningModule):
                 # sample
                 w0p = torch.nn.functional.softmax(wl/temperature, dim=-1)
 
-                w0ps.append(einops.rearrange(w0p, "(b s) v -> b s v", s = self.n_events*self.n_attributes))
+                if plot:
+                    w0ps.append(einops.rearrange(w0p, "(b s) v -> b s v", s = self.n_events*self.n_attributes).cpu())
 
                 # sample
                 w0 = torch.multinomial(w0p, 1).squeeze(-1)
@@ -313,25 +345,26 @@ class SimplexDiffusionModel(pl.LightningModule):
             # sts = torch.stack(sts)
             # pts = torch.stack(pts)
 
-            wops = torch.stack(w0ps)
+            if plot:
+                wops = torch.stack(w0ps)
 
-            for aidx,a in enumerate(self.tokenizer.note_attribute_order):
-                attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
-                attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
-                # set attribute token indices on y axis
-                plt.imshow(wops[:,0,aidx,attribute_token_idxs].cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
-                plt.yticks(range(len(attribute_tokens)),attribute_tokens)
-                plt.title(f"Attribute {a}")
-                plt.show()
+                for aidx,a in enumerate(self.tokenizer.note_attribute_order):
+                    attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
+                    attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
+                    # set attribute token indices on y axis
+                    plt.imshow(wops[:,0,aidx,attribute_token_idxs].cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
+                    plt.yticks(range(len(attribute_tokens)),attribute_tokens)
+                    plt.title(f"Attribute {a}")
+                    plt.show()
 
-            for aidx,a in enumerate(self.tokenizer.note_attribute_order):
-                attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
-                attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
-                # set attribute token indices on y axis
-                plt.imshow(wops[:,0,aidx::self.n_attributes,attribute_token_idxs].mean(-2).cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
-                plt.yticks(range(len(attribute_tokens)),attribute_tokens)
-                plt.title(f"Attribute {a}, all notes")
-                plt.show()
+                for aidx,a in enumerate(self.tokenizer.note_attribute_order):
+                    attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
+                    attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
+                    # set attribute token indices on y axis
+                    plt.imshow(wops[:,0,aidx::self.n_attributes,attribute_token_idxs].mean(-2).cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
+                    plt.yticks(range(len(attribute_tokens)),attribute_tokens)
+                    plt.title(f"Attribute {a}, all notes")
+                    plt.show()
 
             # plt.plot(alphas)
             # plt.title("Alpha")
@@ -398,47 +431,10 @@ class SimplexDiffusionModel(pl.LightningModule):
         return [optimizer], [scheduler]
 
 if __name__ == "__main__":
-    genre_list = [
-        "other",
-        "pop",
-        "rock",
-        "italian%2cfrench%2cspanish",
-        "classical",
-        "romantic",
-        "renaissance",
-        "alternative-indie",
-        "metal",
-        "traditional",
-        "country",
-        "baroque",
-        "punk",
-        "modern",
-        "jazz",
-        "dance-eletric",
-        "rnb-soul",
-        "medley",
-        "blues",
-        "hip-hop-rap",
-        "hits of the 2000s",
-        "instrumental",
-        "midi karaoke",
-        "folk",
-        "newage",
-        "latino",
-        "hits of the 1980s",
-        "hits of 2011 2020",
-        "musical%2cfilm%2ctv",
-        "reggae-ska",
-        "hits of the 1970s",
-        "christian-gospel",
-        "world",
-        "early_20th_century",
-        "hits of the 1990s",
-        "grunge",
-        "australian artists",
-        "funk",
-        "best of british",
-    ]
+
+    BATCH_SIZE = 80
+
+    tag_list = open("./data/mmd_loops/tags.txt").read().splitlines()
 
     N_BARS = 4
 
@@ -452,7 +448,7 @@ if __name__ == "__main__":
         "n_tempo_bins": 16,
         "n_velocity_bins": 32,
         "time_signatures": None,
-        "tags": genre_list,
+        "tags": tag_list,
         "shuffle_notes": True,
         "use_offset": True,
         "merge_pitch_and_beat": False,
@@ -483,29 +479,27 @@ if __name__ == "__main__":
         format_mask_on_probs=True
     )
 
-    other_model = EncoderOnlyModel.load_from_checkpoint(
-        checkpoint_path = "./checkpoints/magic-forest-321/last.ckpt",
-        device="cpu"
-    )
-
-    model.transplant_weights(
-        other_model
-    )
-
-    # model = SimplexDiffusionModel.load_from_checkpoint(
-    #             checkpoint_path = "./checkpoints/quiet-puddle-18/last.ckpt",
-    #             learning_rate=2e-5,
-    #             activation="gelu",
-    #             map_location="cpu"
+    # other_model = EncoderOnlyModel.load_from_checkpoint(
+    #     checkpoint_path = "./checkpoints/magic-forest-321/last.ckpt",
+    #     device="cpu"
     # )
+
+    # model.transplant_weights(
+    #     other_model
+    # )
+
+    model = SimplexDiffusionModel.load_from_checkpoint(
+                checkpoint_path = "./checkpoints/serene-sunset-44/last.ckpt",
+                relative_loss = True,
+                map_location="cpu"
+    )
     # 80
-    BATCH_SIZE = 80
     # model.test_step(batch_size=60)
 
     trn_ds = MidiDataset(
-        cache_path="./paper_assets/trn_midi_records_unique_pr.pt",
+        cache_path="./data/mmd_loops/trn_midi_records_unique_pr.pt",
         path_filter_fn=lambda x: f"n_bars={N_BARS}" in x,
-        genre_list=genre_list,
+        genre_list=tag_list,
         tokenizer=tokenizer,
         transposition_range=[-4, 4],
         min_notes=8 * N_BARS,
@@ -513,9 +507,9 @@ if __name__ == "__main__":
     )
 
     val_ds = MidiDataset(
-        cache_path="./paper_assets/val_midi_records_unique_pr.pt",
+        cache_path="./data/mmd_loops/val_midi_records_unique_pr.pt",
         path_filter_fn=lambda x: f"n_bars={N_BARS}" in x,
-        genre_list=genre_list,
+        genre_list=tag_list,
         tokenizer=tokenizer,
         min_notes=8 * N_BARS,
         max_notes=tokenizer_config["max_notes"],
@@ -568,13 +562,14 @@ if __name__ == "__main__":
         ],
         logger=wandb_logger,
         gradient_clip_val=1.0,
-        accumulate_grad_batches=4,
+        # accumulate_grad_batches=1,
     )
 
     trainer.fit(
                 model,
                 trn_dl, 
                 val_dl,
+            
                 # ckpt_path = "./checkpoints/fanciful-planet-7/last.ckpt"
     )
                 # ckpt_path="checkpoints/upbeat-dawn-53/epoch=14-step=24330-val/loss_epoch=0.00273.ckpt")
