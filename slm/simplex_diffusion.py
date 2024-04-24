@@ -434,7 +434,7 @@ class SimplexDiffusionModel(pl.LightningModule):
 
 if __name__ == "__main__":
 
-    BATCH_SIZE = 80
+    BATCH_SIZE = 200
 
     tag_list = open("./data/mmd_loops/tags.txt").read().splitlines()
 
@@ -464,10 +464,10 @@ if __name__ == "__main__":
     tokenizer = MergedTokenizer(tokenizer_config)
 
     model = SimplexDiffusionModel(
-        hidden_size=768,
-        n_heads=12,
-        feed_forward_size=4 * 768,
-        n_layers=12,
+        hidden_size=512,
+        n_heads=8,
+        feed_forward_size=2 * 512,
+        n_layers=8,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
         learning_rate=1e-3,
@@ -490,11 +490,11 @@ if __name__ == "__main__":
     #     other_model
     # )
 
-    model = SimplexDiffusionModel.load_from_checkpoint(
-                checkpoint_path = "./checkpoints/serene-sunset-44/last.ckpt",
-                relative_loss = True,
-                map_location="cpu"
-    )
+    # model = SimplexDiffusionModel.load_from_checkpoint(
+    #             checkpoint_path = "./checkpoints/serene-sunset-44/last.ckpt",
+    #             relative_loss = False,
+    #             map_location="cpu"
+    # )
     # 80
     # model.test_step(batch_size=60)
 
@@ -571,6 +571,7 @@ if __name__ == "__main__":
                 model,
                 trn_dl, 
                 val_dl,
+                ckpt_path="./checkpoints/misunderstood-cloud-59/last.ckpt"
             
                 # ckpt_path = "./checkpoints/fanciful-planet-7/last.ckpt"
     )

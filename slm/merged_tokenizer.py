@@ -248,7 +248,7 @@ class MergedTokenizer():
         return torch.tensor(x_1h)
 
 
-    def infilling_mask(self, x, beat_range=None, pitches=None, min_notes= None, max_notes=None):
+    def infilling_mask(self, x, beat_range=None, pitches=None, min_notes= None, max_notes=None, mode= "harmonic+drums"):
         '''
         beat_range: tuple of ints, (min_beat, max_beat) : list of strings. If None, defaults to entire beat range.
         pitches : list of strings. If None, defaults to all pitches, including drums.
@@ -266,7 +266,6 @@ class MergedTokenizer():
 
         if beat_range is None:
             beat_range = (0, self.config["max_beats"])
-
 
         # get tokens
         tokens = self.indices_to_tokens(x)
@@ -365,6 +364,10 @@ class MergedTokenizer():
         restriction_mask[self.note_attribute_order.index("offset/beat"),:] *= offset_beat_mask
         restriction_mask[self.note_attribute_order.index("pitch"),:] *= pitch_mask
 
+
+
+
+
         dead_mask = np.zeros((len(self.note_attribute_order), len(self.vocab)), dtype=int)
         for attr_idx, note_attr in enumerate(self.note_attribute_order):
             dead_mask[attr_idx, self.token2idx[f"{note_attr}:-"]] = 1
@@ -393,6 +396,11 @@ class MergedTokenizer():
         dead = np.repeat(dead_mask[None,...], dead_notes, axis=0)
         forced = np.repeat(forced_mask[None,...], forced_notes, axis=0)
         optional = np.repeat(optional_mask[None,...], optional_notes, axis=0)
+
+
+        if mode == "harmonic":
+            forced[:,:,self.token2idx["instrument:Drums"]] = 0
+            optional[:,:,self.token2idx["instrument:Drums"]] = 0
 
         mask = np.concatenate([keep, modify, dead, optional, forced], axis=0)
 

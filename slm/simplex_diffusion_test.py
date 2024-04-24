@@ -1,5 +1,5 @@
 #%%
-device = "cuda:1"
+device = "cuda:0"
 from simplex_diffusion import SimplexDiffusionModel
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -12,9 +12,10 @@ checkpoint = "../checkpoints/fanciful-planet-7/last.ckpt"
 # checkpoint = "../checkpoints/dauntless-aardvark-20/last.ckpt"
 # checkpoint = "../checkpoints/twilight-haze-21/last.ckpt"
 # checkpoint = "../checkpoints/zany-waterfall-23/last.ckpt"
-checkpoint = "../checkpoints/effortless-resonance-33/last.ckpt"
+# checkpoint = "../checkpoints/effortless-resonance-33/last.ckpt"
 # checkpoint = "../checkpoints/ethereal-disco-37/last.ckpt"
 checkpoint = "../checkpoints/serene-sunset-44/last.ckpt"
+# checkpoint = "../checkpoints/misunderstood-cloud-59/last.ckpt"
 model = SimplexDiffusionModel.load_from_checkpoint(checkpoint, map_location=device)
 
 # print model
@@ -22,7 +23,6 @@ print(model)
 #%%
 import seaborn as sns
 
-#%% no grid
 
 # get the embedding
 embedding = model.embedding_layer.weight.detach().cpu().numpy().T
@@ -109,7 +109,7 @@ ds = MidiDataset(
 
 
 #%%
-RESAMPLE_IDX = 130
+RESAMPLE_IDX = 900
 
 x = ds[RESAMPLE_IDX]
 x_sm = model.tokenizer.decode(x)
@@ -124,48 +124,49 @@ sns.set_style("whitegrid", {'axes.grid' : False})
 
 tokenizer = model.tokenizer
 
-# mask = tokenizer.constraint_mask(
-#     # scale="C pentatonic",
-#     # tags=["metal"],
-#     # tempos=["126"],
-#     instruments = ["Drums","Bass",],
-#     min_notes = 50,
-#     max_notes = 150,
-#     min_notes_per_instrument=50,
-# )
-
-mask = tokenizer.infilling_mask(
-    x=x,
-    beat_range=(0, 8),
-    min_notes=100,
-    max_notes=290,
+mask = tokenizer.constraint_mask(
+    scale="C pentatonic",
+    # tags=["metal"],
+    # tempos=["126"],
+    instruments = ["Drums","Bass","Guitar"],
+    min_notes = 50,
+    max_notes = 290,
+    min_notes_per_instrument=10,
 )
 
+# mask = tokenizer.infilling_mask(
+#     x=x,
+#     beat_range=(0, 8),
+#     min_notes=100,
+#     max_notes=290,
+# )
 
-beat_range=(0,16)
-pitch_range = [f"pitch:{i}" for i in range(50,108) ]+["pitch:-"]
-# make infilling mask
-mask = (
-    model.tokenizer.infilling_mask(
-        x,
-        beat_range,
-        min_notes=0,
-        max_notes=290,
-        pitches=pitch_range,
-    )[None, ...]    
-    .to(model.device)
-    .float()
-) 
+
+# beat_range=(0,16)
+# pitch_range = [f"pitch:{i}" for i in range(30,108) ]+["pitch:-"]
+# # make infilling mask
+# mask = (
+#     model.tokenizer.infilling_mask(
+#         x,
+#         beat_range,
+#         min_notes=0,
+#         max_notes=275,
+#         pitches=pitch_range,
+#         mode ="harmonic"
+#     )[None, ...]    
+#     .to(model.device)
+#     .float()
+# ) 
 
 BATCH_SIZE = 2
-N_STEPS = 100
+N_STEPS = 50
 y = model.sample(mask,
                  BATCH_SIZE,
                  N_STEPS,
                  device=device,
                  argmax=True,
-                 temperature=1.0,
-                 top_p=0.9,
+                 temperature=0.1,
+                 top_p=1.0,
                  mask_noise_factor = 2.5,
                  )
 
