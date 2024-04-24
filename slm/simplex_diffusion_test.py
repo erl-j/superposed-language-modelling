@@ -41,13 +41,18 @@ ds = MidiDataset(
 
 
 #%%
-RESAMPLE_IDX = 1400
+RESAMPLE_IDX = 600
 
 x = ds[RESAMPLE_IDX]
 x_sm = model.tokenizer.decode(x)
 
 preview_sm(x_sm)
 
+#%%
+x2 = ds[RESAMPLE_IDX+500]
+x_sm2 = model.tokenizer.decode(x2)
+
+preview_sm(x_sm2)
 #%%
 
 # %%
@@ -60,49 +65,58 @@ mask = tokenizer.constraint_mask(
     scale="C pentatonic",
     # tags=["metal"],
     # tempos=["126"],
-    instruments = ["Drums","Bass","Guitar"],
+    instruments = ["Guitar"],
     min_notes = 50,
     max_notes = 290,
     min_notes_per_instrument=10,
 )
 
-mask = tokenizer.infilling_mask(
-    x=x,
-    beat_range=(4, 12),
-    min_notes=0,
-    max_notes=290,
-)
+# mask = tokenizer.infilling_mask(
+#     x=x,
+#     beat_range=(4, 12),
+#     min_notes=0,
+#     max_notes=290,
+# )
 
 
-# beat_range=(0,16)
-# pitch_range = [f"pitch:{i}" for i in range(30,108) ]+["pitch:-"]
-# # make infilling mask
-# mask = (
-#     model.tokenizer.infilling_mask(
-#         x,
-#         beat_range,
-#         min_notes=0,
-#         max_notes=275,
-#         pitches=pitch_range,
-#         mode ="harmonic"
-#     )[None, ...]    
-#     .to(model.device)
-#     .float()
-# ) 
+beat_range=(0,16)
+pitch_range = [f"pitch:{i}" for i in range(60,108) ]+["pitch:-"]
+# make infilling mask
+mask = (
+    model.tokenizer.infilling_mask(
+        x,
+        beat_range,
+        min_notes=x_sm.note_num(),
+        max_notes=275,
+        pitches=pitch_range,
+        mode ="harmonic"
+    )[None, ...]    
+    .to(model.device)
+    .float()
+) 
 
+import torch
+mask = torch.nn.functional.one_hot(x, num_classes=len(model.tokenizer.vocab)).float()
+# mask2 = torch.nn.functional.one_hot(x2, num_classes=len(model.tokenizer.vocab)).float()
 
+# mask = mask.mean(dim=0, keepdim=True) * torch.ones_like(mask)
+
+plt.imshow(mask.cpu().numpy().T, aspect="auto",interpolation="none")
+plt.show()
+
+# infilling top-p 0.5
 BATCH_SIZE = 2
-N_STEPS = 100
+N_STEPS = 50
 y = model.sample(mask,
                  BATCH_SIZE,
                  N_STEPS,
                  device=device,
                  argmax=True,
                  temperature=1.0,
-                 top_p=0.5,
-                 mask_noise_factor = 5.0,
-                 plot=False,
-                 enforce_mask=True,
+                 top_p=0.0,
+                 mask_noise_factor = 2.8,
+                 plot=True,
+                 enforce_mask=False,
                  )
 
 import matplotlib.pyplot as plt

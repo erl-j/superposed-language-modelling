@@ -317,13 +317,16 @@ class SimplexDiffusionModel(pl.LightningModule):
                 if enforce_mask and mask is not None:
                     wl[mask_flat < 0.5] = -torch.inf
 
+                if plot:
+                    preview_probs = torch.nn.functional.softmax(wl, dim=-1)
+                    w0ps.append(einops.rearrange(preview_probs, "(b s) v -> b s v", s = self.n_events*self.n_attributes).cpu())
+                
                 wl = top_k_top_p_filtering(wl, top_p=top_p)
 
                 # sample
                 w0p = torch.nn.functional.softmax(wl/temperature, dim=-1)
 
-                if plot:
-                    w0ps.append(einops.rearrange(w0p, "(b s) v -> b s v", s = self.n_events*self.n_attributes).cpu())
+
 
                 # sample
                 w0 = torch.multinomial(w0p, 1).squeeze(-1)
@@ -353,34 +356,38 @@ class SimplexDiffusionModel(pl.LightningModule):
             # pts = torch.stack(pts)
 
             if plot:
+                print(len(w0ps))
                 wops = torch.stack(w0ps)
 
-                for aidx,a in enumerate(self.tokenizer.note_attribute_order):
-                    attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
-                    attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
-                    # set attribute token indices on y axis
-                    plt.imshow(wops[:,0,aidx,attribute_token_idxs].cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
-                    plt.yticks(range(len(attribute_tokens)),attribute_tokens)
-                    plt.title(f"Attribute {a}")
-                    plt.show()
+                # for aidx,a in enumerate(self.tokenizer.note_attribute_order):
+                #     attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
+                #     attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
+                #     # set attribute token indices on y axis
+                #     plt.imshow(wops[:,0,aidx,attribute_token_idxs].cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
+                #     plt.yticks(range(len(attribute_tokens)),attribute_tokens)
+                #     plt.title(f"Attribute {a}")
+                #     plt.show()
 
-                for aidx,a in enumerate(self.tokenizer.note_attribute_order):
-                    attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
-                    attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
-                    # set attribute token indices on y axis
-                    plt.imshow(wops[:,0,aidx::self.n_attributes,attribute_token_idxs].mean(-2).cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
-                    plt.yticks(range(len(attribute_tokens)),attribute_tokens)
-                    plt.title(f"Attribute {a}, all notes")
-                    plt.show()
+                # for aidx,a in enumerate(self.tokenizer.note_attribute_order):
+                #     attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
+                #     attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
+                #     # set attribute token indices on y axis
+                #     plt.imshow(wops[:,0,aidx::self.n_attributes,attribute_token_idxs].mean(-2).cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
+                #     plt.yticks(range(len(attribute_tokens)),attribute_tokens)
+                #     plt.title(f"Attribute {a}, all notes")
+                #     plt.show()
 
-            # plt.plot(alphas)
-            # plt.title("Alpha")
-            # plt.show()
+                # plt.plot(alphas)
+                # plt.title("Alpha")
+                # plt.show()
 
-            # entropy = -torch.sum(pts*torch.log(pts),dim=-1).mean(dim=1).mean(dim=1)
-            # plt.plot(entropy.cpu().numpy())
-            # plt.title("Entropy")
-            # plt.show()
+
+                entropy = -torch.sum(wops*torch.log(wops+1e-9),dim=-1).mean(dim=1).mean(dim=1)
+
+                # log scale
+                plt.plot(np.log(entropy.cpu().numpy()))
+                plt.title("Entropy")
+                plt.show()
 
             # sample categorical
             return w0x
