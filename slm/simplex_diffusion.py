@@ -89,7 +89,7 @@ class SimplexDiffusionModel(pl.LightningModule):
 
         self.relative_loss = relative_loss
 
-    def forward(self, s, t):
+    def forward(self, s, t, mask=None):
         t_z = self.t_embedding(t)
         format_mask = self.format_mask[None, ...].to(s.device)
         x = s
@@ -104,6 +104,10 @@ class SimplexDiffusionModel(pl.LightningModule):
             x[format_mask.expand_as(x) < 0.5] = -self.k
             # softmax mask
             x = torch.nn.functional.softmax(x, dim=-1)
+
+        if mask is not None:
+            x = x * mask.float()
+            x = x / x.sum(dim=-1, keepdim=True)
 
         x = einops.rearrange(x, "b (t a) v -> b t a v", a=self.n_attributes)
         ze = self.embedding_layer(x)
@@ -279,7 +283,8 @@ class SimplexDiffusionModel(pl.LightningModule):
         argmax=False,
         temperature=1.0,
         top_p=1.0,
-        mask_noise_factor=0.1
+        mask_noise_factor=0.0,
+        enforce_mask=True,
     ):
         self.eval()
         with torch.no_grad():
@@ -309,7 +314,7 @@ class SimplexDiffusionModel(pl.LightningModule):
 
                 wl = einops.rearrange(wl, "b s v -> (b s) v", s = self.n_events*self.n_attributes)
 
-                if mask is not None:
+                if enforce_mask and mask is not None:
                     wl[mask_flat < 0.5] = -torch.inf
 
                 wl = top_k_top_p_filtering(wl, top_p=top_p)
