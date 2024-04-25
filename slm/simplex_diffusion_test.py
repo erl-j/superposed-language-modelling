@@ -129,12 +129,8 @@ mask = tokenizer.infilling_mask(
 # ) 
 
 import torch
-# mask = torch.nn.functional.one_hot(x, num_classes=len(model.tokenizer.vocab)).float()
-# # mask2 = torch.nn.functional.one_hot(x2, num_classes=len(model.tokenizer.vocab)).float()
+mask = torch.nn.functional.one_hot(x, num_classes=len(model.tokenizer.vocab)).float()
 
-# mask = mask.mean(dim=0, keepdim=True) * torch.ones_like(mask)
-# plt.imshow(mask.cpu().numpy().T, aspect="auto",interpolation="none")
-# plt.show()
 
 
 format_mask = torch.tensor(tokenizer.get_format_mask(), device=model.device).float()
@@ -165,9 +161,13 @@ mask = mask * format_mask
 torch.manual_seed(1)
 # infilling top-p 0.5
 BATCH_SIZE = 2
-N_STEPS = 100
+N_STEPS = 50
 
 prior = mask / mask.sum(dim=-1, keepdim=True)
+
+plt.imshow(prior.cpu().numpy().T, aspect="auto",interpolation="none")
+plt.title("Prior")
+plt.show()
 # check that the prior is normalized
 assert torch.allclose(prior.sum(dim=-1), torch.ones_like(prior.sum(dim=-1)))
 plt.imshow(prior.cpu().numpy().T, aspect="auto",interpolation="none")
@@ -179,9 +179,9 @@ y = model.sample2(prior,
                 argmax=True,
                 # temperature=1.0,
                 top_p=0.0,
-                prior_strength = 1.0,
+                prior_strength = 0.85,
                 plot=False,
-                post_prior=True
+                post_prior=False
                 )
 
 
