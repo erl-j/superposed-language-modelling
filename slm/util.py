@@ -11,6 +11,23 @@ from midi_player import MIDIPlayer
 from midi_player.stylers import basic, cifka_advanced
 import IPython.display as ipd
 import math
+
+
+
+def top_p_probs(probs, top_p=0.0):
+    # inputs are probs with shape [N, V]
+    sorted_probs, sorted_indices = torch.sort(probs, descending=True)
+    cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
+    sorted_indices_to_remove = cumulative_probs > top_p
+    sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+    sorted_indices_to_remove[..., 0] = 0
+    sorted_probs[sorted_indices_to_remove] = 0.0
+    sorted_indices = sorted_indices.argsort(-1)  # Corrected line
+    probs = torch.gather(sorted_probs, 1, sorted_indices)
+    # renormalize
+    probs = probs / probs.sum(dim=-1, keepdim=True)
+    return probs
+
 def preview_sm(x_sm):
     # rand int
     rand_int = np.random.randint(0, 1000000)

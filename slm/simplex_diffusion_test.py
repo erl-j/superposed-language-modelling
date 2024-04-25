@@ -5,25 +5,57 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 from util import preview_sm,piano_roll
+import matplotlib.pyplot as plt
+import seaborn as sns
+from data import MidiDataset
+import torch
 
-# checkpoint = "../checkpoints/quiet-puddle-18/last.ckpt"
 checkpoint = "../checkpoints/fanciful-planet-7/last.ckpt"
 # checkpoint = "../checkpoints/super-mountain-5/last.ckpt"
-# checkpoint = "../checkpoints/dauntless-aardvark-20/last.ckpt"
-# checkpoint = "../checkpoints/twilight-haze-21/last.ckpt"
-# checkpoint = "../checkpoints/zany-waterfall-23/last.ckpt"
 checkpoint = "../checkpoints/effortless-resonance-33/last.ckpt"
-# checkpoint = "../checkpoints/ethereal-disco-37/last.ckpt"
 checkpoint = "../checkpoints/serene-sunset-44/last.ckpt"
-# checkpoint = "../checkpoints/misunderstood-cloud-59/last.ckpt"
+# checkpoint = "../checkpoints/driven-violet-62/last.ckpt"
 model = SimplexDiffusionModel.load_from_checkpoint(checkpoint, map_location=device)
 
 # print model
-print(model)
 #%%
 
+# get the embedding
+embedding = model.embedding_layer.weight.detach().cpu().numpy().T
+projection = model.decoder_output_layer.weight.detach().cpu().numpy()
+
+# get vocab
+vocab = model.tokenizer.vocab
+
+embedding_norm = np.linalg.norm(embedding, axis=1, keepdims=True)
+projection_norm = np.linalg.norm(projection, axis=0, keepdims=True)
+
+# normalize the embedding
+embedding = embedding / embedding_norm
+projection = projection / projection_norm
+
+# compute the cosine similarity
+embedding_similarity = embedding @ embedding.T
+projection_similarity = projection @ projection.T
+
+
+# plot the similarity matrix
+# make large figure
+plt.figure(figsize=(50, 50))
+# set small font
+sns.set(font_scale=0.5)
+sns.heatmap(embedding_similarity, cmap="magma", xticklabels=vocab, yticklabels=vocab, mask = np.eye(len(vocab)))
+plt.show()
+
+# plot the similarity matrix
+# make large figure
+plt.figure(figsize=(50, 50))
+# set small font
+sns.set(font_scale=0.5)
+sns.heatmap(projection_similarity, cmap="magma", xticklabels=vocab, yticklabels=vocab, mask = np.eye(len(vocab)))
+plt.show()
+
 #%%
-from data import MidiDataset
 ROOT_DIR = "../"
 TMP_DIR = ROOT_DIR + "artefacts/tmp"
 OUTPUT_DIR = ROOT_DIR + "artefacts/output"
@@ -41,7 +73,7 @@ ds = MidiDataset(
 
 
 #%%
-RESAMPLE_IDX = 600
+RESAMPLE_IDX = 1400
 
 x = ds[RESAMPLE_IDX]
 x_sm = model.tokenizer.decode(x)
@@ -65,59 +97,78 @@ mask = tokenizer.constraint_mask(
     scale="C pentatonic",
     # tags=["metal"],
     # tempos=["126"],
-    instruments = ["Guitar"],
+    instruments = ["Guitar","Bass","Drums"],
     min_notes = 50,
-    max_notes = 290,
-    min_notes_per_instrument=10,
+    max_notes = 250,
+    min_notes_per_instrument=20,
 )
 
-# mask = tokenizer.infilling_mask(
-#     x=x,
-#     beat_range=(4, 12),
-#     min_notes=0,
-#     max_notes=290,
-# )
+mask = tokenizer.infilling_mask(
+    x=x,
+    beat_range=(4, 12),
+    min_notes=0,
+    max_notes=275,
+)
 
 
-beat_range=(0,16)
-pitch_range = [f"pitch:{i}" for i in range(60,108) ]+["pitch:-"]
-# make infilling mask
-mask = (
-    model.tokenizer.infilling_mask(
-        x,
-        beat_range,
-        min_notes=x_sm.note_num(),
-        max_notes=275,
-        pitches=pitch_range,
-        mode ="harmonic"
-    )[None, ...]    
-    .to(model.device)
-    .float()
-) 
+# beat_range=(0,16)
+# pitch_range = [f"pitch:{i}" for i in range(55,108) ]+["pitch:-"]
+# # make infilling mask
+# mask = (
+#     model.tokenizer.infilling_mask(
+#         x,
+#         beat_range,
+#         min_notes=x_sm.note_num(),
+#         max_notes=x_sm.note_num(),
+#         pitches=pitch_range,
+#         mode ="harmonic"
+#     )[None, ...]    
+#     .to(model.device)
+#     .float()
+# ) 
 
-import torch
+# import torch
 mask = torch.nn.functional.one_hot(x, num_classes=len(model.tokenizer.vocab)).float()
-# mask2 = torch.nn.functional.one_hot(x2, num_classes=len(model.tokenizer.vocab)).float()
+# # mask2 = torch.nn.functional.one_hot(x2, num_classes=len(model.tokenizer.vocab)).float()
 
 # mask = mask.mean(dim=0, keepdim=True) * torch.ones_like(mask)
+# plt.imshow(mask.cpu().numpy().T, aspect="auto",interpolation="none")
+# plt.show()
 
-plt.imshow(mask.cpu().numpy().T, aspect="auto",interpolation="none")
-plt.show()
 
 # infilling top-p 0.5
 BATCH_SIZE = 2
 N_STEPS = 50
-y = model.sample(mask,
-                 BATCH_SIZE,
-                 N_STEPS,
-                 device=device,
-                 argmax=True,
-                 temperature=1.0,
-                 top_p=0.0,
-                 mask_noise_factor = 2.8,
-                 plot=True,
-                 enforce_mask=False,
-                 )
+
+prior = mask / mask.sum(dim=-1, keepdim=True)
+# check that the prior is normalized
+assert torch.allclose(prior.sum(dim=-1), torch.ones_like(prior.sum(dim=-1)))
+plt.imshow(prior.cpu().numpy().T, aspect="auto",interpolation="none")
+plt.show()
+y = model.sample2(prior,
+                BATCH_SIZE,
+                N_STEPS,
+                device=device,
+                argmax=True,
+                temperature=1.0,
+                top_p=0.0,
+                prior_strength = 0.8,
+                plot=False,
+                post_prior=False
+                )
+
+
+# y = model.sample(mask,
+#                  BATCH_SIZE,
+#                  N_STEPS,
+#                  device=device,
+#                  argmax=True,
+#                  temperature=1.0,
+#                  top_p=0.0,
+#                  mask_noise_factor = 5.0,
+#                  plot=True,
+#                  enforce_mask=True,
+#                  )
 
 import matplotlib.pyplot as plt
 import torch

@@ -14,7 +14,7 @@ from torch import nn
 from augmentation import transpose_sm
 import einops
 from tqdm import tqdm
-from util import top_k_top_p_filtering
+from util import top_k_top_p_filtering, top_p_probs
 import numpy as np
 from lightning.pytorch.utilities import grad_norm
 import warnings
@@ -89,25 +89,30 @@ class SimplexDiffusionModel(pl.LightningModule):
 
         self.relative_loss = relative_loss
 
-    def forward(self, s, t, mask=None):
+    def forward(self, s, t, mask=None, prior_strength = 1.0):
         t_z = self.t_embedding(t)
         format_mask = self.format_mask[None, ...].to(s.device)
         x = s
         if self.format_mask_on_probs:
-            x = torch.nn.functional.softmax(x, dim=-1)
-            # set format mask to zeros
-            x[format_mask.expand_as(x) < 0.5] = 0
-            # renormalize
-            x = x / x.sum(dim=-1, keepdim=True)
+            if mask is not None:
+                x = torch.nn.functional.softmax(x, dim=-1)
+                uniform_prior = format_mask.expand_as(x).float()/format_mask.sum(dim=-1,keepdim=True).float()
+                prior = (1-prior_strength)*uniform_prior + prior_strength*mask
+                x = x * prior
+                x = x / x.sum(dim=-1, keepdim=True)
+            else:
+                x = torch.nn.functional.softmax(x, dim=-1)
+                # set format mask to zeros
+                x[format_mask.expand_as(x) < 0.5] = 0
+                # renormalize
+                x = x / x.sum(dim=-1, keepdim=True)
 
         else:
             x[format_mask.expand_as(x) < 0.5] = -self.k
             # softmax mask
             x = torch.nn.functional.softmax(x, dim=-1)
 
-        if mask is not None:
-            x = x * mask.float()
-            x = x / x.sum(dim=-1, keepdim=True)
+      
 
         x = einops.rearrange(x, "b (t a) v -> b t a v", a=self.n_attributes)
         ze = self.embedding_layer(x)
@@ -272,6 +277,148 @@ class SimplexDiffusionModel(pl.LightningModule):
         metrics = {"ce":cross_entropy}
       
         return metrics
+    
+    def sample2(
+        self,
+        prior=None,
+        batch_size=1,
+        nb_steps=10,
+        device="cpu",
+        plot=False,
+        argmax=False,
+        temperature=1.0,
+        top_p=1.0,
+        prior_strength=0.0,
+        post_prior=False,
+    ):
+        self.eval()
+        with torch.no_grad():
+            # repeat to batch_size
+            if prior is not None:
+                prior = prior.repeat(batch_size,1,1).to(self.device).float()
+                prior_flat = einops.rearrange(prior, "b s v -> (b s) v")
+                prior_simplex = (prior * 2 - 1)*self.k
+
+
+
+
+            t = torch.ones((batch_size,1,1),device=self.device)
+            alpha = self.schedule(t)
+            noise = torch.randn((batch_size, self.n_events*self.n_attributes,len(self.vocab)),device=self.device) * self.k
+
+
+            # if prior is not None:
+            #     noise=noise*(1-prior_strength)+prior_simplex*prior_strength
+
+            #     print(noise.mean(),noise.std())
+                # noise+=prior_simplex*prior_strength
+
+                # # rescale noise to mean 0 and std k
+                # noise = noise - noise.mean(dim=-1, keepdim=True) 
+                # noise = noise / noise.std(dim=-1, keepdim=True)
+                # noise = noise * self.k
+
+
+
+                
+            wt = noise
+            w0ps = []
+
+            for step in tqdm(range(nb_steps,-1,-1)):
+
+                t = torch.ones((batch_size,1,1),device=self.device) * (step/nb_steps)
+
+                wl = self.forward(wt,t, prior, prior_strength)
+
+                wl = einops.rearrange(wl, "b s v -> (b s) v", s = self.n_events*self.n_attributes)                
+
+                if plot:
+                    preview_probs = torch.nn.functional.softmax(wl, dim=-1)
+                    w0ps.append(einops.rearrange(preview_probs, "(b s) v -> b s v", s = self.n_events*self.n_attributes).cpu())
+                
+                # sample
+                w0p = torch.nn.functional.softmax(wl, dim=-1)
+
+                # print min and max of probs
+
+                if post_prior and prior is not None:
+                    w0p = (w0p+1e-9) * prior_flat
+                    w0p = w0p / w0p.sum(dim=-1, keepdim=True)
+
+                # check that top_p = 0 is greedy
+
+                # top p 
+
+                w0p = top_p_probs(w0p, top_p)
+
+
+                # sample
+                w0 = torch.multinomial(w0p, 1).squeeze(-1)
+
+                w0x = einops.rearrange(w0, "(b s) -> b s", s = self.n_events*self.n_attributes)
+
+                # convert back to simplex
+                w0 = torch.nn.functional.one_hot(w0x, num_classes=len(self.vocab)).float()
+
+                w0 = (w0 * 2 - 1) * self.k
+
+                noise = torch.randn((batch_size, self.n_events*self.n_attributes,len(self.vocab)),device=self.device) * self.k
+
+                # multiply noise w mask
+                # if prior is not None:
+                #     noise=noise*(1-prior_strength)+prior_simplex*prior_strength
+                    # rescale noise to mean 0 and std k
+                    # noise = noise - noise.mean(dim=-1, keepdim=True) 
+                    # noise = noise / noise.std(dim=-1, keepdim=True)
+                    # noise = noise * self.k
+                
+                t_minus_1 = torch.ones((batch_size,1,1),device=self.device) * ((step-1)/nb_steps)
+                alpha = self.schedule(t_minus_1)
+                wt = torch.sqrt(alpha) * w0 + torch.sqrt(1 - alpha) * noise
+
+             
+            #     sts.append(st.detach())
+            #     pts.append(pt.detach())
+            
+            # sts = torch.stack(sts)
+            # pts = torch.stack(pts)
+
+            if plot:
+                print(len(w0ps))
+                wops = torch.stack(w0ps)
+
+                # for aidx,a in enumerate(self.tokenizer.note_attribute_order):
+                #     attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
+                #     attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
+                #     # set attribute token indices on y axis
+                #     plt.imshow(wops[:,0,aidx,attribute_token_idxs].cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
+                #     plt.yticks(range(len(attribute_tokens)),attribute_tokens)
+                #     plt.title(f"Attribute {a}")
+                #     plt.show()
+
+                for aidx,a in enumerate(self.tokenizer.note_attribute_order):
+                    attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
+                    attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
+                    # set attribute token indices on y axis
+                    plt.imshow(wops[:,0,aidx::self.n_attributes,attribute_token_idxs].mean(-2).cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
+                    plt.yticks(range(len(attribute_tokens)),attribute_tokens)
+                    plt.title(f"Attribute {a}, all notes")
+                    plt.show()
+
+                # plt.plot(alphas)
+                # plt.title("Alpha")
+                # plt.show()
+
+
+                entropy = -torch.sum(wops*torch.log(wops+1e-9),dim=-1).mean(dim=1).mean(dim=1)
+
+                # log scale
+                plt.plot(np.log(entropy.cpu().numpy()))
+                plt.title("Entropy")
+                plt.show()
+
+            # sample categorical
+            return w0x
     
     def sample(
         self,
