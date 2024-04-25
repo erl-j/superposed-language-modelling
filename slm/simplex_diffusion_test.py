@@ -96,7 +96,7 @@ tokenizer = model.tokenizer
 mask = tokenizer.constraint_mask(
     scale="C pentatonic",
     tags=["pop"],
-    tempos=["126"],
+    # tempos=["126"],
     instruments = ["Piano","Bass","Drums"],
     min_notes = 50,
     max_notes = 250,
@@ -104,12 +104,12 @@ mask = tokenizer.constraint_mask(
 )
 
 
-# mask = tokenizer.infilling_mask(
-#     x=x,
-#     beat_range=(4, 12),
-#     min_notes=0,
-#     max_notes=275,
-# )
+mask = tokenizer.infilling_mask(
+    x=x,
+    beat_range=(4, 12),
+    min_notes=0,
+    max_notes=275,
+)
 
 
 # beat_range=(0,16)
@@ -128,7 +128,7 @@ mask = tokenizer.constraint_mask(
 #     .float()
 # ) 
 
-# import torch
+import torch
 # mask = torch.nn.functional.one_hot(x, num_classes=len(model.tokenizer.vocab)).float()
 # # mask2 = torch.nn.functional.one_hot(x2, num_classes=len(model.tokenizer.vocab)).float()
 
@@ -143,23 +143,29 @@ mask = mask.to(model.device).float()
 
 
 plt.imshow(mask.cpu().numpy().T, aspect="auto",interpolation="none")
+plt.title("Mask")
 plt.show()
 
 plt.imshow(format_mask.cpu().numpy().T, aspect="auto",interpolation="none")
+plt.title("Format Mask")
 plt.show()
 
 plt.imshow((mask*format_mask).cpu().T, aspect="auto",interpolation="none")
+plt.title("Mask * Format Mask")
 plt.show()
+
 # assert torch.allclose(mask, mask*format_mask)
 
+
+# mask = torch.ones_like(format_mask)
 mask = mask * format_mask
 
 
 # set torch seed
-torch.manual_seed(0)
+torch.manual_seed(1)
 # infilling top-p 0.5
 BATCH_SIZE = 2
-N_STEPS = 30
+N_STEPS = 100
 
 prior = mask / mask.sum(dim=-1, keepdim=True)
 # check that the prior is normalized
@@ -171,8 +177,8 @@ y = model.sample2(prior,
                 N_STEPS,
                 device=device,
                 argmax=True,
-                temperature=1.0,
-                top_p=0.5,
+                # temperature=1.0,
+                top_p=0.0,
                 prior_strength = 1.0,
                 plot=False,
                 post_prior=True

@@ -108,7 +108,13 @@ class SimplexDiffusionModel(pl.LightningModule):
                     x = (1-prior_strength)*x + prior_strength*mask
                     x = x / x.sum(dim=-1, keepdim=True)
                 elif mode == "b":
+                    # x = torch.nn.functional.softmax(x, dim=-1)
+
                     x = torch.nn.functional.softmax(x, dim=-1)
+                    # set format mask to zeros
+                    x[format_mask.expand_as(x) < 0.5] = 0
+                    # renormalize
+                    x = x / x.sum(dim=-1, keepdim=True)
                     uniform_prior = format_mask.expand_as(x).float()/format_mask.sum(dim=-1,keepdim=True).float()
                     prior = (1-prior_strength)*uniform_prior + prior_strength*mask
                     x = x * prior
