@@ -95,25 +95,26 @@ tokenizer = model.tokenizer
 
 mask = tokenizer.constraint_mask(
     scale="C pentatonic",
-    # tags=["metal"],
-    # tempos=["126"],
-    instruments = ["Guitar","Bass","Drums"],
+    tags=["pop"],
+    tempos=["126"],
+    instruments = ["Piano","Bass","Drums"],
     min_notes = 50,
     max_notes = 250,
-    min_notes_per_instrument=20,
+    min_notes_per_instrument=40,
 )
 
-mask = tokenizer.infilling_mask(
-    x=x,
-    beat_range=(4, 12),
-    min_notes=0,
-    max_notes=275,
-)
+
+# mask = tokenizer.infilling_mask(
+#     x=x,
+#     beat_range=(4, 12),
+#     min_notes=0,
+#     max_notes=275,
+# )
 
 
 # beat_range=(0,16)
-# pitch_range = [f"pitch:{i}" for i in range(55,108) ]+["pitch:-"]
-# # make infilling mask
+# pitch_range = [f"pitch:{i}" for i in range(50,108) ]+["pitch:-"]
+# #make infilling mask
 # mask = (
 #     model.tokenizer.infilling_mask(
 #         x,
@@ -128,7 +129,7 @@ mask = tokenizer.infilling_mask(
 # ) 
 
 # import torch
-mask = torch.nn.functional.one_hot(x, num_classes=len(model.tokenizer.vocab)).float()
+# mask = torch.nn.functional.one_hot(x, num_classes=len(model.tokenizer.vocab)).float()
 # # mask2 = torch.nn.functional.one_hot(x2, num_classes=len(model.tokenizer.vocab)).float()
 
 # mask = mask.mean(dim=0, keepdim=True) * torch.ones_like(mask)
@@ -136,9 +137,29 @@ mask = torch.nn.functional.one_hot(x, num_classes=len(model.tokenizer.vocab)).fl
 # plt.show()
 
 
+format_mask = torch.tensor(tokenizer.get_format_mask(), device=model.device).float()
+
+mask = mask.to(model.device).float()
+
+
+plt.imshow(mask.cpu().numpy().T, aspect="auto",interpolation="none")
+plt.show()
+
+plt.imshow(format_mask.cpu().numpy().T, aspect="auto",interpolation="none")
+plt.show()
+
+plt.imshow((mask*format_mask).cpu().T, aspect="auto",interpolation="none")
+plt.show()
+# assert torch.allclose(mask, mask*format_mask)
+
+mask = mask * format_mask
+
+
+# set torch seed
+torch.manual_seed(0)
 # infilling top-p 0.5
 BATCH_SIZE = 2
-N_STEPS = 50
+N_STEPS = 30
 
 prior = mask / mask.sum(dim=-1, keepdim=True)
 # check that the prior is normalized
@@ -151,10 +172,10 @@ y = model.sample2(prior,
                 device=device,
                 argmax=True,
                 temperature=1.0,
-                top_p=0.0,
-                prior_strength = 0.8,
+                top_p=0.5,
+                prior_strength = 1.0,
                 plot=False,
-                post_prior=False
+                post_prior=True
                 )
 
 
@@ -199,4 +220,4 @@ preview_sm(y_sm)
 
 
 
-# %%
+ # %%

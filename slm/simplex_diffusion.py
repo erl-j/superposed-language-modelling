@@ -95,11 +95,28 @@ class SimplexDiffusionModel(pl.LightningModule):
         x = s
         if self.format_mask_on_probs:
             if mask is not None:
-                x = torch.nn.functional.softmax(x, dim=-1)
-                uniform_prior = format_mask.expand_as(x).float()/format_mask.sum(dim=-1,keepdim=True).float()
-                prior = (1-prior_strength)*uniform_prior + prior_strength*mask
-                x = x * prior
-                x = x / x.sum(dim=-1, keepdim=True)
+
+                mode = "b"
+
+                # A
+                if mode == "a":
+                    x = torch.nn.functional.softmax(x, dim=-1)
+                    # set format mask to zeros
+                    x[format_mask.expand_as(x) < 0.5] = 0
+                    # renormalize
+                    x = x / x.sum(dim=-1, keepdim=True)
+                    x = (1-prior_strength)*x + prior_strength*mask
+                    x = x / x.sum(dim=-1, keepdim=True)
+                elif mode == "b":
+                    x = torch.nn.functional.softmax(x, dim=-1)
+                    uniform_prior = format_mask.expand_as(x).float()/format_mask.sum(dim=-1,keepdim=True).float()
+                    prior = (1-prior_strength)*uniform_prior + prior_strength*mask
+                    x = x * prior
+                    x = x / x.sum(dim=-1, keepdim=True)
+
+                # plt.plot(x[0,0].cpu().numpy())
+                # plt.show()
+                # asd
             else:
                 x = torch.nn.functional.softmax(x, dim=-1)
                 # set format mask to zeros
@@ -305,21 +322,6 @@ class SimplexDiffusionModel(pl.LightningModule):
             t = torch.ones((batch_size,1,1),device=self.device)
             alpha = self.schedule(t)
             noise = torch.randn((batch_size, self.n_events*self.n_attributes,len(self.vocab)),device=self.device) * self.k
-
-
-            # if prior is not None:
-            #     noise=noise*(1-prior_strength)+prior_simplex*prior_strength
-
-            #     print(noise.mean(),noise.std())
-                # noise+=prior_simplex*prior_strength
-
-                # # rescale noise to mean 0 and std k
-                # noise = noise - noise.mean(dim=-1, keepdim=True) 
-                # noise = noise / noise.std(dim=-1, keepdim=True)
-                # noise = noise * self.k
-
-
-
                 
             wt = noise
             w0ps = []
@@ -339,15 +341,12 @@ class SimplexDiffusionModel(pl.LightningModule):
                 # sample
                 w0p = torch.nn.functional.softmax(wl, dim=-1)
 
-                # print min and max of probs
-
                 if post_prior and prior is not None:
                     w0p = (w0p+1e-9) * prior_flat
+                    # if very low prop in prior then 0
+                    # w0p = (w0p * (prior_flat>1e-9).float()) +1e-9
                     w0p = w0p / w0p.sum(dim=-1, keepdim=True)
 
-                # check that top_p = 0 is greedy
-
-                # top p 
 
                 w0p = top_p_probs(w0p, top_p)
 
@@ -363,14 +362,6 @@ class SimplexDiffusionModel(pl.LightningModule):
                 w0 = (w0 * 2 - 1) * self.k
 
                 noise = torch.randn((batch_size, self.n_events*self.n_attributes,len(self.vocab)),device=self.device) * self.k
-
-                # multiply noise w mask
-                # if prior is not None:
-                #     noise=noise*(1-prior_strength)+prior_simplex*prior_strength
-                    # rescale noise to mean 0 and std k
-                    # noise = noise - noise.mean(dim=-1, keepdim=True) 
-                    # noise = noise / noise.std(dim=-1, keepdim=True)
-                    # noise = noise * self.k
                 
                 t_minus_1 = torch.ones((batch_size,1,1),device=self.device) * ((step-1)/nb_steps)
                 alpha = self.schedule(t_minus_1)
