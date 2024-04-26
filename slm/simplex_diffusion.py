@@ -20,14 +20,14 @@ from lightning.pytorch.utilities import grad_norm
 import warnings
 from train import EncoderOnlyModel
 
-def _cleanup_handler():
-    for f in _cleanups:
-        f()
+# def _cleanup_handler():
+#     for f in _cleanups:
+#         f()
 
-import atexit as _atexit
-_atexit.register(_cleanup_handler)
+# import atexit as _atexit
+# _atexit.register(_cleanup_handler)
 
-warnings.filterwarnings("ignore", category=ResourceWarning)
+# warnings.filterwarnings("ignore", category=ResourceWarning)
 
 class SimplexDiffusionModel(pl.LightningModule):
     def __init__(
@@ -300,17 +300,57 @@ class SimplexDiffusionModel(pl.LightningModule):
         metrics = {"ce":cross_entropy}
       
         return metrics
-    
+
+    def self_eval(
+            self,
+            x,
+            prior,
+            prior_strength,
+            t=1,
+            decay_prior=False,
+    ):
+        
+        batch_size, na = x.shape
+
+        t = torch.ones((batch_size,1,1),device=self.device) * t
+
+        x1h = torch.nn.functional.one_hot(x, num_classes=len(self.vocab)).float()
+
+        s = (x1h * 2 - 1)* self.k
+
+        vocab_size = len(self.vocab)
+
+        alpha_t = self.schedule(t)
+
+        t = torch.ones((batch_size,1,1),device=self.device) * 0.5
+
+        alpha = self.schedule(t)
+
+        noise = torch.randn(s.shape, device=s.device)*self.k
+        s_n =  torch.sqrt(alpha) * s + torch.sqrt(1 - alpha) * noise
+
+        wl = self.forward(noise,t, prior, prior_strength*(1-alpha_t) if decay_prior else prior_strength)
+
+        # compute cross entropy
+        cross_entropy = torch.nn.functional.cross_entropy(
+            wl.reshape(-1,vocab_size),
+            x.flatten(),
+            reduction='none'
+        ).reshape(batch_size,na).mean(dim=-1)
+
+        return cross_entropy
+
     @torch.no_grad()
     def sample2(
         self,
-        prior=None,
-        batch_size=1,
-        nb_steps=10,
+        prior,
+        batch_size,
+        nb_steps,
+        top_p,
+        prior_strength,
+        enforce_prior,
         plot=False,
-        top_p=1.0,
-        prior_strength=1.0,
-        post_prior=False,
+        decay_prior=False
     ):
         self.eval()
         with torch.no_grad():
@@ -320,11 +360,11 @@ class SimplexDiffusionModel(pl.LightningModule):
                 prior = prior*format_mask
                 # normalize
                 prior = prior / prior.sum(dim=-1, keepdim=True)
-                prior = prior.repeat(batch_size,1,1).to(self.device).float()
+                if prior.shape[0] != batch_size:
+                    prior = prior.repeat(batch_size,1,1)
+                prior = prior.to(self.device).float()
                 prior_flat = einops.rearrange(prior, "b s v -> (b s) v")
                 prior_simplex = (prior * 2 - 1)*self.k
-
-
 
 
             t = torch.ones((batch_size,1,1),device=self.device)
@@ -334,11 +374,15 @@ class SimplexDiffusionModel(pl.LightningModule):
             wt = noise
             w0ps = []
 
+            alphas = []
+
             for step in tqdm(range(nb_steps,-1,-1)):
 
                 t = torch.ones((batch_size,1,1),device=self.device) * (step/nb_steps)
 
-                wl = self.forward(wt,t, prior, prior_strength)
+                alpha_t = self.schedule(t)
+
+                wl = self.forward(wt,t, prior, prior_strength*(1-alpha_t) if decay_prior else prior_strength)
 
                 wl = einops.rearrange(wl, "b s v -> (b s) v", s = self.n_events*self.n_attributes)                
 
@@ -349,7 +393,7 @@ class SimplexDiffusionModel(pl.LightningModule):
                 # sample
                 w0p = torch.nn.functional.softmax(wl, dim=-1)
 
-                if post_prior and prior is not None:
+                if enforce_prior and prior is not None:
                     w0p = (w0p+1e-9) * prior_flat
                     # if very low prop in prior then 0
                     # w0p = (w0p * (prior_flat>1e-9).float()) +1e-9
@@ -373,6 +417,7 @@ class SimplexDiffusionModel(pl.LightningModule):
                 
                 t_minus_1 = torch.ones((batch_size,1,1),device=self.device) * ((step-1)/nb_steps)
                 alpha = self.schedule(t_minus_1)
+                alphas.append(alpha[0].item())
                 wt = torch.sqrt(alpha) * w0 + torch.sqrt(1 - alpha) * noise
 
              
@@ -404,10 +449,6 @@ class SimplexDiffusionModel(pl.LightningModule):
                     plt.title(f"Attribute {a}, all notes")
                     plt.show()
 
-                # plt.plot(alphas)
-                # plt.title("Alpha")
-                # plt.show()
-
 
                 entropy = -torch.sum(wops*torch.log(wops+1e-9),dim=-1).mean(dim=1).mean(dim=1)
 
@@ -416,124 +457,10 @@ class SimplexDiffusionModel(pl.LightningModule):
                 plt.title("Entropy")
                 plt.show()
 
-            # sample categorical
-            return w0x
-    
-    def sample(
-        self,
-        mask=None,
-        batch_size=1,
-        nb_steps=10,
-        device="cpu",
-        plot=False,
-        argmax=False,
-        temperature=1.0,
-        top_p=1.0,
-        mask_noise_factor=0.0,
-        enforce_mask=True,
-    ):
-        self.eval()
-        with torch.no_grad():
-            # repeat to batch_size
-            if mask is not None:
-                mask = mask.repeat(batch_size,1,1).to(self.device)
-                mask_flat = einops.rearrange(mask, "b s v -> (b s) v")
-                mask_11 = mask * 2 - 1
 
-
-            t = torch.ones((batch_size,1,1),device=self.device)
-            alpha = self.schedule(t)
-            noise = torch.randn((batch_size, self.n_events*self.n_attributes,len(self.vocab)),device=self.device) * self.k
-
-            if mask is not None and mask_noise_factor:
-                noise+=mask_11*mask_noise_factor
-                
-                
-            wt = noise
-            w0ps = []
-
-            for step in tqdm(range(nb_steps,-1,-1)):
-
-                t = torch.ones((batch_size,1,1),device=self.device) * (step/nb_steps)
-
-                wl = self.forward(wt,t)
-
-                wl = einops.rearrange(wl, "b s v -> (b s) v", s = self.n_events*self.n_attributes)
-
-                if enforce_mask and mask is not None:
-                    wl[mask_flat < 0.5] = -torch.inf
-
-                if plot:
-                    preview_probs = torch.nn.functional.softmax(wl, dim=-1)
-                    w0ps.append(einops.rearrange(preview_probs, "(b s) v -> b s v", s = self.n_events*self.n_attributes).cpu())
-                
-                wl = top_k_top_p_filtering(wl, top_p=top_p)
-
-                # sample
-                w0p = torch.nn.functional.softmax(wl/temperature, dim=-1)
-
-
-
-                # sample
-                w0 = torch.multinomial(w0p, 1).squeeze(-1)
-
-                w0x = einops.rearrange(w0, "(b s) -> b s", s = self.n_events*self.n_attributes)
-
-                # convert back to simplex
-                w0 = torch.nn.functional.one_hot(w0x, num_classes=len(self.vocab)).float()
-
-                w0 = (w0 * 2 - 1) * self.k
-
-                noise = torch.randn((batch_size, self.n_events*self.n_attributes,len(self.vocab)),device=self.device) * self.k
-
-                # multiply noise w mask
-                if mask is not None and mask_noise_factor:
-                    noise+=mask_11*mask_noise_factor
-                
-                t_minus_1 = torch.ones((batch_size,1,1),device=self.device) * ((step-1)/nb_steps)
-                alpha = self.schedule(t_minus_1)
-                wt = torch.sqrt(alpha) * w0 + torch.sqrt(1 - alpha) * noise
-
-             
-            #     sts.append(st.detach())
-            #     pts.append(pt.detach())
-            
-            # sts = torch.stack(sts)
-            # pts = torch.stack(pts)
-
-            if plot:
-                print(len(w0ps))
-                wops = torch.stack(w0ps)
-
-                # for aidx,a in enumerate(self.tokenizer.note_attribute_order):
-                #     attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
-                #     attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
-                #     # set attribute token indices on y axis
-                #     plt.imshow(wops[:,0,aidx,attribute_token_idxs].cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
-                #     plt.yticks(range(len(attribute_tokens)),attribute_tokens)
-                #     plt.title(f"Attribute {a}")
-                #     plt.show()
-
-                # for aidx,a in enumerate(self.tokenizer.note_attribute_order):
-                #     attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
-                #     attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
-                #     # set attribute token indices on y axis
-                #     plt.imshow(wops[:,0,aidx::self.n_attributes,attribute_token_idxs].mean(-2).cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
-                #     plt.yticks(range(len(attribute_tokens)),attribute_tokens)
-                #     plt.title(f"Attribute {a}, all notes")
-                #     plt.show()
-
-                # plt.plot(alphas)
-                # plt.title("Alpha")
-                # plt.show()
-
-
-                entropy = -torch.sum(wops*torch.log(wops+1e-9),dim=-1).mean(dim=1).mean(dim=1)
-
-                # log scale
-                plt.plot(np.log(entropy.cpu().numpy()))
-                plt.title("Entropy")
-                plt.show()
+            plt.plot(alphas)
+            plt.title("Alpha")
+            plt.show()
 
             # sample categorical
             return w0x
@@ -592,7 +519,7 @@ class SimplexDiffusionModel(pl.LightningModule):
 
 if __name__ == "__main__":
 
-    BATCH_SIZE = 200
+    BATCH_SIZE = 20
 
     tag_list = open("./data/mmd_loops/tags.txt").read().splitlines()
 
@@ -622,10 +549,10 @@ if __name__ == "__main__":
     tokenizer = MergedTokenizer(tokenizer_config)
 
     model = SimplexDiffusionModel(
-        hidden_size=512,
-        n_heads=8,
-        feed_forward_size=2 * 512,
-        n_layers=8,
+        hidden_size=768,
+        n_heads=12,
+        feed_forward_size=4 * 768,
+        n_layers=12,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
         learning_rate=1e-3,
@@ -705,7 +632,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[2,3],
+        devices=[7],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[
@@ -729,7 +656,7 @@ if __name__ == "__main__":
                 model,
                 trn_dl, 
                 val_dl,
-                ckpt_path="./checkpoints/driven-violet-62/last.ckpt"
+                ckpt_path="./checkpoints/flowing-paper-64/last.ckpt"
             
                 # ckpt_path = "./checkpoints/fanciful-planet-7/last.ckpt"
     )

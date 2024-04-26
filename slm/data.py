@@ -53,8 +53,10 @@ class MidiDataset(torch.utils.data.Dataset):
             transposition = random.randint(*self.transposition_range)
             midi = transpose_sm(midi, transposition)
         return torch.tensor(
-            self.tokenizer.encode(midi
-            ,random.choice(record["genre"] if len(record["genre"]) > 0 else ["other"])
+            self.tokenizer.encode(
+            midi
+            ,
+            random.choice(record["genre"] if len(record["genre"]) > 0 else ["other"])
             )
         )
 

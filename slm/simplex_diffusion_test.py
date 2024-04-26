@@ -10,11 +10,14 @@ import seaborn as sns
 from data import MidiDataset
 import torch
 
-checkpoint = "../checkpoints/fanciful-planet-7/last.ckpt"
+
+# checkpoint = "../checkpoints/fanciful-planet-7/last.ckpt"
 # checkpoint = "../checkpoints/super-mountain-5/last.ckpt"
-checkpoint = "../checkpoints/effortless-resonance-33/last.ckpt"
-checkpoint = "../checkpoints/serene-sunset-44/last.ckpt"
+# checkpoint = "../checkpoints/effortless-resonance-33/last.ckpt"
+# checkpoint = "../checkpoints/serene-sunset-44/last.ckpt"
 # checkpoint = "../checkpoints/driven-violet-62/last.ckpt"
+checkpoint = "../checkpoints/flowing-paper-64/last.ckpt"
+# checkpoint = "../checkpoints/serene-sunset-44/epoch=93-step=201068-val/loss_epoch=0.48428.ckpt"
 model = SimplexDiffusionModel.load_from_checkpoint(checkpoint, map_location=device)
 
 # print model
@@ -94,22 +97,22 @@ sns.set_style("whitegrid", {'axes.grid' : False})
 tokenizer = model.tokenizer
 
 mask = tokenizer.constraint_mask(
-    scale="C pentatonic",
-    tags=["pop"],
+    scale="C major",
+    tags=["jazz"],
     # tempos=["126"],
-    instruments = ["Piano","Bass","Drums"],
+    instruments = ["Piano"],
     min_notes = 50,
     max_notes = 250,
     min_notes_per_instrument=40,
 )
 
 
-mask = tokenizer.infilling_mask(
-    x=x,
-    beat_range=(4, 12),
-    min_notes=0,
-    max_notes=275,
-)
+# mask = tokenizer.infilling_mask(
+#     x=x,
+#     beat_range=(4, 12),
+#     min_notes=0,
+#     max_notes=275,
+# )
 
 
 # beat_range=(0,16)
@@ -120,7 +123,7 @@ mask = tokenizer.infilling_mask(
 #         x,
 #         beat_range,
 #         min_notes=x_sm.note_num(),
-#         max_notes=x_sm.note_num(),
+#         max_notes=275,
 #         pitches=pitch_range,
 #         mode ="harmonic"
 #     )[None, ...]    
@@ -128,8 +131,7 @@ mask = tokenizer.infilling_mask(
 #     .float()
 # ) 
 
-import torch
-mask = torch.nn.functional.one_hot(x, num_classes=len(model.tokenizer.vocab)).float()
+# mask = torch.nn.functional.one_hot(x, num_classes=len(model.tokenizer.vocab)).float()
 
 
 
@@ -154,14 +156,14 @@ plt.show()
 
 
 # mask = torch.ones_like(format_mask)
-mask = mask * format_mask
+# mask = mask * format_mask
 
 
 # set torch seed
 torch.manual_seed(1)
 # infilling top-p 0.5
-BATCH_SIZE = 2
-N_STEPS = 50
+BATCH_SIZE = 30
+N_STEPS = 300
 
 prior = mask / mask.sum(dim=-1, keepdim=True)
 
@@ -172,30 +174,22 @@ plt.show()
 assert torch.allclose(prior.sum(dim=-1), torch.ones_like(prior.sum(dim=-1)))
 plt.imshow(prior.cpu().numpy().T, aspect="auto",interpolation="none")
 plt.show()
+
+# generation 100/0.9 as well?
+# infilling 100/0.9
+# 100 steps
 y = model.sample2(prior,
                 BATCH_SIZE,
                 N_STEPS,
-                device=device,
-                argmax=True,
-                # temperature=1.0,
-                top_p=0.0,
-                prior_strength = 0.85,
+                top_p=1.0,
+                prior_strength = 1.0,
                 plot=False,
-                post_prior=False
+                enforce_prior=True,
+                decay_prior=False,
                 )
 
+#%%
 
-# y = model.sample(mask,
-#                  BATCH_SIZE,
-#                  N_STEPS,
-#                  device=device,
-#                  argmax=True,
-#                  temperature=1.0,
-#                  top_p=0.0,
-#                  mask_noise_factor = 5.0,
-#                  plot=True,
-#                  enforce_mask=True,
-#                  )
 
 import matplotlib.pyplot as plt
 import torch
@@ -227,3 +221,26 @@ preview_sm(y_sm)
 
 
  # %%
+
+ce = model.self_eval(y, None, None, t=1).detach().cpu()
+print(ce.shape)
+plt.plot(ce.detach().cpu())
+plt.show()
+
+# sort by the lowest cross entropy
+idx = ce.argsort()
+for i in range(5):
+    y_sm = model.tokenizer.decode(y[idx[i]])
+    print(f"Cross Entropy: {ce[idx[i]]}")
+    print(f"Number of notes: {y_sm.note_num()}")
+    preview_sm(y_sm)
+    print("\n\n")
+
+# get 5 highest
+for i in range(5):
+    y_sm = model.tokenizer.decode(y[idx[-i]])
+    print(f"Cross Entropy: {ce[idx[-i]]}")
+    print(f"Number of notes: {y_sm.note_num()}")
+    preview_sm(y_sm)
+    print("\n\n")
+# %%

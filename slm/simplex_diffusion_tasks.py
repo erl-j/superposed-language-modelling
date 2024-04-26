@@ -23,12 +23,9 @@ import torch
 import einops
 
 #%%
-checkpoint = "../checkpoints/fanciful-planet-7/last.ckpt"
-# checkpoint = "../checkpoints/super-mountain-5/last.ckpt"
-checkpoint = "../checkpoints/effortless-resonance-33/last.ckpt"
-checkpoint = "../checkpoints/serene-sunset-44/last.ckpt"
-# checkpoint = "../checkpoints/driven-violet-62/last.ckpt"
-model = SimplexDiffusionModel.load_from_checkpoint(checkpoint, map_location=device)
+ROOT_DIR = "../"
+checkpoint = "checkpoints/serene-sunset-44/last.ckpt"
+model = SimplexDiffusionModel.load_from_checkpoint(ROOT_DIR+checkpoint, map_location=device)
 
 #%%
 SEED = 0
@@ -36,21 +33,10 @@ np.random.seed(SEED)
 torch.manual_seed(SEED)
 torch.cuda.manual_seed(SEED)
 
-ROOT_DIR = "./"
+
 TMP_DIR = ROOT_DIR + "tmp"
 OUTPUT_DIR = ROOT_DIR + "artefacts/simplex/"
 device = "cuda:4"
-
-
-SEED = 0
-np.random.seed(SEED)
-torch.manual_seed(SEED)
-torch.cuda.manual_seed(SEED)
-
-ROOT_DIR = "./"
-TMP_DIR = ROOT_DIR + "tmp"
-OUTPUT_DIR = ROOT_DIR + "artefacts/simplex/"
-device = "cuda:0"
 
 def export_batch(y, tokenizer, output_dir):
     for sample_index in tqdm(range(y.shape[0])):
@@ -79,8 +65,44 @@ ds = MidiDataset(
 dl = torch.utils.data.DataLoader(
     ds,
     batch_size=BATCH_SIZE,
-    shuffle=True,
+    shuffle=False,
 )
+
+#%%
+# get random index
+found = False
+while not found:
+    index = np.random.randint(0, len(ds))
+    # get sample
+    sample = ds[index]
+    tokens = tokenizer.indices_to_tokens(sample)
+    token_set = set(tokens)
+    
+    tags = [
+            "other",
+            # "hits of the 2000s",
+            # "hip-hop-rap",
+            # "funk",
+            # "classical",
+            # "instrumental",
+            # "hits of 2011 2020",
+            ]
+    for tag in tags:
+        if "tag:"+tag in token_set:
+            print(f"{tag}")
+            found = True
+            break
+    
+print(f"Index: {index}")
+
+# decode 
+sample_sm = tokenizer.decode(sample)
+
+# preview
+preview_sm(sample_sm)
+
+#%%
+
 iterator = iter(dl)
 # get batch
 # drop first
@@ -89,6 +111,15 @@ batch = next(iterator)
 export_batch(batch,tokenizer,OUTPUT_DIR + "/natural")
 
 #%%
+
+# y = model.sample2(
+#                 prior,
+#                 BATCH_SIZE,
+#                 N_STEPS,
+#                 top_p=0.0,
+#                 prior_strength = 1.0,
+#                 post_prior=True
+# )
 
 tasks = [
 "pitch_set",
@@ -100,15 +131,23 @@ tasks = [
 "infilling_start",
 "infilling_end",
 "generate",
-"resample_velocity",
-"variation"
-"constrained_generation"
+"variation",
+"constrained_generation",
 "infilling_harmonic",
 "infilling_drums"
 ]
 
+N_STEPS = 100
+
 # infilling tasks
 for task in tasks:
+        
+        print(f"Task: {task}")
+        
+        top_p = None
+        prior_strength = None
+        enforce_prior = None
+
         # prepare masks
         masks = []
         for sample_idx in range(batch.shape[0]):
@@ -119,6 +158,12 @@ for task in tasks:
             min_pitch,max_pitch = get_sm_pitch_range(sample_sm)
 
             if "infilling" in task: 
+
+                mode = ".."
+
+                top_p = 0.0
+                prior_strength = 1.0
+                enforce_prior = True
 
                 match task:
                     case "infilling_high":
@@ -193,9 +238,18 @@ for task in tasks:
             
             elif "generate" in task:
 
+                top_p = 0.5
+                prior_strength = 1.0
+                enforce_prior = True
+
                 mask = model.format_mask[None, ...].float()
 
             elif "constrained" in task:
+
+                top_p = 0.5
+                prior_strength = 1.0
+                enforce_prior = True
+
                 x = batch[sample_idx]
                 x_sm = model.tokenizer.decode(x)
                 x_tokens = model.tokenizer.indices_to_tokens(x)
@@ -234,6 +288,10 @@ for task in tasks:
                 )[None, ...].float()
 
             elif task == "pitch_set":
+                top_p = 0.0
+                prior_strength = 1.0
+                enforce_prior = True
+
                 x = batch[sample_idx]
                 x_sm = model.tokenizer.decode(x)
                 n_notes = x_sm.note_num()
@@ -245,11 +303,14 @@ for task in tasks:
                 # get pitch tokens
                 pitch_tokens = (x_a[:,model.tokenizer.note_attribute_order.index("pitch"),:].sum(axis=0)>0).float()
                 # replace pitch attribute with pitch tokens, making sure that shape matches x_a
-                print(pitch_tokens.shape)
                 x_a[:,model.tokenizer.note_attribute_order.index("pitch")] = pitch_tokens
                 mask = einops.rearrange(x_a,"n_notes n_attributes vocab -> (n_notes n_attributes) vocab")[None,...]
 
             elif task == "onset_offset_set":
+                top_p = 0.0
+                prior_strength = 1.0
+                enforce_prior = True
+
                 x = batch[sample_idx]
                 x_sm = model.tokenizer.decode(x)
                 n_notes = x_sm.note_num()
@@ -270,6 +331,9 @@ for task in tasks:
                 mask = einops.rearrange(x_a,"n_notes n_attributes vocab -> (n_notes n_attributes) vocab")[None,...]
 
             elif task == "pitch_onset_offset_set":
+                top_p = 0.0
+                prior_strength = 1.0
+                enforce_prior = True
 
                 x = batch[sample_idx]
                 x_sm = model.tokenizer.decode(x)
@@ -295,21 +359,33 @@ for task in tasks:
 
 
                 mask = einops.rearrange(x_a,"n_notes n_attributes vocab -> (n_notes n_attributes) vocab")[None,...]
+            
+            elif task == "variation":
+                top_p = 0.0
+                prior_strength = 0.85
+                enforce_prior = False
+
+                x1h = torch.nn.functional.one_hot(batch[sample_idx], num_classes=len(model.tokenizer.vocab)).float()
+                mask = x1h[None, ...]
 
             masks.append(mask)
 
         mask = torch.cat(masks, dim=0).to(device)
 
-        y = model.generate_batch(
-            mask,
-            temperature=temperature,
-            top_p=1.0,
-            top_k=0,
-        ).argmax(axis=-1)
+        y = model.sample2(
+            prior=mask,
+            nb_steps=N_STEPS,
+            batch_size=BATCH_SIZE,
+            top_p=top_p,
+            prior_strength=prior_strength,
+            enforce_prior=enforce_prior,
+        )
 
         # get batch
         # export batch
-        export_batch(y, model.tokenizer, OUTPUT_DIR + f"/{task}/{model_name}_t={temperature}")
+        export_batch(y, model.tokenizer, OUTPUT_DIR + f"/{task}/steps_{N_STEPS}_topp_{top_p}_prior_{prior_strength}_enforce_{enforce_prior}")
 
 
 
+
+# %%

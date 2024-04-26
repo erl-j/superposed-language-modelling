@@ -747,7 +747,6 @@ class MergedTokenizer():
                 track.notes.append(symusic.Note(pitch=note["pitch"], time=note["onset"], duration=note["offset"]-note["onset"], velocity=note["velocity"]))
             sm.tracks.append(track)
 
-        print(f"sm end time: {sm.end()}")
         # assert
         if sm.end() > self.config["max_beats"] * self.config["ticks_per_beat"]:
             # write tokens to file
