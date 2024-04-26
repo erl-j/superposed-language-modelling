@@ -401,6 +401,12 @@ class MergedTokenizer():
         if mode == "harmonic":
             forced[:,:,self.token2idx["instrument:Drums"]] = 0
             optional[:,:,self.token2idx["instrument:Drums"]] = 0
+        
+        if mode == "drums":
+            for token in self.vocab:
+                if token.startswith("instrument:") and not token.endswith("Drums") and not token.endswith("-"):
+                    forced[:,:,self.token2idx[token]] = 0
+                    optional[:,:,self.token2idx[token]] = 0
 
         mask = np.concatenate([keep, modify, dead, optional, forced], axis=0)
 

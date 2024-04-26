@@ -301,23 +301,25 @@ class SimplexDiffusionModel(pl.LightningModule):
       
         return metrics
     
+    @torch.no_grad()
     def sample2(
         self,
         prior=None,
         batch_size=1,
         nb_steps=10,
-        device="cpu",
         plot=False,
-        argmax=False,
-        temperature=1.0,
         top_p=1.0,
-        prior_strength=0.0,
+        prior_strength=1.0,
         post_prior=False,
     ):
         self.eval()
         with torch.no_grad():
             # repeat to batch_size
             if prior is not None:
+                format_mask = self.format_mask[None, ...].to(self.device)
+                prior = prior*format_mask
+                # normalize
+                prior = prior / prior.sum(dim=-1, keepdim=True)
                 prior = prior.repeat(batch_size,1,1).to(self.device).float()
                 prior_flat = einops.rearrange(prior, "b s v -> (b s) v")
                 prior_simplex = (prior * 2 - 1)*self.k
@@ -590,7 +592,7 @@ class SimplexDiffusionModel(pl.LightningModule):
 
 if __name__ == "__main__":
 
-    BATCH_SIZE = 80
+    BATCH_SIZE = 200
 
     tag_list = open("./data/mmd_loops/tags.txt").read().splitlines()
 
@@ -620,10 +622,10 @@ if __name__ == "__main__":
     tokenizer = MergedTokenizer(tokenizer_config)
 
     model = SimplexDiffusionModel(
-        hidden_size=768,
-        n_heads=12,
-        feed_forward_size=4 * 768,
-        n_layers=12,
+        hidden_size=512,
+        n_heads=8,
+        feed_forward_size=2 * 512,
+        n_layers=8,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
         learning_rate=1e-3,
@@ -648,7 +650,7 @@ if __name__ == "__main__":
 
     # model = SimplexDiffusionModel.load_from_checkpoint(
     #             checkpoint_path = "./checkpoints/serene-sunset-44/last.ckpt",
-    #             relative_loss = False,
+    #             learning_rate = 1e-4,
     #             map_location="cpu"
     # )
     # 80
@@ -703,7 +705,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[5,6],
+        devices=[2,3],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[
@@ -727,7 +729,7 @@ if __name__ == "__main__":
                 model,
                 trn_dl, 
                 val_dl,
-                ckpt_path="./checkpoints/serene-sunset-44/last.ckpt"
+                ckpt_path="./checkpoints/driven-violet-62/last.ckpt"
             
                 # ckpt_path = "./checkpoints/fanciful-planet-7/last.ckpt"
     )
