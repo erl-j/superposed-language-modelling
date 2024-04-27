@@ -136,13 +136,13 @@ sns.set_style("whitegrid", {'axes.grid' : False})
 tokenizer = model.tokenizer
 
 mask = tokenizer.constraint_mask(
-    scale="C major",
-    tags=["alternative-indie"],
+    # scale="C major",
+    # tags=["alternative-indie"],
     tempos=["138"],
-    instruments = ["Piano","Guitar","Bass","Drums"],
+    instruments = ["Bass"],
     min_notes = 50,
     max_notes = 290,
-    min_notes_per_instrument=10,
+    min_notes_per_instrument=20,
 )
 
 
@@ -201,8 +201,9 @@ mask = mask.to(model.device).float()
 # set torch seed
 torch.manual_seed(1)
 # infilling top-p 0.5
-BATCH_SIZE = 20
+BATCH_SIZE = 3
 N_STEPS = 100
+REFINEMENT_STEPS = 0
 
 prior = mask / mask.sum(dim=-1, keepdim=True)
 
@@ -231,19 +232,61 @@ y = model.sample2(prior,
                 inverse_decay=False,
                 )
 
-ce = model.self_eval(y, None, None, t=1).detach().cpu()
-print(ce.shape)
-plt.plot(ce.detach().cpu())
-plt.show()
+# add refinement step
+# one hot
+if REFINEMENT_STEPS > 0:
+    ys = torch.nn.functional.one_hot(y, num_classes=len(model.tokenizer.vocab)).float()
+    # soften my mixing with format mask
+    format_prior = format_mask / format_mask.sum(dim=-1, keepdim=True)
+    alpha = 0.5
+    ys = alpha * ys + (1-alpha) * format_prior
+    # renormalize
+    ys = ys / ys.sum(dim=-1, keepdim=True)
+    # multiply with prior
+    ys = ys * prior
+    # renormalize
+    ys = ys / ys.sum(dim=-1, keepdim=True)
 
-# sort by the lowest cross entropy
-idx = ce.argsort()
-for i in range(5):
-    y_sm = model.tokenizer.decode(y[idx[i]])
-    print(f"Cross Entropy: {ce[idx[i]]}")
-    print(f"Number of notes: {y_sm.note_num()}")
+
+    # refine
+    y2 = model.sample2(prior,
+                    BATCH_SIZE,
+                    REFINEMENT_STEPS,
+                    top_p=1.0,
+                    prior_strength=1.0,
+                    plot=False,
+                    enforce_prior=True,
+                    enforce_multiply=False,
+                    decay_prior=False,
+                    attribute_temperature=None,
+                    inverse_decay=False,
+                    )
+
+# plot before and after
+for i in range(BATCH_SIZE):
+    y_sm = model.tokenizer.decode(y[i])
     preview_sm(y_sm)
+    if REFINEMENT_STEPS > 0:
+        y2_sm = model.tokenizer.decode(y2[i])
+        preview_sm(y2_sm)
+
+    print(f"Number of notes: {y_sm.note_num()}")
+    print(f"Number of notes: {y2_sm.note_num()}")
     print("\n\n")
+
+    # ce = model.self_eval(y, None, None, t=1).detach().cpu()
+    # print(ce.shape)
+    # plt.plot(ce.detach().cpu())
+    # plt.show()
+
+    # # sort by the lowest cross entropy
+    # idx = ce.argsort()
+    # for i in range(5):
+    #     y_sm = model.tokenizer.decode(y[idx[i]])
+    #     print(f"Cross Entropy: {ce[idx[i]]}")
+    #     print(f"Number of notes: {y_sm.note_num()}")
+    #     preview_sm(y_sm)
+    #     print("\n\n")
 #%%
 
 
