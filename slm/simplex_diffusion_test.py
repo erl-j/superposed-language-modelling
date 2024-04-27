@@ -9,6 +9,44 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from data import MidiDataset
 import torch
+from tqdm import tqdm
+import glob
+
+
+def load_merged_models(pattern):
+    print("Instantiating merged model")
+
+    ckpt_paths = glob.glob(pattern,recursive=True)
+
+    models = [SimplexDiffusionModel.load_from_checkpoint(ckpt_path, map_location="cpu") for ckpt_path in ckpt_paths]
+
+    # make a copy of the last model
+    merged_model = SimplexDiffusionModel.load_from_checkpoint(ckpt_paths[-1], map_location="cpu")
+
+    # set merged model to all zero
+    for p in merged_model.parameters():
+        p.data = torch.zeros_like(p.data)
+
+    total_params = sum(1 for _ in merged_model.parameters())
+    progress_bar = tqdm(total=total_params, desc="Merging parameters")
+
+    # print mean of the model prior to merging
+    mean_params = [p.data.mean() for p in merged_model.parameters()]
+    print(f"Mean of the model prior to merging: {mean_params}")
+
+    for model in models:
+        for p, p_merged in zip(model.parameters(), merged_model.parameters()):
+            p_merged.data += p.data/len(models)
+            progress_bar.update(1)
+
+    # print mean of the model after merging
+    mean_params = [p.data.mean() for p in merged_model.parameters()]
+    print(f"Mean of the model after merging: {mean_params}")
+    
+    progress_bar.close()
+    return merged_model
+
+model = load_merged_models("../checkpoints/dark-sky-67/**/*.ckpt").to(device)
 
 
 # checkpoint = "../checkpoints/fanciful-planet-7/last.ckpt"
@@ -16,10 +54,10 @@ import torch
 # checkpoint = "../checkpoints/effortless-resonance-33/last.ckpt"
 # checkpoint = "../checkpoints/serene-sunset-44/last.ckpt"
 # checkpoint = "../checkpoints/driven-violet-62/last.ckpt"
-checkpoint = "../checkpoints/flowing-paper-64/last.ckpt"
+#checkpoint = "../checkpoints/flowing-paper-64/last.ckpt"
 # checkpoint = "../checkpoints/serene-sunset-44/epoch=93-step=201068-val/loss_epoch=0.48428.ckpt"
-checkpoint = "../checkpoints/dark-sky-67/last.ckpt"
-model = SimplexDiffusionModel.load_from_checkpoint(checkpoint, map_location=device)
+#checkpoint = "../checkpoints/dark-sky-67/last.ckpt"
+#model = SimplexDiffusionModel.load_from_checkpoint(checkpoint, map_location=device)
 
 # print model
 #%%
@@ -163,7 +201,7 @@ mask = mask.to(model.device).float()
 # set torch seed
 torch.manual_seed(1)
 # infilling top-p 0.5
-BATCH_SIZE = 5
+BATCH_SIZE = 20
 N_STEPS = 100
 
 prior = mask / mask.sum(dim=-1, keepdim=True)
