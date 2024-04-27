@@ -11,8 +11,41 @@ from midi_player import MIDIPlayer
 from midi_player.stylers import basic, cifka_advanced
 import IPython.display as ipd
 import math
+import glob
+from tqdm import tqdm
 
+def load_merged_models(pattern, model_class):
+    print("Instantiating merged model")
 
+    ckpt_paths = glob.glob(pattern,recursive=True)
+
+    models = [model_class.load_from_checkpoint(ckpt_path, map_location="cpu") for ckpt_path in ckpt_paths]
+
+    # make a copy of the last model
+    merged_model = model_class.load_from_checkpoint(ckpt_paths[-1], map_location="cpu")
+
+    # set merged model to all zero
+    for p in merged_model.parameters():
+        p.data = torch.zeros_like(p.data)
+
+    total_params = sum(1 for _ in merged_model.parameters())
+    progress_bar = tqdm(total=total_params, desc="Merging parameters")
+
+    # print mean of the model prior to merging
+    mean_params = [p.data.mean() for p in merged_model.parameters()]
+    print(f"Mean of the model prior to merging: {mean_params}")
+
+    for model in models:
+        for p, p_merged in zip(model.parameters(), merged_model.parameters()):
+            p_merged.data += p.data/len(models)
+            progress_bar.update(1)
+
+    # print mean of the model after merging
+    mean_params = [p.data.mean() for p in merged_model.parameters()]
+    print(f"Mean of the model after merging: {mean_params}")
+    
+    progress_bar.close()
+    return merged_model
 
 def top_p_probs(probs, top_p=0.0):
     # inputs are probs with shape [N, V]

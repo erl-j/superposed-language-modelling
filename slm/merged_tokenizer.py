@@ -12,6 +12,26 @@ import matplotlib.pyplot as plt
 # instrument classes
 # metadata is part of note attributes
 
+instrument_class_to_selected_program_nr = {
+    "Piano": 1,
+    "Chromatic Percussion":12,
+    "Organ":21,
+    "Guitar":25,
+    "Bass":36,
+    "Strings":43,
+    "Ensemble":54,
+    "Brass":61,
+    "Reed":72,
+    "Pipe":80,
+    "Synth Lead":83,
+    "Synth Pad":90,
+    "Synth Effects":103,
+    "Ethnic":108,
+    "Percussive":115,
+    "Sound Effects":112
+}
+
+
 class MergedTokenizer():
     def __init__(self, config):
         self.config = config
@@ -365,9 +385,6 @@ class MergedTokenizer():
         restriction_mask[self.note_attribute_order.index("pitch"),:] *= pitch_mask
 
 
-
-
-
         dead_mask = np.zeros((len(self.note_attribute_order), len(self.vocab)), dtype=int)
         for attr_idx, note_attr in enumerate(self.note_attribute_order):
             dead_mask[attr_idx, self.token2idx[f"{note_attr}:-"]] = 1
@@ -379,19 +396,19 @@ class MergedTokenizer():
         max_notes = max(current_notes, max_notes)
         min_notes = max(min_notes, current_notes)
 
-        print(f"Keep notes: {len(keep_notes)}")
-        print(f"Modify notes: {len(modify_notes)}")
-        print(f"Max notes: {max_notes}")
-        print(f"Min notes: {min_notes}")
+        # print(f"Keep notes: {len(keep_notes)}")
+        # print(f"Modify notes: {len(modify_notes)}")
+        # print(f"Max notes: {max_notes}")
+        # print(f"Min notes: {min_notes}")
 
         dead_notes = self.config["max_notes"] - max_notes
         forced_notes = min_notes - current_notes
         optional_notes = max_notes - current_notes - forced_notes
 
-        print(f"Forced notes: {forced_notes}")
-        print(f"Optional notes: {optional_notes}")
-        print(f"Dead notes: {dead_notes}")
-        print(f"Sum: {current_notes + forced_notes + optional_notes + dead_notes}")
+        # print(f"Forced notes: {forced_notes}")
+        # print(f"Optional notes: {optional_notes}")
+        # print(f"Dead notes: {dead_notes}")
+        # print(f"Sum: {current_notes + forced_notes + optional_notes + dead_notes}")
         
         dead = np.repeat(dead_mask[None,...], dead_notes, axis=0)
         forced = np.repeat(forced_mask[None,...], forced_notes, axis=0)
@@ -631,10 +648,6 @@ class MergedTokenizer():
 
         return x1h
 
-
-
-
-        
     def tokens_to_sm(self, tokens):
       
         notes = tokens
@@ -672,7 +685,7 @@ class MergedTokenizer():
                         # -1 indicates drums
                         program = -1
                     else:
-                        program = self.instrument_class_to_program_nrs[instrument_str][0]
+                        program = instrument_class_to_selected_program_nr[instrument_str]-1#[0]
                 elif note_attr == "pitch":
                     assert note[i].split(":")[0] == "pitch"
 

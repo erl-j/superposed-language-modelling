@@ -95,10 +95,7 @@ class SimplexDiffusionModel(pl.LightningModule):
         x = s
         if self.format_mask_on_probs:
             if mask is not None:
-
                 mode = "b"
-
-                # A
                 if mode == "a":
                     x = torch.nn.functional.softmax(x, dim=-1)
                     # set format mask to zeros
@@ -117,10 +114,6 @@ class SimplexDiffusionModel(pl.LightningModule):
                     prior = (1-prior_strength)*uniform_prior + prior_strength*mask
                     x = x * prior
                     x = x / x.sum(dim=-1, keepdim=True)
-
-                # plt.plot(x[0,0].cpu().numpy())
-                # plt.show()
-                # asd
             else:
                 x = torch.nn.functional.softmax(x, dim=-1)
                 # set format mask to zeros
@@ -418,7 +411,32 @@ class SimplexDiffusionModel(pl.LightningModule):
 
                 w0x = einops.rearrange(w0, "(b s) -> b s", s = self.n_events*self.n_attributes)
 
-                # convert back to simplex
+
+                # if step>1:
+                #     w0x_ = einops.rearrange(w0x, "b (n a) -> b n a", n = self.n_events, a = self.n_attributes)
+                #     # if two notes are identical, set one to prior
+                #     # find duplicates
+                #     # get note similarity matrix of size batch_size, n_events, n_events
+                #     # dead note
+                #     attr_undefined = [attr+":-" for attr in self.tokenizer.note_attribute_order]
+                #     dead_note = torch.tensor(self.tokenizer.tokens_to_indices(attr_undefined),device=self.device)
+                    
+                #     is_dead = (w0x_ == dead_note).all(dim=-1)
+                #     note_similarity = (w0x_[:,None] == w0x_[:,:,None]).all(dim=-1)
+                #     n_similar = note_similarity.sum(dim=-1).float()
+
+                #     all_dead = einops.repeat(dead_note,"a -> b n a", b=batch_size, n=self.n_events)
+                    
+                #     keep_prob = 1/n_similar
+                #     keep_mask = (torch.rand_like(n_similar) > keep_prob).long()
+                #     keep_mask[is_dead] = 1
+                #     keep_mask = keep_mask[...,None]
+                #     print(keep_mask.shape)
+                #     print(w0x.shape)
+                #     print(all_dead.shape)
+                #     w0x_ = w0x_ * keep_mask + all_dead * (1-keep_mask)
+                #     w0x = einops.rearrange(w0x_, "b n a -> b (n a)")
+
                 w0 = torch.nn.functional.one_hot(w0x, num_classes=len(self.vocab)).float()
 
                 w0 = (w0 * 2 - 1) * self.k
@@ -430,12 +448,6 @@ class SimplexDiffusionModel(pl.LightningModule):
                 alphas.append(alpha[0].item())
                 wt = torch.sqrt(alpha) * w0 + torch.sqrt(1 - alpha) * noise
 
-             
-            #     sts.append(st.detach())
-            #     pts.append(pt.detach())
-            
-            # sts = torch.stack(sts)
-            # pts = torch.stack(pts)
 
             if plot:
                 print(len(w0ps))

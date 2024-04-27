@@ -4,7 +4,7 @@ from simplex_diffusion import SimplexDiffusionModel
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
-from util import preview_sm,piano_roll
+from util import preview_sm,piano_roll, load_merged_models
 import matplotlib.pyplot as plt
 import seaborn as sns
 from data import MidiDataset
@@ -13,53 +13,8 @@ from tqdm import tqdm
 import glob
 
 
-def load_merged_models(pattern):
-    print("Instantiating merged model")
-
-    ckpt_paths = glob.glob(pattern,recursive=True)
-
-    models = [SimplexDiffusionModel.load_from_checkpoint(ckpt_path, map_location="cpu") for ckpt_path in ckpt_paths]
-
-    # make a copy of the last model
-    merged_model = SimplexDiffusionModel.load_from_checkpoint(ckpt_paths[-1], map_location="cpu")
-
-    # set merged model to all zero
-    for p in merged_model.parameters():
-        p.data = torch.zeros_like(p.data)
-
-    total_params = sum(1 for _ in merged_model.parameters())
-    progress_bar = tqdm(total=total_params, desc="Merging parameters")
-
-    # print mean of the model prior to merging
-    mean_params = [p.data.mean() for p in merged_model.parameters()]
-    print(f"Mean of the model prior to merging: {mean_params}")
-
-    for model in models:
-        for p, p_merged in zip(model.parameters(), merged_model.parameters()):
-            p_merged.data += p.data/len(models)
-            progress_bar.update(1)
-
-    # print mean of the model after merging
-    mean_params = [p.data.mean() for p in merged_model.parameters()]
-    print(f"Mean of the model after merging: {mean_params}")
-    
-    progress_bar.close()
-    return merged_model
-
-model = load_merged_models("../checkpoints/dark-sky-67/**/*.ckpt").to(device)
-
-
-# checkpoint = "../checkpoints/fanciful-planet-7/last.ckpt"
-# checkpoint = "../checkpoints/super-mountain-5/last.ckpt"^
-# checkpoint = "../checkpoints/effortless-resonance-33/last.ckpt"
-# checkpoint = "../checkpoints/serene-sunset-44/last.ckpt"
-# checkpoint = "../checkpoints/driven-violet-62/last.ckpt"
-#checkpoint = "../checkpoints/flowing-paper-64/last.ckpt"
-# checkpoint = "../checkpoints/serene-sunset-44/epoch=93-step=201068-val/loss_epoch=0.48428.ckpt"
-#checkpoint = "../checkpoints/dark-sky-67/last.ckpt"
-#model = SimplexDiffusionModel.load_from_checkpoint(checkpoint, map_location=device)
-
-# print model
+model = load_merged_models("../checkpoints/dark-sky-67/**/*.ckpt",SimplexDiffusionModel).to(device)
+#model = load_merged_models("../checkpoints/flowing-paper-64/**/*.ckpt",SimplexDiffusionModel).to(device)
 #%%
 
 # get the embedding
@@ -139,10 +94,10 @@ mask = tokenizer.constraint_mask(
     # scale="C major",
     # tags=["alternative-indie"],
     tempos=["138"],
-    instruments = ["Bass"],
+    instruments = ["Guitar","Piano"],
     min_notes = 50,
     max_notes = 290,
-    min_notes_per_instrument=20,
+    min_notes_per_instrument=10,
 )
 
 
@@ -154,21 +109,21 @@ mask = tokenizer.constraint_mask(
 # )
 
 
-# beat_range=(0,16)
-# pitch_range = [f"pitch:{i}" for i in range(50,108) ]+["pitch:-"]
-# #make infilling mask
-# mask = (
-#     model.tokenizer.infilling_mask(
-#         x,
-#         beat_range,
-#         min_notes=x_sm.note_num(),
-#         max_notes=275,
-#         pitches=pitch_range,
-#         mode ="harmonic"
-#     )[None, ...]    
-#     .to(model.device)
-#     .float()
-# ) 
+beat_range=(0,16)
+pitch_range = [f"pitch:{i}" for i in range(50,108) ]+["pitch:-"]
+#make infilling mask
+mask = (
+    model.tokenizer.infilling_mask(
+        x,
+        beat_range,
+        min_notes=x_sm.note_num(),
+        max_notes=x_sm.note_num(),
+        pitches=pitch_range,
+        mode ="harmonic"
+    )[None, ...]    
+    .to(model.device)
+    .float()
+) 
 
 # mask = torch.nn.functional.one_hot(x, num_classes=len(model.tokenizer.vocab)).float()
 
@@ -202,7 +157,7 @@ mask = mask.to(model.device).float()
 torch.manual_seed(1)
 # infilling top-p 0.5
 BATCH_SIZE = 3
-N_STEPS = 100
+N_STEPS = 200
 REFINEMENT_STEPS = 0
 
 prior = mask / mask.sum(dim=-1, keepdim=True)
@@ -225,11 +180,11 @@ y = model.sample2(prior,
                 top_p=1.0,
                 prior_strength=1.0,
                 plot=False,
-                enforce_prior=True,
+                enforce_prior=False,
                 enforce_multiply=False,
                 decay_prior=False,
-                attribute_temperature=None,
                 inverse_decay=False,
+                attribute_temperature=None,
                 )
 
 # add refinement step
@@ -253,7 +208,7 @@ if REFINEMENT_STEPS > 0:
                     BATCH_SIZE,
                     REFINEMENT_STEPS,
                     top_p=1.0,
-                    prior_strength=1.0,
+                    prior_strength=0.5,
                     plot=False,
                     enforce_prior=True,
                     enforce_multiply=False,
@@ -266,13 +221,14 @@ if REFINEMENT_STEPS > 0:
 for i in range(BATCH_SIZE):
     y_sm = model.tokenizer.decode(y[i])
     preview_sm(y_sm)
+    print(f"Number of notes: {y_sm.note_num()}")
+
     if REFINEMENT_STEPS > 0:
         y2_sm = model.tokenizer.decode(y2[i])
         preview_sm(y2_sm)
 
-    print(f"Number of notes: {y_sm.note_num()}")
-    print(f"Number of notes: {y2_sm.note_num()}")
-    print("\n\n")
+    # print(f"Number of notes: {y2_sm.note_num()}")
+    # print("\n\n")
 
     # ce = model.self_eval(y, None, None, t=1).detach().cpu()
     # print(ce.shape)
