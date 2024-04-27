@@ -7,7 +7,7 @@ import torch
 import torch.nn.functional as F
 import wandb
 from data import MidiDataset
-from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, RichProgressBar
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, RichProgressBar, StochasticWeightAveraging
 from pytorch_lightning.loggers import WandbLogger
 from merged_tokenizer import MergedTokenizer
 from torch import nn
@@ -89,7 +89,7 @@ class SimplexDiffusionModel(pl.LightningModule):
 
         self.relative_loss = relative_loss
 
-    def forward(self, s, t, mask=None, prior_strength = 1.0):
+    def forward(self, s, t, mask=None, prior_strength = None):
         t_z = self.t_embedding(t)
         format_mask = self.format_mask[None, ...].to(s.device)
         x = s
@@ -108,8 +108,6 @@ class SimplexDiffusionModel(pl.LightningModule):
                     x = (1-prior_strength)*x + prior_strength*mask
                     x = x / x.sum(dim=-1, keepdim=True)
                 elif mode == "b":
-                    # x = torch.nn.functional.softmax(x, dim=-1)
-
                     x = torch.nn.functional.softmax(x, dim=-1)
                     # set format mask to zeros
                     x[format_mask.expand_as(x) < 0.5] = 0
@@ -349,8 +347,11 @@ class SimplexDiffusionModel(pl.LightningModule):
         top_p,
         prior_strength,
         enforce_prior,
+        enforce_multiply=False,
         plot=False,
-        decay_prior=False
+        decay_prior=False,
+        inverse_decay=False,
+        attribute_temperature=None,
     ):
         self.eval()
         with torch.no_grad():
@@ -376,32 +377,41 @@ class SimplexDiffusionModel(pl.LightningModule):
 
             alphas = []
 
-            for step in tqdm(range(nb_steps,-1,-1)):
+            for step in tqdm(range(nb_steps,0,-1)):
 
                 t = torch.ones((batch_size,1,1),device=self.device) * (step/nb_steps)
 
                 alpha_t = self.schedule(t)
+                
+                wl = self.forward(wt,t, prior, 
+                                  prior_strength*(1-alpha_t) if (decay_prior and not inverse_decay)
+                                else prior_strength*(alpha_t) if (decay_prior and inverse_decay)
+                                  else prior_strength
+                                  )
 
-                wl = self.forward(wt,t, prior, prior_strength*(1-alpha_t) if decay_prior else prior_strength)
+                if attribute_temperature is not None:
+                    for attr, temp in attribute_temperature.items():
+                        attr_index = self.tokenizer.note_attribute_order.index(attr)
+                        if temp != 1.0:
+                            wl[:,attr_index::self.n_attributes] = wl[:,attr_index::self.n_attributes] / temp
 
                 wl = einops.rearrange(wl, "b s v -> (b s) v", s = self.n_events*self.n_attributes)                
 
                 if plot:
                     preview_probs = torch.nn.functional.softmax(wl, dim=-1)
                     w0ps.append(einops.rearrange(preview_probs, "(b s) v -> b s v", s = self.n_events*self.n_attributes).cpu())
-                
+
                 # sample
                 w0p = torch.nn.functional.softmax(wl, dim=-1)
 
                 if enforce_prior and prior is not None:
-                    w0p = (w0p+1e-9) * prior_flat
-                    # if very low prop in prior then 0
-                    # w0p = (w0p * (prior_flat>1e-9).float()) +1e-9
+                    if enforce_multiply:
+                        w0p = (w0p+1e-9) * prior_flat
+                    else:
+                        w0p = ((w0p+1e-9) * (prior_flat>1e-9).float()) 
                     w0p = w0p / w0p.sum(dim=-1, keepdim=True)
 
-
                 w0p = top_p_probs(w0p, top_p)
-
 
                 # sample
                 w0 = torch.multinomial(w0p, 1).squeeze(-1)
@@ -440,14 +450,14 @@ class SimplexDiffusionModel(pl.LightningModule):
                 #     plt.title(f"Attribute {a}")
                 #     plt.show()
 
-                for aidx,a in enumerate(self.tokenizer.note_attribute_order):
-                    attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
-                    attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
-                    # set attribute token indices on y axis
-                    plt.imshow(wops[:,0,aidx::self.n_attributes,attribute_token_idxs].mean(-2).cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
-                    plt.yticks(range(len(attribute_tokens)),attribute_tokens)
-                    plt.title(f"Attribute {a}, all notes")
-                    plt.show()
+                # for aidx,a in enumerate(self.tokenizer.note_attribute_order):
+                #     attribute_token_idxs = [i for i,v in enumerate(self.tokenizer.vocab) if a+":" in v]
+                #     attribute_tokens = [self.tokenizer.vocab[i] for i in attribute_token_idxs]
+                #     # set attribute token indices on y axis
+                #     plt.imshow(wops[:,0,aidx::self.n_attributes,attribute_token_idxs].mean(-2).cpu().numpy().T, aspect="auto", cmap="rocket",interpolation="none")
+                #     plt.yticks(range(len(attribute_tokens)),attribute_tokens)
+                #     plt.title(f"Attribute {a}, all notes")
+                #     plt.show()
 
 
                 entropy = -torch.sum(wops*torch.log(wops+1e-9),dim=-1).mean(dim=1).mean(dim=1)
@@ -458,9 +468,9 @@ class SimplexDiffusionModel(pl.LightningModule):
                 plt.show()
 
 
-            plt.plot(alphas)
-            plt.title("Alpha")
-            plt.show()
+                plt.plot(alphas)
+                plt.title("Alpha")
+                plt.show()
 
             # sample categorical
             return w0x
@@ -519,7 +529,7 @@ class SimplexDiffusionModel(pl.LightningModule):
 
 if __name__ == "__main__":
 
-    BATCH_SIZE = 20
+    BATCH_SIZE = 80
 
     tag_list = open("./data/mmd_loops/tags.txt").read().splitlines()
 
@@ -555,7 +565,7 @@ if __name__ == "__main__":
         n_layers=12,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
-        learning_rate=1e-3,
+        learning_rate=2e-3,
         tokenizer_config=tokenizer_config,
         learning_rate_gamma=0.99,
         norm_first=True,
@@ -637,6 +647,7 @@ if __name__ == "__main__":
         log_every_n_steps=1,
         callbacks=[
             progress_bar_callback,
+            StochasticWeightAveraging(swa_lrs=0.05,swa_epoch_start=0.1),
             pl.callbacks.LearningRateMonitor(logging_interval="step"),
             pl.callbacks.ModelCheckpoint(
                 dirpath=f"./checkpoints/{name}/",

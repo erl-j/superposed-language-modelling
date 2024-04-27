@@ -12,12 +12,13 @@ import torch
 
 
 # checkpoint = "../checkpoints/fanciful-planet-7/last.ckpt"
-# checkpoint = "../checkpoints/super-mountain-5/last.ckpt"
+# checkpoint = "../checkpoints/super-mountain-5/last.ckpt"^
 # checkpoint = "../checkpoints/effortless-resonance-33/last.ckpt"
 # checkpoint = "../checkpoints/serene-sunset-44/last.ckpt"
 # checkpoint = "../checkpoints/driven-violet-62/last.ckpt"
 checkpoint = "../checkpoints/flowing-paper-64/last.ckpt"
 # checkpoint = "../checkpoints/serene-sunset-44/epoch=93-step=201068-val/loss_epoch=0.48428.ckpt"
+checkpoint = "../checkpoints/dark-sky-67/last.ckpt"
 model = SimplexDiffusionModel.load_from_checkpoint(checkpoint, map_location=device)
 
 # print model
@@ -98,12 +99,12 @@ tokenizer = model.tokenizer
 
 mask = tokenizer.constraint_mask(
     scale="C major",
-    tags=["jazz"],
-    # tempos=["126"],
-    instruments = ["Piano"],
+    tags=["alternative-indie"],
+    tempos=["138"],
+    instruments = ["Piano","Guitar","Bass","Drums"],
     min_notes = 50,
-    max_notes = 250,
-    min_notes_per_instrument=40,
+    max_notes = 290,
+    min_notes_per_instrument=10,
 )
 
 
@@ -140,17 +141,17 @@ format_mask = torch.tensor(tokenizer.get_format_mask(), device=model.device).flo
 mask = mask.to(model.device).float()
 
 
-plt.imshow(mask.cpu().numpy().T, aspect="auto",interpolation="none")
-plt.title("Mask")
-plt.show()
+# plt.imshow(mask.cpu().numpy().T, aspect="auto",interpolation="none")
+# plt.title("Mask")
+# plt.show()
 
-plt.imshow(format_mask.cpu().numpy().T, aspect="auto",interpolation="none")
-plt.title("Format Mask")
-plt.show()
+# plt.imshow(format_mask.cpu().numpy().T, aspect="auto",interpolation="none")
+# plt.title("Format Mask")
+# plt.show()
 
-plt.imshow((mask*format_mask).cpu().T, aspect="auto",interpolation="none")
-plt.title("Mask * Format Mask")
-plt.show()
+# plt.imshow((mask*format_mask).cpu().T, aspect="auto",interpolation="none")
+# plt.title("Mask * Format Mask")
+# plt.show()
 
 # assert torch.allclose(mask, mask*format_mask)
 
@@ -162,8 +163,8 @@ plt.show()
 # set torch seed
 torch.manual_seed(1)
 # infilling top-p 0.5
-BATCH_SIZE = 30
-N_STEPS = 300
+BATCH_SIZE = 5
+N_STEPS = 100
 
 prior = mask / mask.sum(dim=-1, keepdim=True)
 
@@ -178,16 +179,33 @@ plt.show()
 # generation 100/0.9 as well?
 # infilling 100/0.9
 # 100 steps
+# decay prior helps for constrained generation?
 y = model.sample2(prior,
                 BATCH_SIZE,
                 N_STEPS,
                 top_p=1.0,
-                prior_strength = 1.0,
+                prior_strength=1.0,
                 plot=False,
                 enforce_prior=True,
+                enforce_multiply=False,
                 decay_prior=False,
+                attribute_temperature=None,
+                inverse_decay=False,
                 )
 
+ce = model.self_eval(y, None, None, t=1).detach().cpu()
+print(ce.shape)
+plt.plot(ce.detach().cpu())
+plt.show()
+
+# sort by the lowest cross entropy
+idx = ce.argsort()
+for i in range(5):
+    y_sm = model.tokenizer.decode(y[idx[i]])
+    print(f"Cross Entropy: {ce[idx[i]]}")
+    print(f"Number of notes: {y_sm.note_num()}")
+    preview_sm(y_sm)
+    print("\n\n")
 #%%
 
 
@@ -222,25 +240,14 @@ preview_sm(y_sm)
 
  # %%
 
-ce = model.self_eval(y, None, None, t=1).detach().cpu()
-print(ce.shape)
-plt.plot(ce.detach().cpu())
-plt.show()
 
-# sort by the lowest cross entropy
-idx = ce.argsort()
-for i in range(5):
-    y_sm = model.tokenizer.decode(y[idx[i]])
-    print(f"Cross Entropy: {ce[idx[i]]}")
-    print(f"Number of notes: {y_sm.note_num()}")
-    preview_sm(y_sm)
-    print("\n\n")
 
+#%%
 # get 5 highest
-for i in range(5):
-    y_sm = model.tokenizer.decode(y[idx[-i]])
-    print(f"Cross Entropy: {ce[idx[-i]]}")
-    print(f"Number of notes: {y_sm.note_num()}")
-    preview_sm(y_sm)
-    print("\n\n")
+# for i in range(5):
+#     y_sm = model.tokenizer.decode(y[idx[-i]])
+#     print(f"Cross Entropy: {ce[idx[-i]]}")
+#     print(f"Number of notes: {y_sm.note_num()}")
+#     preview_sm(y_sm)
+#     print("\n\n")
 # %%
