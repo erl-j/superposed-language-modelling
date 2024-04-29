@@ -14,8 +14,11 @@ import glob
 
 
 
-model = load_merged_models("../checkpoints/dark-sky-67/**/*.ckpt",SimplexDiffusionModel).to(device)
+#model = load_merged_models("../checkpoints/dark-sky-67/**/*.ckpt",SimplexDiffusionModel).to(device)
 #model = load_merged_models("../checkpoints/flowing-paper-64/**/*.ckpt",SimplexDiffusionModel).to(device)
+
+model = load_merged_models("../checkpoints/daily-armadillo-82/**/*.ckpt",SimplexDiffusionModel).to(device)
+model = load_merged_models("../checkpoints/peachy-silence-79/**/*.ckpt",SimplexDiffusionModel).to(device)
 #%%
 
 # get the embedding
@@ -70,8 +73,6 @@ ds = MidiDataset(
 )
 
 print(len(ds))
-
-
 #%%
 # 1403
 # 3050 guitar
@@ -100,11 +101,11 @@ tokenizer = model.tokenizer
 mask = tokenizer.constraint_mask(
     # scale="C major",
     # tags=["alternative-indie"],
+    # instruments=["Drums"],
     tempos=["138"],
-    instruments = ["Guitar","Piano"],
     min_notes = 50,
     max_notes = 290,
-    min_notes_per_instrument=10,
+    # min_notes_per_instrument=10,
 )
 
 
@@ -116,21 +117,21 @@ mask = tokenizer.constraint_mask(
 # )
 
 
-beat_range=(0,16)
-pitch_range = [f"pitch:{i}" for i in range(50,108) ]+["pitch:-"]
-#make infilling mask
-mask = (
-    model.tokenizer.infilling_mask(
-        x,
-        beat_range,
-        min_notes=x_sm.note_num(),
-        max_notes=290,
-        pitches=pitch_range,
-        mode ="harmonic"
-    )[None, ...]    
-    .to(model.device)
-    .float()
-) 
+# beat_range=(0,16)
+# pitch_range = [f"pitch:{i}" for i in range(50,108) ]+["pitch:-"]
+# #make infilling mask
+# mask = (
+#     model.tokenizer.infilling_mask(
+#         x,
+#         beat_range,
+#         min_notes=x_sm.note_num(),
+#         max_notes=290,
+#         pitches=pitch_range,
+#         mode ="harmonic"
+#     )[None, ...]    
+#     .to(model.device)
+#     .float()
+# ) 
 
 # mask = torch.nn.functional.one_hot(x, num_classes=len(model.tokenizer.vocab)).float()
 
@@ -164,8 +165,8 @@ mask = mask.to(model.device).float()
 torch.manual_seed(1)
 # infilling top-p 0.5
 BATCH_SIZE = 3
-N_STEPS = 200
-TOP_P = 0.95
+N_STEPS = 10
+TOP_P = 0.99
 PRIOR_STRENGTH = 1.0
 REFINEMENT_STEPS = 0
 ENFORCE_MULTIPLY = True

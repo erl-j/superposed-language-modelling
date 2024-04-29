@@ -8,14 +8,14 @@ import symusic
 import torch
 #%%
 
-example_records = torch.load("../data/mmd_loops/val_midi_records_unique_pr.pt")
-print(len(example_records))
-print(example_records[0][0].keys())
+# example_records = torch.load("./data/mmd_loops/val_midi_records_unique_pr.pt")
+# print(len(example_records))
+# print(example_records[0][0].keys())
 # path, md5, genre, midi
 
 #%%
 
-data_path = "../data/clean_drums"
+data_path = "./data/clean_drums"
 
 # load pickle
 pickle_path = os.path.join(data_path, "clean.pkl")
@@ -45,8 +45,8 @@ for i in range(len(data)):
     # if time signature is not 4/4, then resample
 
     # filter out non 4/4 time signatures
-    num = midi_sm.time_signatures[0].numerator
-    denum = midi_sm.time_signatures[0].denominator
+    num = midi_sm.time_signatures[-1].numerator
+    denum = midi_sm.time_signatures[-1].denominator
 
     if num != 4 or denum != 4:
         continue
@@ -60,21 +60,21 @@ for i in range(len(data)):
     # remove everything after 4 bars
     end_4_bars_tick = 16 * midi_sm.ticks_per_quarter
 
+    print(f"end of midi file: {end_4_bars_tick}")
+
     # print(f"end of midi file: {end_4_bars_tick}")
     # print(f"end of midi file: {midi_sm.end()}")
 
-    if midi_sm.end() > end_4_bars_tick:
-        print(f"{midi_sm.end()} midi file is too long")
-
-    if midi_sm.end() <= end_4_bars_tick*(3/4):
-        print(f"{midi_sm.end()} midi file is too short")
-       
-    path = data[i]["path"]
-    md5 = i
-    midi = midi_sm
-    tag = meta[path]["tags"]
-    records.append({"path": path, "md5": md5, "genre": tag, "midi": midi})
-    
+    if midi_sm.end() > end_4_bars_tick or midi_sm.end() <= end_4_bars_tick*(3/4):
+        continue
+    else:
+        print(f"{midi_sm.end()} midi file is just right")
+        path = data[i]["path"]
+        md5 = i
+        midi = midi_sm
+        tag = meta[path]["tags"]
+        records.append({"path": path, "md5": md5, "genre": tag, "midi": midi})
+        
 # %%
 
 # add one list level
@@ -82,6 +82,7 @@ records = [[record] for record in records]
 print(len(records))
 # split into train test val according to 90/10/10
 
+#%%
 # shuffle
 import random
 random.seed(0)
@@ -106,3 +107,8 @@ torch.save(tst_records, data_path + "/tst_midi_records_unique_pr.pt")
 
 # %%
 print(len(trn_records))
+# %%
+print(len(val_records))
+# %%
+print(len(tst_records))
+# %%

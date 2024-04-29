@@ -524,12 +524,27 @@ class SimplexDiffusionModel(pl.LightningModule):
         )
         return loss
     
-    def transplant_weights(self, other_model):
-        self.embedding_layer.weight.data = other_model.embedding_layer.weight.data
-        self.decoder_output_layer.weight.data = other_model.decoder_output_layer.weight.data
-        if self.decoder_output_layer.bias is not None:
-            self.decoder_output_layer.bias.data = other_model.decoder_output_layer.bias.data
-        self.transformer.load_state_dict(other_model.transformer.state_dict())
+    # def transplant_weights(self, other_model,):
+    #     self.embedding_layer.weight.data = other_model.embedding_layer.weight.data
+    #     self.decoder_output_layer.weight.data = other_model.decoder_output_layer.weight.data
+    #     if self.decoder_output_layer.bias is not None:
+    #         self.decoder_output_layer.bias.data = other_model.decoder_output_layer.bias.data
+    #     self.transformer.load_state_dict(other_model.transformer.state_dict())
+
+    def initialize_from_different_model(self, src_model):
+        for token in self.vocab:
+            if token not in src_model.vocab:
+                print(f"Token {token} not found in source model")
+                continue
+            else:
+                print(f"Transplanting token {token}")
+                src_idx = src_model.vocab.index(token)
+                tgt_idx = self.vocab.index(token)
+                self.embedding_layer.weight.data[:,tgt_idx] = src_model.embedding_layer.weight.data[:,src_idx]
+                self.decoder_output_layer.weight.data[tgt_idx,:] = src_model.decoder_output_layer.weight.data[src_idx,:]
+        # now copy transformer
+        self.transformer.load_state_dict(src_model.transformer.state_dict())
+
 
     def configure_optimizers(self):
         # learning rate decay
@@ -541,9 +556,11 @@ class SimplexDiffusionModel(pl.LightningModule):
 
 if __name__ == "__main__":
 
-    BATCH_SIZE = 80
+    DATASET = "harmonic"
 
-    tag_list = open("./data/mmd_loops/tags.txt").read().splitlines()
+    BATCH_SIZE = 200
+
+    tag_list = open(f"./data/{DATASET}/tags.txt").read().splitlines()
 
     N_BARS = 4
 
@@ -571,13 +588,13 @@ if __name__ == "__main__":
     tokenizer = MergedTokenizer(tokenizer_config)
 
     model = SimplexDiffusionModel(
-        hidden_size=768,
-        n_heads=12,
-        feed_forward_size=4 * 768,
-        n_layers=12,
+        hidden_size=512,
+        n_heads=8,
+        feed_forward_size=2 * 512,
+        n_layers=8,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
-        learning_rate=2e-3,
+        learning_rate=1e-3,
         tokenizer_config=tokenizer_config,
         learning_rate_gamma=0.99,
         norm_first=True,
@@ -588,41 +605,38 @@ if __name__ == "__main__":
         format_mask_on_probs=True
     )
 
-    # other_model = EncoderOnlyModel.load_from_checkpoint(
-    #     checkpoint_path = "./checkpoints/magic-forest-321/last.ckpt",
-    #     device="cpu"
-    # )
+    src_model = SimplexDiffusionModel.load_from_checkpoint(
+                checkpoint_path = "./checkpoints/dark-sky-67/last.ckpt",
+                map_location="cpu"
+    )
 
-    # model.transplant_weights(
-    #     other_model
-    # )
+    model.initialize_from_different_model(
+        src_model
+    )
 
-    # model = SimplexDiffusionModel.load_from_checkpoint(
-    #             checkpoint_path = "./checkpoints/serene-sunset-44/last.ckpt",
-    #             learning_rate = 1e-4,
-    #             map_location="cpu"
-    # )
-    # 80
-    # model.test_step(batch_size=60)
+    mmd_4bar_filter_fn = lambda x: f"n_bars={N_BARS}" in x
 
     trn_ds = MidiDataset(
-        cache_path="./data/mmd_loops/trn_midi_records_unique_pr.pt",
-        path_filter_fn=lambda x: f"n_bars={N_BARS}" in x,
+        cache_path=f"./data/{DATASET}/trn_midi_records_unique_pr.pt",
+        path_filter_fn=mmd_4bar_filter_fn if DATASET == "mmd_loops" else None,
         genre_list=tag_list,
         tokenizer=tokenizer,
-        transposition_range=[-4, 4],
+        transposition_range=[-4, 4] if DATASET == "mmd_loops" or DATASET == "harmonic" else None,
         min_notes=8 * N_BARS,
         max_notes=tokenizer_config["max_notes"],
     )
+    # print len of dataset
+    print(f"Loaded {len(trn_ds)} training records")
 
     val_ds = MidiDataset(
-        cache_path="./data/mmd_loops/val_midi_records_unique_pr.pt",
-        path_filter_fn=lambda x: f"n_bars={N_BARS}" in x,
+        cache_path=f"./data/{DATASET}/val_midi_records_unique_pr.pt",
+        path_filter_fn=mmd_4bar_filter_fn if DATASET == "mmd_loops" else None,
         genre_list=tag_list,
         tokenizer=tokenizer,
         min_notes=8 * N_BARS,
         max_notes=tokenizer_config["max_notes"],
     )
+    print(f"Loaded {len(val_ds)} validation records")
 
     # desert capy uses batch size 80
     trn_dl = torch.utils.data.DataLoader(
@@ -654,12 +668,11 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[7],
+        devices=[0],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[
             progress_bar_callback,
-            StochasticWeightAveraging(swa_lrs=0.05,swa_epoch_start=0.1),
             pl.callbacks.LearningRateMonitor(logging_interval="step"),
             pl.callbacks.ModelCheckpoint(
                 dirpath=f"./checkpoints/{name}/",
@@ -679,8 +692,4 @@ if __name__ == "__main__":
                 model,
                 trn_dl, 
                 val_dl,
-                ckpt_path="./checkpoints/flowing-paper-64/last.ckpt"
-            
-                # ckpt_path = "./checkpoints/fanciful-planet-7/last.ckpt"
     )
-                # ckpt_path="checkpoints/upbeat-dawn-53/epoch=14-step=24330-val/loss_epoch=0.00273.ckpt")
