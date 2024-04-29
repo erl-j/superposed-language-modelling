@@ -29,8 +29,8 @@ device = "cuda:0"
 # model = load_merged_models(ROOT_DIR+"checkpoints/dark-sky-67/**/*.ckpt",SimplexDiffusionModel).to(device)
 #model = load_merged_models(ROOT_DIR+"checkpoints/flowing-paper-64/**/*.ckpt",SimplexDiffusionModel).to(device)
 # get hidden size
-#model = SimplexDiffusionModel.load_from_checkpoint(ROOT_DIR+"checkpoints/dark-sky-67/last.ckpt", map_location=device)
-model = SimplexDiffusionModel.load_from_checkpoint(ROOT_DIR+"checkpoints/flowing-paper-64/last.ckpt", map_location=device)
+model = SimplexDiffusionModel.load_from_checkpoint(ROOT_DIR+"checkpoints/dark-sky-67/last.ckpt", map_location=device)
+#model = SimplexDiffusionModel.load_from_checkpoint(ROOT_DIR+"checkpoints/flowing-paper-64/last.ckpt", map_location=device)
 hidden_size = model.hparams.hidden_size
 model.eval()
 #%%
@@ -84,9 +84,9 @@ export_batch(batch,tokenizer,OUTPUT_DIR + "/natural")
 #%%
 
 tasks = [
-"generate",
+#"generate",
 #"pitch_set", # 100 0.5 True 1.0 True
-# "onset_offset_set",
+ "onset_offset_set",
 #"pitch_onset_offset_set",
 # "infilling_box_middle",
 #"infilling_high", # 50 0.0 TRUE 1.0 / 100, 0.85, True, 1.0 , True / 200 ,0.8, True, 1.0, True
@@ -106,7 +106,7 @@ tasks = [
 # GRID_TOPP = [0.0,0.5,0.8,0.9,0.95,0.99,1.0]
 
 GRID_STEPS = [200]
-GRID_TOPP = [0.9]
+GRID_TOPP = [0.85]
 
 MULTIPLY_PRIOR = True
 PRIOR_STRENGTH = 1.0

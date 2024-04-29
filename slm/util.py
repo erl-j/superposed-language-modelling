@@ -94,6 +94,38 @@ def get_sm_pitch_range(sm):
     max_pitch = max(pitches)
     return min_pitch, max_pitch
 
+
+def adjust_note_endings(notes):
+    # Sort notes by start time
+    notes_sorted = sorted(notes, key=lambda x: (x.start, x.pitch))
+
+    # Dictionary to track the last note on each pitch
+    last_note_on_pitch = {}
+
+    new_notes = []
+    for note in notes_sorted:
+        pitch = note.pitch
+        start = note.start
+
+        # If there's already a note playing on the same pitch, update its end time
+        if pitch in last_note_on_pitch:
+            last_active_note = last_note_on_pitch[pitch]
+            if last_active_note.end > start:
+                last_active_note.duration = start - last_active_note.start 
+
+        # Update the last note on this pitch
+        last_note_on_pitch[pitch] = note
+
+        new_notes.append(note)
+
+    return new_notes
+
+def clear_overlap_notes(sm):
+    # new note on same pitch cancels old note
+    for track_idx, track in enumerate(sm.tracks):
+        sm.tracks[track_idx].notes = adjust_note_endings(track.notes)
+    return sm
+
 def render_directory_with_fluidsynth(midi_dir, audio_dir, overwrite=False):
     os.makedirs(audio_dir, exist_ok=True)
     for midi_file in os.listdir(midi_dir):

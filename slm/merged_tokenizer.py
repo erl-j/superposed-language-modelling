@@ -205,6 +205,85 @@ class MergedTokenizer():
                         format_mask[note_idx * self.attributes_per_note + attr_idx, self.token2idx[token]] = 1
         return format_mask
     
+    def replace_instruments(self, x, instruments_to_remove, instruments_to_add, min_notes_per_instrument=0):
+        x = x.clone()
+        # to tokens
+        tokens = self.indices_to_tokens(x)
+        # fold into note arrays
+        notes = [tokens[i:i+self.attributes_per_note] for i in range(0, len(tokens), self.attributes_per_note)]
+        keep_notes = []
+        for note in notes:
+            if any([note[i].split(":")[1] in set(instruments_to_remove) for i in range(len(self.note_attribute_order))]):
+                continue
+            keep_notes.append(note)
+        # return to indices
+        tokens = pydash.flatten(keep_notes)
+        indices = self.tokens_to_indices(tokens)
+        # for each instrument to add, create min_notes_per_instrument notes
+        keep_1h = torch.nn.functional.one_hot(torch.tensor(indices,device=x.device), num_classes=len(self.vocab)).float()
+
+        # reshape
+        keep = einops.rearrange(keep_1h, "(n a) v -> n a v", n=len(keep_notes), a=len(self.note_attribute_order))
+        new = []
+        for instrument in instruments_to_add:
+            note_event = np.ones((self.attributes_per_note, len(self.vocab)))
+            # set all attributes undefined values to 0
+            for attr_idx, note_attr in enumerate(self.note_attribute_order):
+                undef_token_idx = self.token2idx[note_attr + ":-"]
+                note_event[attr_idx, undef_token_idx] = 0
+            instrument_idx = self.note_attribute_order.index("instrument")
+            # get one hot encoding of instrument
+            instrument_token_idx = self.token2idx["instrument:" + instrument]
+            instrument_1h = torch.nn.functional.one_hot(torch.tensor([instrument_token_idx],device=x.device), num_classes=len(self.vocab)).float()
+            note_event[instrument_idx,:] = instrument_1h
+            # repeat for min_notes_per_instrument
+            note_events = np.repeat(note_event[None,...], min_notes_per_instrument, axis=0)
+            new.append(note_events)
+        
+        new = np.concatenate(new, axis=0)
+
+        # concatenate
+        x_1h = np.concatenate([keep, new], axis=0)
+
+        # count missing note events
+        missing_note_events = self.config["max_notes"] - x_1h.shape[0]
+
+        optional_notes = torch.ones((missing_note_events, len(self.note_attribute_order), len(self.vocab)))
+        # add missing note events
+        for note_idx in range(missing_note_events):
+            for instrument in instruments_to_add:
+                instrument_idx = self.note_attribute_order.index("instrument")
+                # get one hot encoding of instrument
+                instrument_token_idx = self.token2idx["instrument:" + instrument]
+                instrument_1h = torch.nn.functional.one_hot(torch.tensor(instrument_token_idx,device=x.device), num_classes=len(self.vocab)).float()
+                # Shapes are (22, 9, 374) and torch.Size([374])
+                # reshape instrument_1h
+                optional_notes[note_idx, instrument_idx,:] += instrument_1h
+            undef_instrument_token_idx = self.token2idx["instrument:-"]
+            undef_instrument_1h = torch.nn.functional.one_hot(torch.tensor(undef_instrument_token_idx,device=x.device), num_classes=len(self.vocab)).float()
+            undef_instrument_1h = undef_instrument_1h
+            optional_notes[note_idx, instrument_idx,:] += undef_instrument_1h
+
+        # concatenate all
+        x_1h = np.concatenate([x_1h, optional_notes], axis=0)
+
+        x_1h = einops.rearrange(x_1h, "n a v -> (n a) v")
+
+        # multiply by format mask
+        x_1h = x_1h * self.get_format_mask()
+
+        return torch.tensor(x_1h)
+
+
+
+
+        
+
+            
+
+
+
+    
     def replace_mask(self,x, attributes_to_replace):
         x = x.clone()
 

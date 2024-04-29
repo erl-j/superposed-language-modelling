@@ -6,6 +6,7 @@ import note_seq
 from rich.progress import track
 import symusic
 import torch
+from tqdm import tqdm
 #%%
 
 # example_records = torch.load("./data/mmd_loops/val_midi_records_unique_pr.pt")
@@ -15,7 +16,8 @@ import torch
 
 #%%
 
-data_path = "./data/clean_drums"
+data_path = "../data/harmonic"
+NUM_BARS = 8
 
 # load pickle
 pickle_path = os.path.join(data_path, "clean.pkl")
@@ -31,14 +33,16 @@ meta = json.loads(open(metadata_path).read())
 
 #%%
 
+TPQ = 240
 records = []
 #'path', 'md5', 'genre', 'midi'
-for i in range(len(data)):
+for i in tqdm(range(len(data))):
     tmp_midi_fp = os.path.join(tmp_midi_path, f"{i}.mid")
     # export midi
     note_seq.midi_io.note_sequence_to_midi_file(data[i]["note_seq"], tmp_midi_fp)
     # load midi with symusic
     midi_sm = symusic.Score(tmp_midi_fp)
+    midi_sm = midi_sm.resample(tpq=TPQ,min_dur=0)
     original_midi_path = data[i]["path"]
     # path
     # get key signature
@@ -52,30 +56,33 @@ for i in range(len(data)):
         continue
     # crop to 4 first bars
     tpq = midi_sm.ticks_per_quarter
-     
-    N_BARS = 4
-    bars_ticks = tpq * 4 * N_BARS
-
-    ##
-    # remove everything after 4 bars
-    end_4_bars_tick = 16 * midi_sm.ticks_per_quarter
-
-    print(f"end of midi file: {end_4_bars_tick}")
-
     # print(f"end of midi file: {end_4_bars_tick}")
     # print(f"end of midi file: {midi_sm.end()}")
 
-    if midi_sm.end() > end_4_bars_tick or midi_sm.end() <= end_4_bars_tick*(3/4):
-        continue
-    else:
-        print(f"{midi_sm.end()} midi file is just right")
-        path = data[i]["path"]
-        md5 = i
-        midi = midi_sm
-        tag = meta[path]["tags"]
-        records.append({"path": path, "md5": md5, "genre": tag, "midi": midi})
+    path = data[i]["path"]
+    md5 = i
+    midi = midi_sm
+    tag = meta[path]["tags"]
+    records.append({"path": path, "md5": md5, "genre": tag, "midi": midi, "ticks": midi_sm.end()})
         
 # %%
+
+# plot histogram of ticks
+import matplotlib.pyplot as plt
+import numpy as np
+
+ticks = [record["ticks"] for record in records]
+plt.hist(ticks, bins=100, range=(0, TPQ * 16 * 4))
+
+records = [{"note_num":record["midi"].note_num(),**record} for record in records]
+
+#%%
+# plot histogram of note_num
+note_nums = [record["note_num"] for record in records]
+plt.hist(note_nums, bins=100, range=(0, 300))
+plt.show()
+
+#%%
 
 # add one list level
 records = [[record] for record in records]

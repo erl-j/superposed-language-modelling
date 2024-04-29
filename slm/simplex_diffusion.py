@@ -589,9 +589,9 @@ if __name__ == "__main__":
 
     model = SimplexDiffusionModel(
         hidden_size=512,
-        n_heads=8,
+        n_heads=4,
         feed_forward_size=2 * 512,
-        n_layers=8,
+        n_layers=6,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
         learning_rate=1e-3,
@@ -605,14 +605,14 @@ if __name__ == "__main__":
         format_mask_on_probs=True
     )
 
-    src_model = SimplexDiffusionModel.load_from_checkpoint(
-                checkpoint_path = "./checkpoints/dark-sky-67/last.ckpt",
-                map_location="cpu"
-    )
+    # src_model = SimplexDiffusionModel.load_from_checkpoint(
+    #             checkpoint_path = "./checkpoints/dark-sky-67/last.ckpt",
+    #             map_location="cpu"
+    # )
 
-    model.initialize_from_different_model(
-        src_model
-    )
+    # model.initialize_from_different_model(
+    #     src_model
+    # )
 
     mmd_4bar_filter_fn = lambda x: f"n_bars={N_BARS}" in x
 
@@ -668,7 +668,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[0],
+        devices=[6],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[
@@ -681,6 +681,7 @@ if __name__ == "__main__":
                 save_top_k=3,
                 save_last=True,
                 filename="{epoch}-{step}-{val/loss_epoch:.5f}",
+                every_n_epochs=1 if DATASET == "mmd_loops" else 20,
             ),
         ],
         logger=wandb_logger,
@@ -692,4 +693,5 @@ if __name__ == "__main__":
                 model,
                 trn_dl, 
                 val_dl,
+                # ckpt_path = "./checkpoints/dark-sky-67/last.ckpt"
     )
