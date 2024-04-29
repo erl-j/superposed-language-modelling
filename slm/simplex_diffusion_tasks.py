@@ -22,14 +22,17 @@ import torch
 import einops
 
 #%%
-ROOT_DIR = "./"
+ROOT_DIR = "../"
 device = "cuda:0"
 
 # print model
-model = load_merged_models(ROOT_DIR+"checkpoints/dark-sky-67/**/*.ckpt",SimplexDiffusionModel).to(device)
-# model = load_merged_models(ROOT_DIR+"checkpoints/flowing-paper-64/**/*.ckpt",SimplexDiffusionModel).to(device)
+# model = load_merged_models(ROOT_DIR+"checkpoints/dark-sky-67/**/*.ckpt",SimplexDiffusionModel).to(device)
+#model = load_merged_models(ROOT_DIR+"checkpoints/flowing-paper-64/**/*.ckpt",SimplexDiffusionModel).to(device)
 # get hidden size
+#model = SimplexDiffusionModel.load_from_checkpoint(ROOT_DIR+"checkpoints/dark-sky-67/last.ckpt", map_location=device)
+model = SimplexDiffusionModel.load_from_checkpoint(ROOT_DIR+"checkpoints/flowing-paper-64/last.ckpt", map_location=device)
 hidden_size = model.hparams.hidden_size
+model.eval()
 #%%
 SEED = 0
 np.random.seed(SEED)
@@ -38,7 +41,7 @@ torch.cuda.manual_seed(SEED)
 
 
 TMP_DIR = ROOT_DIR + "tmp"
-OUTPUT_DIR = ROOT_DIR + "artefacts/simplex_demo/"
+OUTPUT_DIR = ROOT_DIR + "artefacts/simplex_demo_2/"
 
 def export_batch(y, tokenizer, output_dir):
     for sample_index in tqdm(range(y.shape[0])):
@@ -51,7 +54,6 @@ def export_batch(y, tokenizer, output_dir):
 # get tokenizer
 tokenizer = model.tokenizer
 
-BATCH_SIZE = 23
 MODEL_BARS = 4
 # Load the dataset
 ds = MidiDataset(
@@ -61,20 +63,18 @@ ds = MidiDataset(
     tokenizer=tokenizer,
     min_notes=8 * MODEL_BARS,
     max_notes=tokenizer.config["max_notes"],
-    sm_filter_fn = lambda sm : has_drum(sm) and has_harmonic(sm)
+    # sm_filter_fn = lambda sm : has_drum(sm) and has_harmonic(sm)
 )
 
-dl = torch.utils.data.DataLoader(
-    ds,
-    batch_size=BATCH_SIZE,
-    shuffle=False,
-)
 
 #%%
 
-likes = [317, 762, 2705, 4868, 6033, 7165, 8118, 10730, 12045, 12085, 12843, 12989, 13633, 13819, 13823, 15112, 15790, 16326, 17115, 18310, 18424, 18619, 21862]
-curated_test_data = list(set(likes))
-curated_test_data.sort()
+#likes = [317, 762, 2705, 4868, 6033, 7165, 8118, 10730, 12045, 12085, 12843, 12989, 13633, 13819, 13823, 15112, 15790, 16326, 17115, 18310, 18424, 18619, 21862]
+likes = [1403,  50, 30]
+
+BATCH_SIZE = len(likes)
+curated_test_data = likes
+# curated_test_data.sort()
 
 # create batch from likes
 batch = torch.stack([ds[index] for index in curated_test_data], dim=0)
@@ -84,35 +84,45 @@ export_batch(batch,tokenizer,OUTPUT_DIR + "/natural")
 #%%
 
 tasks = [
-"pitch_set",
-"onset_offset_set",
-"pitch_onset_offset_set",
-"infilling_box_middle",
-"infilling_high", 
-"infilling_low",
-"infilling_start",
-"infilling_end",
 "generate",
-"variation",
-"constrained_generation",
-"infilling_harmonic",
-"infilling_drums"
+#"pitch_set", # 100 0.5 True 1.0 True
+# "onset_offset_set",
+#"pitch_onset_offset_set",
+# "infilling_box_middle",
+#"infilling_high", # 50 0.0 TRUE 1.0 / 100, 0.85, True, 1.0 , True / 200 ,0.8, True, 1.0, True
+#"infilling_middle", # 50 , 0.0, TRUE, 1.0 / 200, 0.75, TRUE, 1.0 / 200 ,0.8, True, 1.0, True
+#"infilling_low", # 50, 0.0, False, 1.0 / 200, 0.75, True, 1.0 
+# "infilling_start",
+# "infilling_end",
+# "variation",
+#"constrained_generation",
+#"infilling_harmonic", #  200 0.85 True 1.0 True
+#"infilling_drums" # 200, 0.85, True, 1.0, True
 ]
 
-GRID_STEPS = [5,10,25,50,100,200]
-GRID_TOPP = [0.0,0.5,0.8,0.9,0.95,0.99,1.0]
+# 200 0.75/0.85 True 1.0
+
+# GRID_STEPS = [5,10,25,50,100,200]
+# GRID_TOPP = [0.0,0.5,0.8,0.9,0.95,0.99,1.0]
+
+GRID_STEPS = [200]
+GRID_TOPP = [0.9]
+
+MULTIPLY_PRIOR = True
+PRIOR_STRENGTH = 1.0
+ENFORCE_PRIOR = True
 
 # infilling tasks
 for task in tasks:
     for N_STEPS in GRID_STEPS:
         for TOPP in GRID_TOPP:
+
+            prior_strength = PRIOR_STRENGTH
             
             print(f"Task: {task}")
             print(f"##################")
             
-            top_p = None
-            prior_strength = None
-            enforce_prior = None
+            enforce_prior = True
 
             # prepare masks
             masks = []
@@ -128,8 +138,6 @@ for task in tasks:
                     mode = ".."
 
                     top_p = TOPP
-                    prior_strength = 1.0
-                    enforce_prior = True
 
                     match task:
                         case "infilling_high":
@@ -158,6 +166,11 @@ for task in tasks:
                         
                         case "infilling_end":
                             beat_range = (8,16)
+                            pitches=None
+                            infilling_mode = "harmonic+drums"
+
+                        case "infilling_middle":
+                            beat_range = (4,12)
                             pitches=None
                             infilling_mode = "harmonic+drums"
 
@@ -205,15 +218,23 @@ for task in tasks:
                 elif "generate" in task:
 
                     top_p = TOPP
-                    prior_strength = 1.0
                     enforce_prior = True
 
-                    mask = model.format_mask[None, ...].float()
+                    mask = model.tokenizer.constraint_mask(
+                        # tags=["jazz"],
+                        scale="C major",
+                        instruments=["Piano","Bass","Drums"],
+                        # tempos=["138"],
+                        min_notes=25,
+                        max_notes=275,
+                        min_notes_per_instrument=20
+                    )[None, ...].float()
+
+                    #mask = model.format_mask[None, ...].float()
 
                 elif "constrained" in task:
 
                     top_p = TOPP
-                    prior_strength = 1.0
                     enforce_prior = True
 
                     x = batch[sample_idx]
@@ -250,12 +271,11 @@ for task in tasks:
                         # tags = tags,
                         min_notes=n_notes,
                         max_notes=n_notes,
-                        min_notes_per_instrument=1,
+                        min_notes_per_instrument=10,
                     )[None, ...].float()
 
                 elif task == "pitch_set":
                     top_p = TOPP
-                    prior_strength = 1.0
                     enforce_prior = True
 
                     x = batch[sample_idx]
@@ -274,7 +294,6 @@ for task in tasks:
 
                 elif task == "onset_offset_set":
                     top_p = TOPP
-                    prior_strength = 1.0
                     enforce_prior = True
 
                     x = batch[sample_idx]
@@ -298,7 +317,6 @@ for task in tasks:
 
                 elif task == "pitch_onset_offset_set":
                     top_p = TOPP
-                    prior_strength = 1.0
                     enforce_prior = True
 
                     x = batch[sample_idx]
@@ -342,15 +360,16 @@ for task in tasks:
                 prior=mask,
                 nb_steps=N_STEPS,
                 batch_size=BATCH_SIZE,
-                top_p=top_p,
-                prior_strength=prior_strength,
-                enforce_prior=enforce_prior,
+                top_p=TOPP,
+                prior_strength=PRIOR_STRENGTH,
+                enforce_prior=ENFORCE_PRIOR,
+                enforce_multiply=MULTIPLY_PRIOR if task != "variation" else False,
             )
 
-            # for sample_index in range(y.shape[0])[:3]:
-            #     # decode
-            #     y_sm = tokenizer.decode(y[sample_index])
-            #     preview_sm(y_sm)
+            for sample_index in range(y.shape[0]):
+                # decode
+                y_sm = tokenizer.decode(y[sample_index])
+                preview_sm(y_sm)
 
             # get batch
             # export batch

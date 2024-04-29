@@ -460,8 +460,11 @@ class MergedTokenizer():
         if max_notes is None:
             max_notes = self.config["max_notes"]
 
-        n_instruments = len(instruments)
-        n_instrument_specific_notes = min_notes_per_instrument * n_instruments
+        if instruments is not None:
+            n_instruments = len(instruments)
+            n_instrument_specific_notes = min_notes_per_instrument * n_instruments
+        else:
+            n_instrument_specific_notes = 0
 
         min_notes = max(min_notes, n_instrument_specific_notes)
 

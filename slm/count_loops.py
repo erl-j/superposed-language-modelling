@@ -13,7 +13,6 @@ from tqdm import tqdm
 import glob
 
 
-
 model = load_merged_models("../checkpoints/dark-sky-67/**/*.ckpt",SimplexDiffusionModel).to(device)
 #model = load_merged_models("../checkpoints/flowing-paper-64/**/*.ckpt",SimplexDiffusionModel).to(device)
 #%%
@@ -69,14 +68,12 @@ ds = MidiDataset(
     max_notes=model.tokenizer.config["max_notes"],
 )
 
-print(len(ds))
-
 
 #%%
 # 1403
 # 3050 guitar
 # 3700?
-RESAMPLE_IDX = 1400
+RESAMPLE_IDX = 11800
 
 x = ds[RESAMPLE_IDX]
 x_sm = model.tokenizer.decode(x)
@@ -124,7 +121,7 @@ mask = (
         x,
         beat_range,
         min_notes=x_sm.note_num(),
-        max_notes=290,
+        max_notes=x_sm.note_num(),
         pitches=pitch_range,
         mode ="harmonic"
     )[None, ...]    
@@ -165,10 +162,7 @@ torch.manual_seed(1)
 # infilling top-p 0.5
 BATCH_SIZE = 3
 N_STEPS = 200
-TOP_P = 0.95
-PRIOR_STRENGTH = 1.0
 REFINEMENT_STEPS = 0
-ENFORCE_MULTIPLY = True
 
 prior = mask / mask.sum(dim=-1, keepdim=True)
 
@@ -180,49 +174,52 @@ assert torch.allclose(prior.sum(dim=-1), torch.ones_like(prior.sum(dim=-1)))
 plt.imshow(prior.cpu().numpy().T, aspect="auto",interpolation="none")
 plt.show()
 
-
+# generation 100/0.9 as well?
+# infilling 100/0.9
+# 100 steps
+# decay prior helps for constrained generation?
 y = model.sample2(prior,
                 BATCH_SIZE,
                 N_STEPS,
-                top_p=TOP_P,
-                prior_strength=PRIOR_STRENGTH,
+                top_p=0.9,
+                prior_strength=1.0,
                 plot=False,
                 enforce_prior=True,
-                enforce_multiply=ENFORCE_MULTIPLY,
+                enforce_multiply=True,
                 decay_prior=False,
                 inverse_decay=False,
                 attribute_temperature=None,
                 )
 
-# # add refinement step
-# # one hot
-# if REFINEMENT_STEPS > 0:
-#     ys = torch.nn.functional.one_hot(y, num_classes=len(model.tokenizer.vocab)).float()
-#     # soften my mixing with format mask
-#     format_prior = format_mask / format_mask.sum(dim=-1, keepdim=True)
-#     alpha = 0.5
-#     ys = alpha * ys + (1-alpha) * format_prior
-#     # renormalize
-#     ys = ys / ys.sum(dim=-1, keepdim=True)
-#     # multiply with prior
-#     ys = ys * prior
-#     # renormalize
-#     ys = ys / ys.sum(dim=-1, keepdim=True)
+# add refinement step
+# one hot
+if REFINEMENT_STEPS > 0:
+    ys = torch.nn.functional.one_hot(y, num_classes=len(model.tokenizer.vocab)).float()
+    # soften my mixing with format mask
+    format_prior = format_mask / format_mask.sum(dim=-1, keepdim=True)
+    alpha = 0.5
+    ys = alpha * ys + (1-alpha) * format_prior
+    # renormalize
+    ys = ys / ys.sum(dim=-1, keepdim=True)
+    # multiply with prior
+    ys = ys * prior
+    # renormalize
+    ys = ys / ys.sum(dim=-1, keepdim=True)
 
 
-#     # refine
-#     y2 = model.sample2(prior,
-#                     BATCH_SIZE,
-#                     REFINEMENT_STEPS,
-#                     top_p=1.0,
-#                     prior_strength=0.5,
-#                     plot=False,
-#                     enforce_prior=True,
-#                     enforce_multiply=False,
-#                     decay_prior=False,
-#                     attribute_temperature=None,
-#                     inverse_decay=False,
-#                     )
+    # refine
+    y2 = model.sample2(prior,
+                    BATCH_SIZE,
+                    REFINEMENT_STEPS,
+                    top_p=1.0,
+                    prior_strength=0.5,
+                    plot=False,
+                    enforce_prior=True,
+                    enforce_multiply=False,
+                    decay_prior=False,
+                    attribute_temperature=None,
+                    inverse_decay=False,
+                    )
 
 # plot before and after
 for i in range(BATCH_SIZE):

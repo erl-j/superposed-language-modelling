@@ -399,9 +399,9 @@ class SimplexDiffusionModel(pl.LightningModule):
 
                 if enforce_prior and prior is not None:
                     if enforce_multiply:
-                        w0p = (w0p+1e-9) * prior_flat
+                        w0p = (w0p+1e-12) * prior_flat
                     else:
-                        w0p = ((w0p+1e-9) * (prior_flat>1e-9).float()) 
+                        w0p = ((w0p+1e-12) * (prior_flat>1e-12).float()) 
                     w0p = w0p / w0p.sum(dim=-1, keepdim=True)
 
                 w0p = top_p_probs(w0p, top_p)
