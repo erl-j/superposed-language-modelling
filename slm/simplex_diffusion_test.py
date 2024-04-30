@@ -4,15 +4,16 @@ from simplex_diffusion import SimplexDiffusionModel
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
-from util import preview_sm,piano_roll, load_merged_models, clear_overlap_notes
+from util import preview_sm,piano_roll, load_merged_models, clear_overlap_notes, sm_reduce_dynamics
 import matplotlib.pyplot as plt
 import seaborn as sns
 from data import MidiDataset
 import torch
 from tqdm import tqdm
 import glob
+import os
 
-
+#%%
 
 #model = SimplexDiffusionModel.load_from_checkpoint("../checkpoints/dark-sky-67/last.ckpt").to(device)
 model = SimplexDiffusionModel.load_from_checkpoint("../checkpoints/flowing-paper-64/last.ckpt").to(device)
@@ -24,44 +25,8 @@ model = SimplexDiffusionModel.load_from_checkpoint("../checkpoints/flowing-paper
 
 dataset = "mmd_loops"
 
-#%%
-
-# get the embedding
-embedding = model.embedding_layer.weight.detach().cpu().numpy().T
-projection = model.decoder_output_layer.weight.detach().cpu().numpy()
-
-# get vocab
-vocab = model.tokenizer.vocab
-
-embedding_norm = np.linalg.norm(embedding, axis=1, keepdims=True)
-projection_norm = np.linalg.norm(projection, axis=0, keepdims=True)
-
-# normalize the embedding
-embedding = embedding / embedding_norm
-projection = projection / projection_norm
-
-# compute the cosine similarity
-embedding_similarity = embedding @ embedding.T
-projection_similarity = projection @ projection.T
 
 
-# plot the similarity matrix
-# make large figure
-plt.figure(figsize=(50, 50))
-# set small font
-sns.set(font_scale=0.5)
-sns.heatmap(embedding_similarity, cmap="magma", xticklabels=vocab, yticklabels=vocab, mask = np.eye(len(vocab)))
-plt.show()
-
-# plot the similarity matrix
-# make large figure
-plt.figure(figsize=(50, 50))
-# set small font
-sns.set(font_scale=0.5)
-sns.heatmap(projection_similarity, cmap="magma", xticklabels=vocab, yticklabels=vocab, mask = np.eye(len(vocab)))
-plt.show()
-
-#%%
 ROOT_DIR = "../"
 TMP_DIR = ROOT_DIR + "artefacts/tmp"
 OUTPUT_DIR = ROOT_DIR + "artefacts/output"
@@ -143,8 +108,9 @@ mask = (
     .float()
 ) 
 
-
-mask = model.tokenizer.replace_instruments(x,["Drums","Bass"],["Bass","Drums"],20)[None, ...].to(model.device).float()
+# chromatic percussion is fun!
+#mask = model.tokenizer.replace_instruments(x,["Piano","Guitar"],["Chromatic Percussion"],20)[None, ...].to(model.device).float()
+mask = model.tokenizer.replace_instruments(x,["Guitar"],["Guitar"],20,275)[None, ...].to(model.device).float()
 
 # mask = torch.nn.functional.one_hot(x, num_classes=len(model.tokenizer.vocab)).float()
 
@@ -178,8 +144,8 @@ mask = mask.to(model.device).float()
 torch.manual_seed(1)
 # infilling top-p 0.5
 BATCH_SIZE = 3
-N_STEPS = 200
-TOP_P = 0.99
+N_STEPS = 100
+TOP_P = 0.75
 PRIOR_STRENGTH = 1.0
 REFINEMENT_STEPS = 0
 ENFORCE_MULTIPLY = True
@@ -237,7 +203,7 @@ y = model.sample2(prior,
 #                     attribute_temperature=None,
 #                     inverse_decay=False,
 #                     )
-
+#%%
 # plot before and after
 for i in range(BATCH_SIZE):
     y_sm = model.tokenizer.decode(y[i])
@@ -245,6 +211,10 @@ for i in range(BATCH_SIZE):
     y_sm = clear_overlap_notes(y_sm)
     print(f"Number of notes after clearing overlap: {y_sm.note_num()}")
     preview_sm(y_sm)
+    # export to midi
+    sm_reduce_dynamics(y_sm, 0.5)
+    os.makedirs("../artefacts/test_vel",exist_ok=True)
+    y_sm.dump_midi(f"../artefacts/test_vel/sample_{i}.mid")
     # if REFINEMENT_STEPS > 0:
     #     y2_sm = model.tokenizer.decode(y2[i])
     #     preview_sm(y2_sm)
@@ -297,6 +267,7 @@ preview_sm(y_sm)
 
 
 
+
  # %%
 
 
@@ -310,3 +281,39 @@ preview_sm(y_sm)
 #     preview_sm(y_sm)
 #     print("\n\n")
 # %%
+#%%
+
+# get the embedding
+embedding = model.embedding_layer.weight.detach().cpu().numpy().T
+projection = model.decoder_output_layer.weight.detach().cpu().numpy()
+
+# get vocab
+vocab = model.tokenizer.vocab
+
+embedding_norm = np.linalg.norm(embedding, axis=1, keepdims=True)
+projection_norm = np.linalg.norm(projection, axis=0, keepdims=True)
+
+# normalize the embedding
+embedding = embedding / embedding_norm
+projection = projection / projection_norm
+
+# compute the cosine similarity
+embedding_similarity = embedding @ embedding.T
+projection_similarity = projection @ projection.T
+
+
+# plot the similarity matrix
+# make large figure
+plt.figure(figsize=(50, 50))
+# set small font
+sns.set(font_scale=0.5)
+sns.heatmap(embedding_similarity, cmap="magma", xticklabels=vocab, yticklabels=vocab, mask = np.eye(len(vocab)))
+plt.show()
+
+# plot the similarity matrix
+# make large figure
+plt.figure(figsize=(50, 50))
+# set small font
+sns.set(font_scale=0.5)
+sns.heatmap(projection_similarity, cmap="magma", xticklabels=vocab, yticklabels=vocab, mask = np.eye(len(vocab)))
+plt.show()

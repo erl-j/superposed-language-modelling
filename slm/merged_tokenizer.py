@@ -205,17 +205,26 @@ class MergedTokenizer():
                         format_mask[note_idx * self.attributes_per_note + attr_idx, self.token2idx[token]] = 1
         return format_mask
     
-    def replace_instruments(self, x, instruments_to_remove, instruments_to_add, min_notes_per_instrument=0):
+    def replace_instruments(self, x, instruments_to_remove, instruments_to_add, min_notes_per_instrument=0, total_max_notes=None):
         x = x.clone()
         # to tokens
+        if total_max_notes is None:
+            total_max_notes = self.config["max_notes"]
         tokens = self.indices_to_tokens(x)
         # fold into note arrays
         notes = [tokens[i:i+self.attributes_per_note] for i in range(0, len(tokens), self.attributes_per_note)]
+        # remove notes with undefined attributes
+        active_notes = [attr for attr in notes if not any([attr[i].endswith("-") for i in range(len(self.note_attribute_order))])]
+        inactive_notes = [attr for attr in notes if any([attr[i].endswith("-") for i in range(len(self.note_attribute_order))])]
+        n_dead = self.config["max_notes"] - total_max_notes
+        notes = active_notes + inactive_notes[:n_dead]
+        print(len(notes))
         keep_notes = []
         for note in notes:
             if any([note[i].split(":")[1] in set(instruments_to_remove) for i in range(len(self.note_attribute_order))]):
                 continue
             keep_notes.append(note)
+        
         # return to indices
         tokens = pydash.flatten(keep_notes)
         indices = self.tokens_to_indices(tokens)
@@ -244,6 +253,8 @@ class MergedTokenizer():
 
         # concatenate
         x_1h = np.concatenate([keep, new], axis=0)
+
+        print(x_1h.shape)
 
         # count missing note events
         missing_note_events = self.config["max_notes"] - x_1h.shape[0]

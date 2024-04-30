@@ -14,6 +14,13 @@ import math
 import glob
 from tqdm import tqdm
 
+def sm_reduce_dynamics(sm, factor):
+    sm = sm.copy()
+    for track in sm.tracks:
+        for note in track.notes:
+            note.velocity = int(note.velocity * factor)
+    return sm
+
 def load_merged_models(pattern, model_class):
     print("Instantiating merged model")
 
