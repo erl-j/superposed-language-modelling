@@ -109,8 +109,8 @@ mask = (
 ) 
 
 # chromatic percussion is fun!
-#mask = model.tokenizer.replace_instruments(x,["Piano","Guitar"],["Chromatic Percussion"],20)[None, ...].to(model.device).float()
-mask = model.tokenizer.replace_instruments(x,["Guitar"],["Guitar"],20,275)[None, ...].to(model.device).float()
+#mask = model.tokenizer.replace_instruments(x,["Piano","Guitar"],["Chromatic Percussion"],20,275)[None, ...].to(model.device).float()
+mask = model.tokenizer.replace_instruments(x,["Piano","Guitar"],["Piano","Guitar"],20,275)[None, ...].to(model.device).float()
 
 # mask = torch.nn.functional.one_hot(x, num_classes=len(model.tokenizer.vocab)).float()
 
@@ -144,7 +144,7 @@ mask = mask.to(model.device).float()
 torch.manual_seed(1)
 # infilling top-p 0.5
 BATCH_SIZE = 3
-N_STEPS = 100
+N_STEPS = 50
 TOP_P = 0.75
 PRIOR_STRENGTH = 1.0
 REFINEMENT_STEPS = 0
@@ -203,7 +203,6 @@ y = model.sample2(prior,
 #                     attribute_temperature=None,
 #                     inverse_decay=False,
 #                     )
-#%%
 # plot before and after
 for i in range(BATCH_SIZE):
     y_sm = model.tokenizer.decode(y[i])

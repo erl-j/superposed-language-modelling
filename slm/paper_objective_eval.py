@@ -42,7 +42,7 @@ dummy_model = (
 tokenizer = dummy_model.tokenizer
 del dummy_model
 
-
+ 
 BATCH_SIZE = 1
 MODEL_BARS = 4
 # Load the dataset

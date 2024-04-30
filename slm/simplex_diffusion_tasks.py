@@ -41,7 +41,8 @@ torch.cuda.manual_seed(SEED)
 
 
 TMP_DIR = ROOT_DIR + "tmp"
-OUTPUT_DIR = ROOT_DIR + "artefacts/simplex_demo_2/"
+OUTPUT_DIR = ROOT_DIR + "artefacts/simplex_demo_2_/"
+DEMO_DIR = ROOT_DIR + "artefacts/simplex_demo_2_website/"
 
 def export_batch(y, tokenizer, output_dir):
     for sample_index in tqdm(range(y.shape[0])):
@@ -70,7 +71,7 @@ ds = MidiDataset(
 #%%
 
 #likes = [317, 762, 2705, 4868, 6033, 7165, 8118, 10730, 12045, 12085, 12843, 12989, 13633, 13819, 13823, 15112, 15790, 16326, 17115, 18310, 18424, 18619, 21862]
-likes = [1403,  50, 30]
+likes = [430, 1403,50,280,327, 420 ]
 
 BATCH_SIZE = len(likes)
 curated_test_data = likes
@@ -81,12 +82,20 @@ batch = torch.stack([ds[index] for index in curated_test_data], dim=0)
 
 export_batch(batch,tokenizer,OUTPUT_DIR + "/natural")
 
+# preview batch
+for sample_index in range(batch.shape[0]):
+    print(f"likes: {curated_test_data[sample_index]}")
+    # decode
+    sm = tokenizer.decode(batch[sample_index])
+    preview_sm(sm)
+
 #%%
 
 tasks = [
-#"generate",
+# "generate",
+#"generate_w_constraints",
 #"pitch_set", # 100 0.5 True 1.0 True
- "onset_offset_set",
+#"onset_offset_set",
 #"pitch_onset_offset_set",
 # "infilling_box_middle",
 #"infilling_high", # 50 0.0 TRUE 1.0 / 100, 0.85, True, 1.0 , True / 200 ,0.8, True, 1.0, True
@@ -94,8 +103,7 @@ tasks = [
 #"infilling_low", # 50, 0.0, False, 1.0 / 200, 0.75, True, 1.0 
 # "infilling_start",
 # "infilling_end",
-# "variation",
-#"constrained_generation",
+"variation",
 #"infilling_harmonic", #  200 0.85 True 1.0 True
 #"infilling_drums" # 200, 0.85, True, 1.0, True
 ]
@@ -108,9 +116,10 @@ tasks = [
 GRID_STEPS = [200]
 GRID_TOPP = [0.85]
 
-MULTIPLY_PRIOR = True
-PRIOR_STRENGTH = 1.0
-ENFORCE_PRIOR = True
+PRIOR_STRENGTH = 0.6
+ENFORCE_PRIOR = False
+MULTIPLY_PRIOR = False
+
 
 # infilling tasks
 for task in tasks:
@@ -215,7 +224,24 @@ for task in tasks:
                         .float()
                     ) 
                 
-                elif "generate" in task:
+                elif "generate" == task:
+
+                    top_p = TOPP
+                    enforce_prior = True
+
+                    # mask = model.tokenizer.constraint_mask(
+                    #     # tags=["jazz"],
+                    #     scale="C major",
+                    #     instruments=["Piano","Bass","Drums"],
+                    #     # tempos=["138"],
+                    #     min_notes=25,
+                    #     max_notes=275,
+                    #     min_notes_per_instrument=20
+                    # )[None, ...].float()
+
+                    mask = model.format_mask[None, ...].float()
+
+                elif "generate_w_constraints" in task:
 
                     top_p = TOPP
                     enforce_prior = True
@@ -223,14 +249,12 @@ for task in tasks:
                     mask = model.tokenizer.constraint_mask(
                         # tags=["jazz"],
                         scale="C major",
-                        instruments=["Piano","Bass","Drums"],
+                        instruments=["Piano","Bass","Drums","Guitar"],
                         # tempos=["138"],
                         min_notes=25,
                         max_notes=275,
-                        min_notes_per_instrument=20
+                        min_notes_per_instrument=10
                     )[None, ...].float()
-
-                    #mask = model.format_mask[None, ...].float()
 
                 elif "constrained" in task:
 
@@ -368,10 +392,12 @@ for task in tasks:
 
             for sample_index in range(y.shape[0]):
                 # decode
+                print(f"n_notes {tokenizer.decode(y[sample_index]).note_num()}")
                 y_sm = tokenizer.decode(y[sample_index])
                 preview_sm(y_sm)
 
             # get batch
             # export batch
             export_batch(y, model.tokenizer, OUTPUT_DIR + f"/{task}/hz_{hidden_size}_steps_{N_STEPS}_topp_{top_p}_prior_{prior_strength}_enforce_{enforce_prior}")
+            export_batch(y, model.tokenizer, DEMO_DIR + f"/{task}/")
 # %%
