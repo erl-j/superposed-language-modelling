@@ -205,7 +205,7 @@ class MergedTokenizer():
                         format_mask[note_idx * self.attributes_per_note + attr_idx, self.token2idx[token]] = 1
         return format_mask
     
-    def replace_instruments(self, x, instruments_to_remove, instruments_to_add, min_notes_per_instrument=0, total_max_notes=None):
+    def replace_instruments_mask(self, x, instruments_to_remove, instruments_to_add, min_notes_per_instrument=0, total_max_notes=None):
         x = x.clone()
         # to tokens
         if total_max_notes is None:
@@ -218,7 +218,6 @@ class MergedTokenizer():
         inactive_notes = [attr for attr in notes if any([attr[i].endswith("-") for i in range(len(self.note_attribute_order))])]
         n_dead = self.config["max_notes"] - total_max_notes
         notes = active_notes + inactive_notes[:n_dead]
-        print(len(notes))
         keep_notes = []
         for note in notes:
             if any([note[i].split(":")[1] in set(instruments_to_remove) for i in range(len(self.note_attribute_order))]):
@@ -254,7 +253,6 @@ class MergedTokenizer():
         # concatenate
         x_1h = np.concatenate([keep, new], axis=0)
 
-        print(x_1h.shape)
 
         # count missing note events
         missing_note_events = self.config["max_notes"] - x_1h.shape[0]
@@ -262,8 +260,9 @@ class MergedTokenizer():
         optional_notes = torch.ones((missing_note_events, len(self.note_attribute_order), len(self.vocab)))
         # add missing note events
         for note_idx in range(missing_note_events):
+            instrument_idx = self.note_attribute_order.index("instrument")
+            optional_notes[note_idx, instrument_idx,:] = 0
             for instrument in instruments_to_add:
-                instrument_idx = self.note_attribute_order.index("instrument")
                 # get one hot encoding of instrument
                 instrument_token_idx = self.token2idx["instrument:" + instrument]
                 instrument_1h = torch.nn.functional.one_hot(torch.tensor(instrument_token_idx,device=x.device), num_classes=len(self.vocab)).float()
@@ -547,6 +546,8 @@ class MergedTokenizer():
     
     def constraint_mask(self,tags=None, tempos=None, instruments=None, pitches=None, onset_beats=None, offset_beats=None, scale="" ,min_notes=1, max_notes=None, min_notes_per_instrument=0):
 
+        if tempos is not None:
+            tempos = [self.tempo_to_tempo_bin(tempo) for tempo in tempos] 
         if max_notes is None:
             max_notes = self.config["max_notes"]
 

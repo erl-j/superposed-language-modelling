@@ -14,6 +14,29 @@ import math
 import glob
 from tqdm import tqdm
 
+def sm_fix_overlap_notes(sm):
+    sm = sm.copy()
+    for track_idx in range(len(sm.tracks)):
+        track = sm.tracks[track_idx]
+        notes = track.notes
+        # sort notes by start
+        notes = sorted(notes,key=lambda x: x.start)
+        new_notes = []
+        for pitch in range(128):
+            new_pitch_notes = []
+            pitch_notes = [note for note in notes if note.pitch == pitch]
+            if len(pitch_notes) > 0:
+                new_pitch_notes.append(pitch_notes[0])
+                for i in range(len(pitch_notes)-1):
+                    if pitch_notes[i].start == pitch_notes[i+1].start:
+                        continue
+                    elif pitch_notes[i].end > pitch_notes[i+1].start:
+                        pitch_notes[i].duration = pitch_notes[i+1].start - pitch_notes[i].start
+                    new_pitch_notes.append(pitch_notes[i+1])
+            new_notes.extend(new_pitch_notes)
+        sm.tracks[track_idx].notes = new_notes
+    return sm
+
 def sm_reduce_dynamics(sm, factor):
     sm = sm.copy()
     for track in sm.tracks:
@@ -102,36 +125,6 @@ def get_sm_pitch_range(sm):
     return min_pitch, max_pitch
 
 
-def adjust_note_endings(notes):
-    # Sort notes by start time
-    notes_sorted = sorted(notes, key=lambda x: (x.start, x.pitch))
-
-    # Dictionary to track the last note on each pitch
-    last_note_on_pitch = {}
-
-    new_notes = []
-    for note in notes_sorted:
-        pitch = note.pitch
-        start = note.start
-
-        # If there's already a note playing on the same pitch, update its end time
-        if pitch in last_note_on_pitch:
-            last_active_note = last_note_on_pitch[pitch]
-            if last_active_note.end > start:
-                last_active_note.duration = start - last_active_note.start 
-
-        # Update the last note on this pitch
-        last_note_on_pitch[pitch] = note
-
-        new_notes.append(note)
-
-    return new_notes
-
-def clear_overlap_notes(sm):
-    # new note on same pitch cancels old note
-    for track_idx, track in enumerate(sm.tracks):
-        sm.tracks[track_idx].notes = adjust_note_endings(track.notes)
-    return sm
 
 def render_directory_with_fluidsynth(midi_dir, audio_dir, overwrite=False):
     os.makedirs(audio_dir, exist_ok=True)

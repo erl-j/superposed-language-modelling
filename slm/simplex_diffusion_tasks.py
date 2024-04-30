@@ -12,8 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 from data import MidiDataset
-from train import EncoderOnlyModel
-from util import preview, render_directory_with_fluidsynth, has_drum, has_harmonic, get_sm_pitch_range, load_merged_models
+from util import preview, render_directory_with_fluidsynth, has_drum, has_harmonic, get_sm_pitch_range, load_merged_models, sm_fix_overlap_notes
 import os
 import IPython.display as ipd
 from paper_checkpoints import checkpoints
@@ -41,8 +40,8 @@ torch.cuda.manual_seed(SEED)
 
 
 TMP_DIR = ROOT_DIR + "tmp"
-OUTPUT_DIR = ROOT_DIR + "artefacts/simplex_demo_2_/"
-DEMO_DIR = ROOT_DIR + "artefacts/simplex_demo_2_website/"
+OUTPUT_DIR = ROOT_DIR + "artefacts/simplex_demo_3_/"
+DEMO_DIR = ROOT_DIR + "artefacts/simplex_demo_3_website/"
 
 def export_batch(y, tokenizer, output_dir):
     for sample_index in tqdm(range(y.shape[0])):
@@ -81,6 +80,7 @@ curated_test_data = likes
 batch = torch.stack([ds[index] for index in curated_test_data], dim=0)
 
 export_batch(batch,tokenizer,OUTPUT_DIR + "/natural")
+export_batch(batch,tokenizer,DEMO_DIR + "/natural")
 
 # preview batch
 for sample_index in range(batch.shape[0]):
@@ -93,9 +93,9 @@ for sample_index in range(batch.shape[0]):
 
 tasks = [
 # "generate",
-#"generate_w_constraints",
+"generate_w_constraints",
 #"pitch_set", # 100 0.5 True 1.0 True
-#"onset_offset_set",
+# "onset_offset_set",
 #"pitch_onset_offset_set",
 # "infilling_box_middle",
 #"infilling_high", # 50 0.0 TRUE 1.0 / 100, 0.85, True, 1.0 , True / 200 ,0.8, True, 1.0, True
@@ -103,9 +103,12 @@ tasks = [
 #"infilling_low", # 50, 0.0, False, 1.0 / 200, 0.75, True, 1.0 
 # "infilling_start",
 # "infilling_end",
-"variation",
+# "variation",
 #"infilling_harmonic", #  200 0.85 True 1.0 True
 #"infilling_drums" # 200, 0.85, True, 1.0, True
+# "replace_bass",
+#"replace_chromatic",
+# "replace_drums" d
 ]
 
 # 200 0.75/0.85 True 1.0
@@ -113,12 +116,12 @@ tasks = [
 # GRID_STEPS = [5,10,25,50,100,200]
 # GRID_TOPP = [0.0,0.5,0.8,0.9,0.95,0.99,1.0]
 
-GRID_STEPS = [200]
-GRID_TOPP = [0.85]
+GRID_STEPS = [50]
+GRID_TOPP = [1.0]
 
-PRIOR_STRENGTH = 0.6
-ENFORCE_PRIOR = False
-MULTIPLY_PRIOR = False
+PRIOR_STRENGTH = 1.0
+ENFORCE_PRIOR = True
+MULTIPLY_PRIOR = True
 
 
 # infilling tasks
@@ -247,12 +250,12 @@ for task in tasks:
                     enforce_prior = True
 
                     mask = model.tokenizer.constraint_mask(
-                        # tags=["jazz"],
+                        tags=["pop"],
                         scale="C major",
                         instruments=["Piano","Bass","Drums","Guitar"],
-                        # tempos=["138"],
-                        min_notes=25,
-                        max_notes=275,
+                        tempos=["180"],
+                        min_notes=50,
+                        max_notes=250,
                         min_notes_per_instrument=10
                     )[None, ...].float()
 
@@ -337,6 +340,17 @@ for task in tasks:
                     x_a[:,model.tokenizer.note_attribute_order.index("offset/beat")] = offset_tokens
                     # get pitch tokens
 
+                    # # blank out onset / offset ticks
+                    # x_a[:,model.tokenizer.note_attribute_order.index("offset/tick")] = 1
+                    # x_a[:,model.tokenizer.note_attribute_order.index("onset/tick")] = 1
+                    # # blank out onset / offset beats
+                    # x_a[:,model.tokenizer.note_attribute_order.index("offset/beat")] = 1
+                    # x_a[:,model.tokenizer.note_attribute_order.index("onset/beat")] = 1
+
+                    # for all attributes, set undefined to possible
+                    for attribute in model.tokenizer.note_attribute_order:
+                        x_a[:,model.tokenizer.note_attribute_order.index(attribute), model.tokenizer.token2idx[attribute + ":-"]] = 1
+
                     mask = einops.rearrange(x_a,"n_notes n_attributes vocab -> (n_notes n_attributes) vocab")[None,...]
 
                 elif task == "pitch_onset_offset_set":
@@ -365,6 +379,8 @@ for task in tasks:
                     offset_tokens = (x_a[:,model.tokenizer.note_attribute_order.index("offset/beat"),:].sum(axis=0)>0).float()
                     x_a[:,model.tokenizer.note_attribute_order.index("offset/beat")] = offset_tokens
 
+                    
+
 
                     mask = einops.rearrange(x_a,"n_notes n_attributes vocab -> (n_notes n_attributes) vocab")[None,...]
                 
@@ -376,7 +392,50 @@ for task in tasks:
                     x1h = torch.nn.functional.one_hot(batch[sample_idx], num_classes=len(model.tokenizer.vocab)).float()
                     mask = x1h[None, ...]
 
+                elif task == "replace_bass":
+                    top_p = TOPP
+                    enforce_prior = True
+
+                    x = batch[sample_idx]
+                    mask = model.tokenizer.replace_instruments_mask(
+                        x,
+                        ["Bass"],
+                        ["Bass"],
+                        10,
+                        275
+                    )[None, ...].float()
+
+                elif task == "replace_chromatic":
+                    top_p = TOPP
+                    enforce_prior = True
+
+                    x = batch[sample_idx]
+                    mask = model.tokenizer.replace_instruments_mask(
+                        x,
+                        ["Piano","Guitar"],
+                        ["Chromatic Percussion"],
+                        10,
+                        275
+                    )[None, ...].float()
+
+                elif task == "replace_drums":
+                    top_p = TOPP
+                    enforce_prior = True
+
+                    x = batch[sample_idx]
+                    mask = model.tokenizer.replace_instruments_mask(
+                        x,
+                        ["Drums"],
+                        ["Drums"],
+                        10,
+                        275
+                    )[None, ...].float()
+                    
+                
+
                 masks.append(mask)
+
+               
 
             mask = torch.cat(masks, dim=0).to(device)
 
@@ -394,10 +453,37 @@ for task in tasks:
                 # decode
                 print(f"n_notes {tokenizer.decode(y[sample_index]).note_num()}")
                 y_sm = tokenizer.decode(y[sample_index])
+                y_sm = sm_fix_overlap_notes(y_sm)
+
                 preview_sm(y_sm)
 
             # get batch
             # export batch
             export_batch(y, model.tokenizer, OUTPUT_DIR + f"/{task}/hz_{hidden_size}_steps_{N_STEPS}_topp_{top_p}_prior_{prior_strength}_enforce_{enforce_prior}")
             export_batch(y, model.tokenizer, DEMO_DIR + f"/{task}/")
+# %%
+
+
+            
+
+stack_sample = y[2]
+
+y_sm = tokenizer.decode(stack_sample)
+
+
+print(y_sm.tracks)
+
+print(y_sm.note_num())
+
+onsets = [note.start for note in y_sm.tracks[0].notes]
+pitches = [note.pitch for note in y_sm.tracks[0].notes]
+velocities = [note.velocity for note in y_sm.tracks[0].notes]
+
+# plot scatter plot
+plt.figure(figsize=(10,10))
+sns.scatterplot(x=onsets,y=pitches, alpha=0.2)# hue=velocities)
+plt.show()
+
+preview_sm(y_sm)
+
 # %%
