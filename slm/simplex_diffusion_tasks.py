@@ -40,8 +40,8 @@ torch.cuda.manual_seed(SEED)
 
 
 TMP_DIR = ROOT_DIR + "tmp"
-OUTPUT_DIR = ROOT_DIR + "artefacts/simplex_demo_3_/"
-DEMO_DIR = ROOT_DIR + "artefacts/simplex_demo_3_website/"
+OUTPUT_DIR = ROOT_DIR + "artefacts/variation/"
+DEMO_DIR = ROOT_DIR + "artefacts/variation_website/"
 
 def export_batch(y, tokenizer, output_dir):
     for sample_index in tqdm(range(y.shape[0])):
@@ -93,7 +93,7 @@ for sample_index in range(batch.shape[0]):
 
 tasks = [
 # "generate",
-"generate_w_constraints",
+# "generate_w_constraints",
 #"pitch_set", # 100 0.5 True 1.0 True
 # "onset_offset_set",
 #"pitch_onset_offset_set",
@@ -103,7 +103,7 @@ tasks = [
 #"infilling_low", # 50, 0.0, False, 1.0 / 200, 0.75, True, 1.0 
 # "infilling_start",
 # "infilling_end",
-# "variation",
+"variation",
 #"infilling_harmonic", #  200 0.85 True 1.0 True
 #"infilling_drums" # 200, 0.85, True, 1.0, True
 # "replace_bass",
@@ -116,11 +116,11 @@ tasks = [
 # GRID_STEPS = [5,10,25,50,100,200]
 # GRID_TOPP = [0.0,0.5,0.8,0.9,0.95,0.99,1.0]
 
-GRID_STEPS = [50]
-GRID_TOPP = [1.0]
+GRID_STEPS = [300]
+GRID_TOPP = [0.75]
 
-PRIOR_STRENGTH = 1.0
-ENFORCE_PRIOR = True
+PRIOR_STRENGTH = 0.7
+ENFORCE_PRIOR = False
 MULTIPLY_PRIOR = True
 
 
@@ -211,7 +211,7 @@ for task in tasks:
                             pitches = [
                                 f"pitch:{i}" for i in range(min_box_pitch,max_box_pitch+1)
                             ]
-                            beat_range = (8,12)
+                            beat_range = (4,12)
                             infilling_mode = "harmonic"
 
                     # make infilling mask
