@@ -49,7 +49,7 @@ class DirichletFlowModel(pl.LightningModule):
         self.tokenizer = MergedTokenizer(tokenizer_config)
         self.format_mask = torch.Tensor(self.tokenizer.get_format_mask())
         self.vocab = vocab
-        self.embedding_layer = nn.Linear(vocab_size, hidden_size, bias=False)
+        self.embedding_layer = nn.Linear(vocab_size * 2, hidden_size, bias=False)
         self.one_hot_input = one_hot_input
         self.transformer = torch.nn.TransformerEncoder(
             encoder_layer=torch.nn.TransformerEncoderLayer(
@@ -88,6 +88,7 @@ class DirichletFlowModel(pl.LightningModule):
         seq_1hot = F.one_hot(seq, self.alphabet_size).float()
         B, L = seq.shape
         xt, alphas = sample_cond_prob_path(self.flow_args, seq, self.alphabet_size)
+        xt, prior_weights = expand_simplex(xt, alphas, self.flow_args.prior_pseudocount)
         logits = self.forward(xt, t=alphas)
         losses = torch.nn.functional.cross_entropy(logits.transpose(1, 2), seq, reduction='none')
         losses = losses.mean(-1)
@@ -132,16 +133,20 @@ class DirichletFlowModel(pl.LightningModule):
         return loss
     
     def forward(self, s, t):
-        t_z = self.t_embedding(t[:,None,None])
+        print(t.shape)
+        t_z = self.t_embedding(t[:,None])
+        print(t.shape)
         format_mask = self.format_mask[None, ...].to(s.device)
+        # double in last dimension
+        format_mask_db = format_mask.repeat(1, 1, 2)
         x = s
         x = torch.nn.functional.softmax(x, dim=-1)
-        x[format_mask.expand_as(x) < 0.5] = 0
+        x[format_mask_db.expand_as(x) < 0.5] = 0
         x = torch.nn.functional.softmax(x, dim=-1)
 
         x = einops.rearrange(x, "b (t a) v -> b t a v", a=self.n_attributes)
         ze = self.embedding_layer(x)
-        ze += t_z[:,None,...]
+        ze += t_z[:, None, None, :]
         ze = ze.sum(dim=2)
 
         # pass through transformer
@@ -168,7 +173,7 @@ class DirichletFlowModel(pl.LightningModule):
     
 if __name__ == "__main__":
 
-    DATASET = "clean_drums"
+    DATASET = "mmd_loops"
 
     BATCH_SIZE = 200
 
@@ -200,17 +205,17 @@ if __name__ == "__main__":
     tokenizer = MergedTokenizer(tokenizer_config)
 
     model = DirichletFlowModel(
-    hidden_size=128,
+    hidden_size=512,
     n_heads=4,
-    feed_forward_size=2*128,
+    feed_forward_size=2*512,
     n_layers=6,
     vocab=tokenizer.vocab,
     tokenizer_config=tokenizer_config,
     one_hot_input=False,
     norm_first=False,
-    activation = "relu",
+    activation = "gelu",
     output_bias = False,
-    learning_rate=1e-4,
+    learning_rate=1e-3,
     learning_rate_gamma=0.98,
     )    
 
