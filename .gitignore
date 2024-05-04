@@ -3,6 +3,8 @@ paper_assets/
 wandb/
 bfn-checkpoints/
 checkpoints/
+dfm-checkpoints/
+workdir/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *__pycache__/
