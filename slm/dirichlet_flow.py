@@ -49,7 +49,7 @@ class DirichletFlowModel(pl.LightningModule):
         self.tokenizer = MergedTokenizer(tokenizer_config)
         self.format_mask = torch.Tensor(self.tokenizer.get_format_mask())
         self.vocab = vocab
-        self.embedding_layer = nn.Linear(vocab_size * 2, hidden_size, bias=False)
+        self.embedding_layer = nn.Linear(vocab_size, hidden_size, bias=False)
         self.one_hot_input = one_hot_input
         self.transformer = torch.nn.TransformerEncoder(
             encoder_layer=torch.nn.TransformerEncoderLayer(
@@ -88,9 +88,11 @@ class DirichletFlowModel(pl.LightningModule):
         seq_1hot = F.one_hot(seq, self.alphabet_size).float()
         B, L = seq.shape
         xt, alphas = sample_cond_prob_path(self.flow_args, seq, self.alphabet_size)
-        xt, prior_weights = expand_simplex(xt, alphas, self.flow_args.prior_pseudocount)
+        # xt, prior_weights = expand_simplex(xt, alphas, self.flow_args.prior_pseudocount)
         logits = self.forward(xt, t=alphas)
-        losses = torch.nn.functional.cross_entropy(logits.transpose(1, 2), seq, reduction='none')
+        losses = torch.nn.functional.cross_entropy(
+            logits.reshape(-1, self.alphabet_size),
+            seq.reshape(-1) , reduction='none')
         losses = losses.mean(-1)
         self.last_log_time = time.time()
         return {"ce":losses.mean()}
@@ -133,15 +135,12 @@ class DirichletFlowModel(pl.LightningModule):
         return loss
     
     def forward(self, s, t):
-        print(t.shape)
         t_z = self.t_embedding(t[:,None])
-        print(t.shape)
         format_mask = self.format_mask[None, ...].to(s.device)
         # double in last dimension
-        format_mask_db = format_mask.repeat(1, 1, 2)
         x = s
-        x = torch.nn.functional.softmax(x, dim=-1)
-        x[format_mask_db.expand_as(x) < 0.5] = 0
+        # sum across last dim
+        x[format_mask.expand_as(x) < 0.5] = 0
         x = torch.nn.functional.softmax(x, dim=-1)
 
         x = einops.rearrange(x, "b (t a) v -> b t a v", a=self.n_attributes)
@@ -215,14 +214,12 @@ if __name__ == "__main__":
     norm_first=False,
     activation = "gelu",
     output_bias = False,
-    learning_rate=1e-3,
+    learning_rate=1e-4,
     learning_rate_gamma=0.98,
     )    
 
     # test step
     format_mask = torch.Tensor(tokenizer.get_format_mask())
-
-    print(format_mask.shape)
     
     dummy_sample = format_mask.argmax(-1)
 

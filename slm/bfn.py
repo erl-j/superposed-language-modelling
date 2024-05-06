@@ -405,47 +405,11 @@ class BFNModel(pl.LightningModule):
 
 
 if __name__ == "__main__":
-    genre_list = [
-        "other",
-        "pop",
-        "rock",
-        "italian%2cfrench%2cspanish",
-        "classical",
-        "romantic",
-        "renaissance",
-        "alternative-indie",
-        "metal",
-        "traditional",
-        "country",
-        "baroque",
-        "punk",
-        "modern",
-        "jazz",
-        "dance-eletric",
-        "rnb-soul",
-        "medley",
-        "blues",
-        "hip-hop-rap",
-        "hits of the 2000s",
-        "instrumental",
-        "midi karaoke",
-        "folk",
-        "newage",
-        "latino",
-        "hits of the 1980s",
-        "hits of 2011 2020",
-        "musical%2cfilm%2ctv",
-        "reggae-ska",
-        "hits of the 1970s",
-        "christian-gospel",
-        "world",
-        "early_20th_century",
-        "hits of the 1990s",
-        "grunge",
-        "australian artists",
-        "funk",
-        "best of british",
-    ]
+    DATASET = "mmd_loops"
+
+    BATCH_SIZE = 200
+
+    tag_list = open(f"./data/{DATASET}/tags.txt").read().splitlines()
 
     N_BARS = 4
 
@@ -459,7 +423,7 @@ if __name__ == "__main__":
         "n_tempo_bins": 16,
         "n_velocity_bins": 32,
         "time_signatures": None,
-        "tags": genre_list,
+        "tags": tag_list,
         "shuffle_notes": True,
         "use_offset": True,
         "merge_pitch_and_beat": False,
@@ -472,46 +436,31 @@ if __name__ == "__main__":
 
     tokenizer = MergedTokenizer(tokenizer_config)
 
-    model = BFNModel(
-        hidden_size=768,
-        n_heads=12,
-        feed_forward_size=4 * 768,
-        n_layers=12,
-        vocab=tokenizer.vocab,
-        max_seq_len=tokenizer.total_len,
-        learning_rate=2e-5,
-        tokenizer_config=tokenizer_config,
-        learning_rate_gamma=0.99,
-        norm_first=True,
-        beta1=0.3,
-        vocab_theta=False,
-    )
-    # 80
-    BATCH_SIZE = 80
-
-    # model.test_step(batch_size=60)
+    mmd_4bar_filter_fn = lambda x: f"n_bars={N_BARS}" in x
 
     trn_ds = MidiDataset(
-        cache_path="./paper_assets/trn_midi_records_unique_pr.pt",
-        path_filter_fn=lambda x: f"n_bars={N_BARS}" in x,
-        genre_list=genre_list,
+        cache_path=f"./data/{DATASET}/trn_midi_records_unique_pr.pt",
+        path_filter_fn=mmd_4bar_filter_fn if DATASET == "mmd_loops" else None,
+        genre_list=tag_list,
         tokenizer=tokenizer,
-        transposition_range=[-4, 4],
+        transposition_range=[-4, 4] if DATASET == "mmd_loops" or DATASET == "harmonic" else None,
         min_notes=8 * N_BARS,
         max_notes=tokenizer_config["max_notes"],
     )
+    # print len of dataset
+    print(f"Loaded {len(trn_ds)} training records")
 
     val_ds = MidiDataset(
-        cache_path="./paper_assets/val_midi_records_unique_pr.pt",
-        path_filter_fn=lambda x: f"n_bars={N_BARS}" in x,
-        genre_list=genre_list,
+        cache_path=f"./data/{DATASET}/val_midi_records_unique_pr.pt",
+        path_filter_fn=mmd_4bar_filter_fn if DATASET == "mmd_loops" else None,
+        genre_list=tag_list,
         tokenizer=tokenizer,
         min_notes=8 * N_BARS,
         max_notes=tokenizer_config["max_notes"],
     )
+    print(f"Loaded {len(val_ds)} validation records")
 
     # desert capy uses batch size 80
-
     trn_dl = torch.utils.data.DataLoader(
         trn_ds,
         batch_size=BATCH_SIZE,
@@ -528,6 +477,21 @@ if __name__ == "__main__":
         pin_memory=True,
     )
 
+    model = BFNModel(
+        hidden_size=768,
+        n_heads=12,
+        feed_forward_size=4 * 768,
+        n_layers=12,
+        vocab=tokenizer.vocab,
+        max_seq_len=tokenizer.total_len,
+        learning_rate=2e-5,
+        tokenizer_config=tokenizer_config,
+        learning_rate_gamma=0.99,
+        norm_first=True,
+        beta1=0.3,
+        vocab_theta=False,
+    )
+
     wandb_logger = WandbLogger(log_model="all", project="bfn")
     # get name
     name = wandb_logger.experiment.name
@@ -539,7 +503,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[6],
+        devices=[7],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[
