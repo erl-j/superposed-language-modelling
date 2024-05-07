@@ -81,6 +81,7 @@ def sample_cond_prob_path(args, seq, alphabet_size):
     if args.mode == 'dirichlet':
         alphas = torch.from_numpy(1 + scipy.stats.expon().rvs(size=B) * args.alpha_scale).to(seq.device).float()
         if args.fix_alpha:
+            raise NotImplementedError('fix_alpha not to be used')
             alphas = torch.ones(B, device=seq.device) * args.fix_alpha
         alphas_ = torch.ones(B, L, alphabet_size, device=seq.device)
         alphas_ = alphas_ + seq_one_hot * (alphas[:,None,None] - 1)

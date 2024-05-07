@@ -70,32 +70,77 @@ class DirichletFlowModel(pl.LightningModule):
         self.alphabet_size = len(vocab)
 
         self.flow_args = {
-            "simplex_spacing":1000,
             "prior_pseudocount":2,
-            "alpha_scale":2,
+            "alpha_scale":2.0,
             "mode":"dirichlet",
-            "alpha_max":8,
+            "alpha_max":8.0,
             "fix_alpha":None,
+            "alpha_spacing":1.0
         }
         self.flow_args = SimpleNamespace(**self.flow_args)
 
-        self.condflow = DirichletConditionalFlow(K=self.alphabet_size, alpha_spacing=0.01, alpha_max=self.flow_args.alpha_max)
+        self.condflow = DirichletConditionalFlow(K=self.alphabet_size, alpha_spacing=self.flow_args.alpha_spacing, alpha_max=self.flow_args.alpha_max)
 
         self.iter_step = 0
+    
     def step(self, batch, batch_idx=None):
-        self.iter_step += 1
         seq = batch
         seq_1hot = F.one_hot(seq, self.alphabet_size).float()
         B, L = seq.shape
         xt, alphas = sample_cond_prob_path(self.flow_args, seq, self.alphabet_size)
+        if self.iter_step == 0:
+            print(alphas)
+            print(xt.shape)
+            print(alphas.shape)
+            # plot xt[0]
+            plt.imshow(xt[0].cpu().numpy())
+            plt.savefig(f"xt_{self.iter_step}.png")
+            plt.close()
+
+            plt.plot(xt[0,0].cpu().numpy())
+            plt.savefig(f"xt0_{self.iter_step}.png")
+            plt.close()
+
+            # plot alphas[0]
+            plt.plot(alphas.cpu().numpy())
+            plt.savefig(f"alphas_{self.iter_step}.png")
+            plt.close()
+
+            # plot entropy
+            entropy = (-xt * torch.log(xt)).sum(-1).mean(-1)
+            # sort
+            entropy, idx = entropy.sort()
+            plt.plot(entropy.cpu().numpy())
+            plt.savefig(f"entropy_{self.iter_step}.png")
+            plt.close()
+
+            # plot cross entropy
+            ce = (-seq_1hot * torch.log(xt)).sum(-1).mean(-1)
+            # sort
+            ce, idx = ce.sort()
+            plt.plot(ce.cpu().numpy())
+            plt.savefig(f"ce_{self.iter_step}.png")
+
+            # plot uniform cross entropy
+            uniform = torch.ones_like(xt) / self.alphabet_size
+
+            uce = (-seq_1hot * torch.log(uniform)).sum(-1).mean(-1)
+            # sort
+            uce, idx = uce.sort()
+            plt.plot(uce.cpu().numpy())
+            plt.savefig(f"uce_{self.iter_step}.png")
+
+
+
+
         # xt, prior_weights = expand_simplex(xt, alphas, self.flow_args.prior_pseudocount)
-        logits = self.forward(xt, t=alphas)
+        logits = self.forward(xt, t=(alphas-1)/self.flow_args.alpha_max)
         losses = torch.nn.functional.cross_entropy(
             logits.reshape(-1, self.alphabet_size),
-            seq.reshape(-1) , reduction='none')
-        losses = losses.mean(-1)
+            seq.reshape(-1))
         self.last_log_time = time.time()
-        return {"ce":losses.mean()}
+        self.iter_step += 1
+        return {"ce":losses}
     
     def training_step(self, batch, batch_idx):
         metrics = self.step(batch, batch_idx)
@@ -141,7 +186,8 @@ class DirichletFlowModel(pl.LightningModule):
         x = s
         # sum across last dim
         x[format_mask.expand_as(x) < 0.5] = 0
-        x = torch.nn.functional.softmax(x, dim=-1)
+        # normalize
+        x = x / (x.sum(-1, keepdim=True)+1e-12)
 
         x = einops.rearrange(x, "b (t a) v -> b t a v", a=self.n_attributes)
         ze = self.embedding_layer(x)
@@ -211,10 +257,10 @@ if __name__ == "__main__":
     vocab=tokenizer.vocab,
     tokenizer_config=tokenizer_config,
     one_hot_input=False,
-    norm_first=False,
+    norm_first=True,
     activation = "gelu",
     output_bias = False,
-    learning_rate=1e-4,
+    learning_rate=1e-3,
     learning_rate_gamma=0.98,
     )    
 
@@ -223,7 +269,7 @@ if __name__ == "__main__":
     
     dummy_sample = format_mask.argmax(-1)
 
-    model.step(dummy_sample[None, :],0)
+    model.step(dummy_sample[None, :].repeat(BATCH_SIZE, 1))
 
     mmd_4bar_filter_fn = lambda x: f"n_bars={N_BARS}" in x
 
@@ -279,7 +325,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[6],
+        devices=[2],
         max_epochs=10_000,
         # log_every_n_steps=1,
         callbacks=[

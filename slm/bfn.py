@@ -72,6 +72,8 @@ class BFNModel(pl.LightningModule):
         t_z = self.t_embedding(t)
         format_mask = self.format_mask[None, ...].to(theta.device)
         theta = theta * format_mask
+        # renormalize
+        # theta = theta / theta.sum(dim=-1, keepdim=True)
         x = theta
 
         x = einops.rearrange(x, "b (t a) v -> b t a v", a=self.n_attributes)
@@ -194,8 +196,6 @@ class BFNModel(pl.LightningModule):
             plt.show()
 
 
-
-
     def step(self, batch, batch_idx, tmp_beta1=None, preview_input_dist=False, tmp_t=None):
         if self.one_hot_input:
             x = batch
@@ -298,10 +298,11 @@ class BFNModel(pl.LightningModule):
                 plt.show()
 
             k = torch.distributions.Categorical(probs=k_probs).sample()  # (B, D)
-            assert k.shape == k_probs
+            print(k.shape)
+            # assert k.shape == k_probs
             alpha = self.beta1 * (2 * i - 1) / (nb_steps**2)
 
-            # e_k = F.one_hot(k, num_classes=K).float()  # (B, D, K)
+            e_k = F.one_hot(k, num_classes=K).float()  # (B, D, K)
             mean = alpha * (K * e_k - 1)
             var = alpha * K
             std = torch.full_like(mean, fill_value=var).sqrt()
@@ -478,10 +479,10 @@ if __name__ == "__main__":
     )
 
     model = BFNModel(
-        hidden_size=768,
-        n_heads=12,
-        feed_forward_size=4 * 768,
-        n_layers=12,
+        hidden_size=512,
+        n_heads=4,
+        feed_forward_size=2 * 512,
+        n_layers=6,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer.total_len,
         learning_rate=2e-5,

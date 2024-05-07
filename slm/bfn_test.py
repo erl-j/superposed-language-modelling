@@ -13,6 +13,7 @@ import numpy as np
 checkpoint = "../checkpoints/kind-oath-66/last.ckpt"
 # checkpoint = "../checkpoints/golden-capybara-67/last.ckpt"
 # checkpoint = "../checkpoints/avid-durian-68/last.ckpt"
+checkpoint = "../checkpoints/ethereal-star-75/last.ckpt"
 
 model = BFNModel.load_from_checkpoint(checkpoint, map_location=device)
 
@@ -134,7 +135,9 @@ mask = tokenizer.constraint_mask(
 )
 
 BATCH_SIZE = 2
-N_STEPS = 100
+N_STEPS = 500
+
+#%%
 y = model.sample(None,BATCH_SIZE,N_STEPS,device=device,argmax=True)
 
 import matplotlib.pyplot as plt
