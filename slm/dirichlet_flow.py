@@ -19,9 +19,10 @@ import numpy as np
 from lightning.pytorch.utilities import grad_norm
 import warnings
 from train import EncoderOnlyModel
-from flow_utils import DirichletConditionalFlow, sample_cond_prob_path, expand_simplex
+from flow_utils import DirichletConditionalFlow, sample_cond_prob_path, expand_simplex, simplex_proj
 import time
 from types import SimpleNamespace
+import os
 
 class DirichletFlowModel(pl.LightningModule):
     def __init__(
@@ -32,11 +33,11 @@ class DirichletFlowModel(pl.LightningModule):
         n_layers,
         vocab,
         tokenizer_config,
+        flow_args,
         one_hot_input=False,
         norm_first=False,
         activation = "relu",
         output_bias = True,
-        flow_args = {},
         learning_rate=1e-4,
         learning_rate_gamma=0.98,
     ):
@@ -69,19 +70,87 @@ class DirichletFlowModel(pl.LightningModule):
         self.t_embedding = torch.nn.Linear(1, hidden_size)
         self.alphabet_size = len(vocab)
 
-        self.flow_args = {
-            "prior_pseudocount":2,
-            "alpha_scale":2.0,
-            "mode":"dirichlet",
-            "alpha_max":8.0,
-            "fix_alpha":None,
-            "alpha_spacing":1.0
-        }
-        self.flow_args = SimpleNamespace(**self.flow_args)
-
-        self.condflow = DirichletConditionalFlow(K=self.alphabet_size, alpha_spacing=self.flow_args.alpha_spacing, alpha_max=self.flow_args.alpha_max)
-
+        self.flow_args = SimpleNamespace(**flow_args)
         self.iter_step = 0
+
+    @torch.no_grad()
+    def generate(self, batch_size, generation_args):
+        B = batch_size
+        L = self.n_events * self.n_attributes
+        x0 = torch.distributions.Dirichlet(torch.ones(B, L, self.alphabet_size, device=self.device)).sample()
+        eye = torch.eye(self.alphabet_size).to(x0)
+        xt = x0
+
+        self.condflow = DirichletConditionalFlow(K=self.alphabet_size, alpha_spacing=generation_args.alpha_spacing, alpha_max=generation_args.alpha_max)
+
+        t_span = torch.linspace(1, generation_args.alpha_max, generation_args.num_integration_steps, device=self.device)
+
+        xts = []
+
+        xts.append(xt.detach().clone())
+
+        out_probss = []
+
+        
+
+        for i, (s, t) in tqdm(enumerate(zip(t_span[:-1], t_span[1:]))):
+
+
+            alphas = s
+            ts = (alphas-1)/(generation_args.alpha_max-1)
+
+            logits = self.forward(xt, ts[None].expand(B))
+
+            # print(f'xt.min(): {xt.min()} xt.max(): {xt.max()} logits.min(): {logits.min()} logits.max(): {logits.max()}')
+            out_probs = torch.nn.functional.softmax(logits / generation_args.flow_temp, -1)
+            out_probss.append(out_probs.detach().clone())
+
+            # add some noise
+            # out_probs = out_probs + torch.randn_like(out_probs) * 0.001           
+
+            c_factor = self.condflow.c_factor(xt.cpu().numpy(), s.item())
+            c_factor = torch.from_numpy(c_factor).to(xt)
+            if torch.isnan(c_factor).any():
+                print(f'NAN cfactor after: xt.min(): {xt.min()}, out_probs.min(): {out_probs.min()}')
+                c_factor = torch.nan_to_num(c_factor)
+                return logits, out_probs
+
+            cond_flows = (eye - xt.unsqueeze(-1)) * c_factor.unsqueeze(-2)
+            flow = (out_probs.unsqueeze(-2) * cond_flows).sum(-1)
+            xt = xt + flow * (t - s)
+            # norma
+            if not torch.allclose(xt.sum(2), torch.ones((B, L), device=self.device), atol=1e-4) or not (xt >= 0).all():
+                print(f'WARNING: xt.min(): {xt.min()}. Some values of xt do not lie on the simplex. There are we are {(xt<0).sum()} negative values in xt of shape {xt.shape} that are negative.')
+                xt = simplex_proj(xt)
+                return logits, out_probs
+
+            xts.append(xt.detach().clone())
+
+        xts = torch.stack(xts, 0)
+
+        print(f'xts.shape: {xts.shape}')
+
+        xts_slice = xts[:,0,2,:]
+
+        print(f'xts_slice.shape: {xts_slice.shape}')
+
+        plt.imshow(xts[:,0,0,:].cpu().numpy().T, cmap='gray', aspect='auto', origin='lower')
+        plt.show()
+
+        out_probss = torch.stack(out_probss, 0)
+
+        plt.imshow(out_probss[:,0,0,:].cpu().numpy().T, cmap='gray', aspect='auto', origin='lower')
+        plt.show()
+
+        # plot sum 
+        plt.plot(xts_slice.cpu().numpy().sum(-1))
+        plt.show()
+
+        plt.plot(xts[:,0,0,:].sum(-1).cpu().numpy())
+        plt.show()
+
+
+        return logits, x0
     
     def step(self, batch, batch_idx=None):
         seq = batch
@@ -89,21 +158,20 @@ class DirichletFlowModel(pl.LightningModule):
         B, L = seq.shape
         xt, alphas = sample_cond_prob_path(self.flow_args, seq, self.alphabet_size)
         if self.iter_step == 0:
-            print(alphas)
-            print(xt.shape)
-            print(alphas.shape)
+
+            os.makedirs("artefacts/dflow", exist_ok=True)
             # plot xt[0]
             plt.imshow(xt[0].cpu().numpy())
-            plt.savefig(f"xt_{self.iter_step}.png")
+            plt.savefig(f"artefacts/dflow/xt_{self.iter_step}.png")
             plt.close()
 
             plt.plot(xt[0,0].cpu().numpy())
-            plt.savefig(f"xt0_{self.iter_step}.png")
+            plt.savefig(f"artefacts/dflow/xt0_{self.iter_step}.png")
             plt.close()
 
             # plot alphas[0]
             plt.plot(alphas.cpu().numpy())
-            plt.savefig(f"alphas_{self.iter_step}.png")
+            plt.savefig(f"artefacts/dflow/alphas_{self.iter_step}.png")
             plt.close()
 
             # plot entropy
@@ -111,7 +179,7 @@ class DirichletFlowModel(pl.LightningModule):
             # sort
             entropy, idx = entropy.sort()
             plt.plot(entropy.cpu().numpy())
-            plt.savefig(f"entropy_{self.iter_step}.png")
+            plt.savefig(f"artefacts/dflow/entropy_{self.iter_step}.png")
             plt.close()
 
             # plot cross entropy
@@ -119,7 +187,8 @@ class DirichletFlowModel(pl.LightningModule):
             # sort
             ce, idx = ce.sort()
             plt.plot(ce.cpu().numpy())
-            plt.savefig(f"ce_{self.iter_step}.png")
+            plt.savefig(f"artefacts/dflow/ce_{self.iter_step}.png")
+            plt.close()
 
             # plot uniform cross entropy
             uniform = torch.ones_like(xt) / self.alphabet_size
@@ -128,13 +197,18 @@ class DirichletFlowModel(pl.LightningModule):
             # sort
             uce, idx = uce.sort()
             plt.plot(uce.cpu().numpy())
-            plt.savefig(f"uce_{self.iter_step}.png")
+            plt.savefig(f"artefacts/dflow/uce_{self.iter_step}.png")
+            plt.close()
 
-
-
+            # get xt with largest alpha
+            xt_max_alpha = xt[alphas.argmax()]
+            plt.plot(xt_max_alpha[0].cpu().numpy())
+            plt.savefig(f"artefacts/dflow/xt_max_alpha_{self.iter_step}.png")
+            plt.close()
 
         # xt, prior_weights = expand_simplex(xt, alphas, self.flow_args.prior_pseudocount)
-        logits = self.forward(xt, t=(alphas-1)/self.flow_args.alpha_max)
+        ts = (alphas-1)/(self.flow_args.alpha_max-1)
+        logits = self.forward(xt, t=ts)
         losses = torch.nn.functional.cross_entropy(
             logits.reshape(-1, self.alphabet_size),
             seq.reshape(-1))
@@ -180,8 +254,11 @@ class DirichletFlowModel(pl.LightningModule):
         return loss
     
     def forward(self, s, t):
+        s = s.clone()
+        t = t.clone()
         t_z = self.t_embedding(t[:,None])
         format_mask = self.format_mask[None, ...].to(s.device)
+
         # double in last dimension
         x = s
         # sum across last dim
@@ -249,12 +326,22 @@ if __name__ == "__main__":
 
     tokenizer = MergedTokenizer(tokenizer_config)
 
+    flow_args = {
+            "prior_pseudocount":2,
+            "alpha_scale":10.0,
+            "mode":"dirichlet",
+            "alpha_max":200.0,
+            "fix_alpha":None,
+            "alpha_spacing":0.1
+    }
+
     model = DirichletFlowModel(
     hidden_size=512,
     n_heads=4,
     feed_forward_size=2*512,
     n_layers=6,
     vocab=tokenizer.vocab,
+    flow_args=flow_args,
     tokenizer_config=tokenizer_config,
     one_hot_input=False,
     norm_first=True,
