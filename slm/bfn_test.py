@@ -20,6 +20,15 @@ model = BFNModel.load_from_checkpoint(checkpoint, map_location=device)
 # print model
 print(model)
 
+
+#%%
+
+# repeat in first dim
+batch = model.format_mask[None,:].repeat(10,1,1).argmax(-1)
+
+# plot beta curve
+model.preview_beta(batch)
+
 #%% no grid
 
 

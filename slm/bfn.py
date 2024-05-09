@@ -15,6 +15,7 @@ from augmentation import transpose_sm
 import einops
 from tqdm import tqdm
 from util import top_k_top_p_filtering
+from flow_utils import GaussianFourierProjection
 
 
 class BFNModel(pl.LightningModule):
@@ -68,17 +69,21 @@ class BFNModel(pl.LightningModule):
 
         self.vocab_theta = vocab_theta
 
+        self.time_embedder = nn.Sequential(GaussianFourierProjection(embedding_dim= hidden_size),nn.Linear(hidden_size, hidden_size))
+
     def forward(self, theta, t):
-        t_z = self.t_embedding(t)
+        theta = theta.clone()
+        t = t.clone()
+        t_z = self.time_embedder(t)
         format_mask = self.format_mask[None, ...].to(theta.device)
         theta = theta * format_mask
         # renormalize
-        # theta = theta / theta.sum(dim=-1, keepdim=True)
+        theta = theta / theta.sum(dim=-1, keepdim=True)
         x = theta
 
         x = einops.rearrange(x, "b (t a) v -> b t a v", a=self.n_attributes)
         ze = self.embedding_layer(x)
-        ze += t_z[..., None, :]
+        ze += t_z
         ze = ze.sum(dim=2)
 
         # pass through transformer
@@ -92,7 +97,7 @@ class BFNModel(pl.LightningModule):
         decoder_logits = einops.rearrange(
             decoder_logits, "b t a v -> b (t a) v", a=self.n_attributes
         )
-        decoder_logits[format_mask.expand_as(decoder_logits) <0.5] = -1e9
+        decoder_logits[format_mask.expand_as(decoder_logits) <0.5] = -1e12
         return decoder_logits
 
     def discrete_output_distribution(self, theta, t):
@@ -112,7 +117,7 @@ class BFNModel(pl.LightningModule):
         return loss
     
     def preview_beta(self,batch):
-        betas = [0.05,0.1,0.2,0.5]
+        betas = [0.05,0.065,0.075,0.1,0.2,0.5]
         T = 10
 
         # linspace from 0 to 1 and includes 0 and 1
@@ -437,6 +442,28 @@ if __name__ == "__main__":
 
     tokenizer = MergedTokenizer(tokenizer_config)
 
+
+    model = BFNModel(
+        hidden_size=512,
+        n_heads=4,
+        feed_forward_size=2 * 512,
+        n_layers=6,
+        vocab=tokenizer.vocab,
+        max_seq_len=tokenizer.total_len,
+        learning_rate=1e-4,
+        tokenizer_config=tokenizer_config,
+        learning_rate_gamma=0.99,
+        norm_first=True,
+        beta1=0.065,
+        vocab_theta=False,
+    )
+
+    format_mask = torch.Tensor(tokenizer.get_format_mask())
+    
+    dummy_sample = format_mask.argmax(-1)
+
+    model.step(dummy_sample[None, :].repeat(BATCH_SIZE, 1),0)
+
     mmd_4bar_filter_fn = lambda x: f"n_bars={N_BARS}" in x
 
     trn_ds = MidiDataset(
@@ -478,20 +505,7 @@ if __name__ == "__main__":
         pin_memory=True,
     )
 
-    model = BFNModel(
-        hidden_size=512,
-        n_heads=4,
-        feed_forward_size=2 * 512,
-        n_layers=6,
-        vocab=tokenizer.vocab,
-        max_seq_len=tokenizer.total_len,
-        learning_rate=2e-5,
-        tokenizer_config=tokenizer_config,
-        learning_rate_gamma=0.99,
-        norm_first=True,
-        beta1=0.3,
-        vocab_theta=False,
-    )
+
 
     wandb_logger = WandbLogger(log_model="all", project="bfn")
     # get name
@@ -504,7 +518,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[7],
+        devices=[6],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[

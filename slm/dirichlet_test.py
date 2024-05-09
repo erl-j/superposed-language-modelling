@@ -13,10 +13,10 @@ model = DirichletFlowModel.load_from_checkpoint(
 
 inference_args = model.flow_args
 print(inference_args)
-inference_args.num_integration_steps = 200
-inference_args.flow_temp = 0.8
-inference_args.alpha_spacing = 0.2
-inference_args.alpha_max = 8.0
+inference_args.num_integration_steps = 100
+inference_args.flow_temp = 0.9
+inference_args.alpha_spacing = 0.02
+inference_args.alpha_max = 5.0
 # inference_args.alpha_max = 30.0
 # inference_args.alpha_scale = 2.0
 # inference_args.alpha_max = 30.0
@@ -24,10 +24,11 @@ inference_args.alpha_max = 8.0
 
 
 mask = model.tokenizer.constraint_mask(
-    instruments=["Piano"],
-    min_notes=30,
-    max_notes=200,
-    min_notes_per_instrument=5
+    # scale="C major",
+    instruments=["Guitar","Bass","Drums","Piano"],
+    min_notes=40,
+    max_notes=280,
+    min_notes_per_instrument=10
 )
 
 mask = torch.tensor(mask * model.tokenizer.get_format_mask()).float()
@@ -39,6 +40,8 @@ prior = mask / mask.sum(dim=-1, keepdim=True)[None,:]
 l,x = model.generate(
     prior,
     inference_args,
+    break_on_anomaly=True,
+    log= True,
 )
 
 

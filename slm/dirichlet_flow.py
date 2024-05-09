@@ -79,7 +79,7 @@ class DirichletFlowModel(pl.LightningModule):
             self.time_embedder = nn.Sequential(GaussianFourierProjection(embedding_dim= hidden_size),nn.Linear(hidden_size, hidden_size))
 
     @torch.no_grad()
-    def generate(self, prior, generation_args):
+    def generate(self, prior, generation_args, break_on_anomaly, log=False):
         prior = prior.to(self.device)
         # assert that prior is normalized
         assert torch.allclose(prior.sum(-1), torch.ones_like(prior.sum(-1)))
@@ -115,7 +115,8 @@ class DirichletFlowModel(pl.LightningModule):
             out_probs = out_probs * prior
             out_probs = out_probs / out_probs.sum(-1, keepdim=True)
 
-            out_probss.append(out_probs.detach().clone())
+            if log:
+                out_probss.append(out_probs.detach().clone())
 
             # add some noise
             # out_probs = out_probs + torch.randn_like(out_probs) * 0.001           
@@ -125,60 +126,74 @@ class DirichletFlowModel(pl.LightningModule):
             if torch.isnan(c_factor).any():
                 print(f'NAN cfactor after: xt.min(): {xt.min()}, out_probs.min(): {out_probs.min()}')
                 c_factor = torch.nan_to_num(c_factor)
-                out_logits = logits
-                out_probs = out_probs
-                break
+                if break_on_anomaly:
+                    out_logits = logits
+                    out_probs = out_probs
+                    break
 
             cond_flows = (eye - xt.unsqueeze(-1)) * c_factor.unsqueeze(-2)
             flow = (out_probs.unsqueeze(-2) * cond_flows).sum(-1)
-
-            print(f'flow.min(): {flow.min()} flow.max(): {flow.max()}')
 
             xt = xt + flow * (t - s)
             # norma
             if not torch.allclose(xt.sum(2), torch.ones((B, L), device=self.device), atol=1e-4) or not (xt >= 0).all():
                 print(f'WARNING: xt.min(): {xt.min()}. Some values of xt do not lie on the simplex. There are we are {(xt<0).sum()} negative values in xt of shape {xt.shape} that are negative.')
                 xt = simplex_proj(xt)
-                out_logits = logits
-                out_probs = out_probs
-                break
+                if break_on_anomaly:
+                    out_logits = logits
+                    out_probs = out_probs
+                    break
 
-            xts.append(xt.detach().clone())
+            out_logits = logits
+            out_probs = out_probs
 
-        xts = torch.stack(xts, 0)
+            if log:
+                xts.append(xt.detach().clone())
 
-        cmap_scale_fn = lambda x : x ** (1/4)
+        if log:
 
-        # plot xts diff in first dimension
-        xts_diff = xts[1:] - xts[:-1]
+            xts = torch.stack(xts, 0)
 
-        plt.imshow(
-            xts_diff[:,0,:,:].mean(-2).cpu().numpy().T,
-            cmap='magma', aspect='auto', interpolation="none")
-        plt.show()
+            cmap_scale_fn = lambda x : x ** (1/4)
 
-        plt.imshow(
-            cmap_scale_fn(xts[:,0,1,:].cpu().numpy().T),
-            cmap='magma', aspect='auto', interpolation="none")
-        plt.show()
+            # plot xts diff in first dimension
+            xts_diff = xts[1:] - xts[:-1]
 
-        out_probss = torch.stack(out_probss, 0)
+            plt.imshow(
+                xts_diff[:,0,:,:].mean(-2).cpu().numpy().T,
+                cmap='magma', aspect='auto', interpolation="none")
+            plt.show()
 
-        plt.imshow(
-            cmap_scale_fn(out_probss[:,0,1,:].cpu().numpy().T), cmap='magma', aspect='auto', interpolation="none")
-        plt.show()
+            plt.imshow(
+                cmap_scale_fn(xts[:,0,:,:].mean(-2).cpu().numpy().T),
+                cmap='magma', aspect='auto', interpolation="none")
+            plt.show()
+
+            out_probss = torch.stack(out_probss, 0)
+
+            plt.imshow(
+                cmap_scale_fn(out_probss[:,0,1,:].cpu().numpy().T), cmap='magma', aspect='auto', interpolation="none")
+            plt.show()
 
 
-        plt.imshow(
-            cmap_scale_fn(out_probss[:,0,1::self.n_attributes,:].mean(dim=-2).cpu().numpy().T), 
-            cmap='magma', aspect='auto', interpolation="None")
-        plt.show()
+            plt.imshow(
+                cmap_scale_fn(out_probss[:,0,1::self.n_attributes,:].mean(dim=-2).cpu().numpy().T), 
+                cmap='magma', aspect='auto', interpolation="None")
+            plt.show()
 
-        # plot t_span with a line at the last i with a label
-        plt.plot(t_span.cpu().numpy())
-        plt.axvline(i, color='r', label=f"i_f={i}")
-        plt.legend()
-        plt.show()
+            # plot t_span with a line at the last i with a label
+            plt.plot(t_span.cpu().numpy())
+            plt.axvline(i, color='r', label=f"i_f={i}")
+            plt.legend()
+            plt.show()
+
+
+            # plot entropy of outprobss
+            entropy = (out_probss * - torch.log(out_probss+1e-12)).sum(-1).mean(-1).mean(-1)
+            print(entropy)
+            plt.plot(entropy.cpu().numpy().tolist())
+            plt.show()
+
 
         return out_logits, out_probs
     
