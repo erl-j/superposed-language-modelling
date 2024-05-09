@@ -3,6 +3,7 @@ from dirichlet_flow import DirichletFlowModel
 import torch
 from data import MidiDataset
 import copy
+from util import preview_sm
 device = 'cuda:0'
 
 # ckpt = "../checkpoints/zany-thunder-48/last.ckpt"
@@ -30,10 +31,12 @@ ds = MidiDataset(
     max_notes=model.tokenizer.config["max_notes"],
 )
 
-RESAMPLE_IDX = 1400
+RESAMPLE_IDX = 0
 
 x = ds[RESAMPLE_IDX]
 x_sm = model.tokenizer.decode(x)
+
+preview_sm(x_sm)
 
 #%%
 
@@ -51,17 +54,17 @@ prior = mask / mask.sum(dim=-1, keepdim=True)[None,:]
 
 
 sampling_args = copy.deepcopy(model.flow_args)
-sampling_args.num_integration_steps = 100
-sampling_args.flow_temp = 0.5
+sampling_args.num_integration_steps = 10
+sampling_args.flow_temp = 0.75
 sampling_args.alpha_spacing = 0.02
-sampling_args.alpha_max = 8.0
+sampling_args.alpha_max = 4.0
 # sampling_args.alpha_max = 30.0
 # sampling_args.alpha_scale = 2.0
 # sampling_args.alpha_max = 30.0
 # sampling_args.alpha_scale = 2.0
 
 l,y = model.sample(
-    prior=None,
+    prior=prior,
     sampling_args=sampling_args,
     break_on_anomaly=True,
     log= True,
