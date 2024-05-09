@@ -100,9 +100,9 @@ class BFNModel(pl.LightningModule):
         decoder_logits[format_mask.expand_as(decoder_logits) <0.5] = -1e12
         return decoder_logits
 
-    def discrete_output_distribution(self, theta, t):
+    def discrete_output_distribution(self, theta, t, temperature=1.0):
         output_dist = self.forward(theta, t)
-        output_probs = torch.nn.functional.softmax(output_dist, dim=-1)
+        output_probs = torch.nn.functional.softmax(output_dist/temperature, dim=-1)
         return output_probs
 
     def test_step(self, batch_size):
@@ -250,6 +250,7 @@ class BFNModel(pl.LightningModule):
         mask=None,
         batch_size=1,
         nb_steps=10,
+        temperature=1.0,
         device="cpu",
         eps_=1e-10,
         plot_interval=-1,
@@ -290,7 +291,7 @@ class BFNModel(pl.LightningModule):
                 (theta.shape[0], 1, 1), device=theta.device, dtype=theta.dtype
             )
 
-            k_probs = self.discrete_output_distribution(theta, t)  # (B, D, K)
+            k_probs = self.discrete_output_distribution(theta, t, temperature=temperature)  # (B, D, K)
             if plot_interval > 0 and i % plot_interval == 0:
                 # plt.imshow(k_probs[0].cpu().detach().numpy().T, aspect="auto", interpolation="none")
                 # plt.show()

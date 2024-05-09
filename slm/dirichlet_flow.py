@@ -79,20 +79,26 @@ class DirichletFlowModel(pl.LightningModule):
             self.time_embedder = nn.Sequential(GaussianFourierProjection(embedding_dim= hidden_size),nn.Linear(hidden_size, hidden_size))
 
     @torch.no_grad()
-    def generate(self, prior, generation_args, break_on_anomaly, log=False):
-        prior = prior.to(self.device)
-        # assert that prior is normalized
-        assert torch.allclose(prior.sum(-1), torch.ones_like(prior.sum(-1)))
-        B = prior.shape[0]
+    def sample(self, sampling_args, break_on_anomaly, prior=None, log=False):
+        self.eval()
+        if prior is not None:
+            prior = prior.to(self.device)
+            # assert that prior is normalized
+            assert torch.allclose(prior.sum(-1), torch.ones_like(prior.sum(-1)))
+            B = prior.shape[0]
+        else:
+            B = 1
         L = self.n_events * self.n_attributes
         x0 = torch.distributions.Dirichlet(torch.ones(B, L, self.alphabet_size, device=self.device)).sample()
         eye = torch.eye(self.alphabet_size).to(x0)
         xt = x0
 
-        self.condflow = DirichletConditionalFlow(K=self.alphabet_size, alpha_spacing=generation_args.alpha_spacing, alpha_max=generation_args.alpha_max)
+        self.condflow = DirichletConditionalFlow(K=self.alphabet_size, alpha_spacing=sampling_args.alpha_spacing, alpha_max=sampling_args.alpha_max)
 
-        t_span = torch.linspace(1, generation_args.alpha_max, generation_args.num_integration_steps, device=self.device)
+        t_span = torch.linspace(1, sampling_args.alpha_max, sampling_args.num_integration_steps, device=self.device)
 
+        # xt = xt * prior
+        # xt = xt / xt.sum(dim=-1,keepdim=True)
         xts = []
 
         xts.append(xt.detach().clone())
@@ -103,17 +109,18 @@ class DirichletFlowModel(pl.LightningModule):
 
             if not self.fourier_t_embedding:
                 alphas = s
-                ts = (alphas-1)/(generation_args.alpha_max-1)
+                ts = (alphas-1)/(sampling_args.alpha_max-1)
             else:
                 ts = s
 
             logits = self.forward(xt, ts[None].expand(B))
 
             # print(f'xt.min(): {xt.min()} xt.max(): {xt.max()} logits.min(): {logits.min()} logits.max(): {logits.max()}')
-            out_probs = torch.nn.functional.softmax(logits / generation_args.flow_temp, -1)
+            out_probs = torch.nn.functional.softmax(logits / sampling_args.flow_temp, -1)
 
-            out_probs = out_probs * prior
-            out_probs = out_probs / out_probs.sum(-1, keepdim=True)
+            if prior is not None:
+                out_probs = out_probs * prior
+                out_probs = out_probs / out_probs.sum(-1, keepdim=True)
 
             if log:
                 out_probss.append(out_probs.detach().clone())

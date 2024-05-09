@@ -14,6 +14,7 @@ checkpoint = "../checkpoints/kind-oath-66/last.ckpt"
 # checkpoint = "../checkpoints/golden-capybara-67/last.ckpt"
 # checkpoint = "../checkpoints/avid-durian-68/last.ckpt"
 checkpoint = "../checkpoints/ethereal-star-75/last.ckpt"
+checkpoint = "../checkpoints/crisp-surf-78/last.ckpt"
 
 model = BFNModel.load_from_checkpoint(checkpoint, map_location=device)
 
@@ -108,18 +109,22 @@ ROOT_DIR = "../"
 TMP_DIR = ROOT_DIR + "artefacts/tmp"
 OUTPUT_DIR = ROOT_DIR + "artefacts/output"
 
-MODEL_BARS = 2
+dataset = "mmd_loops"
+
+ROOT_DIR = "../"
+TMP_DIR = ROOT_DIR + "artefacts/tmp"
+OUTPUT_DIR = ROOT_DIR + "artefacts/output"
+
+MODEL_BARS = 4
 # Load the dataset
 ds = MidiDataset(
-    cache_path=ROOT_DIR+"paper_assets/tst_midi_records_unique_pr.pt",
-    path_filter_fn=lambda x: f"n_bars={MODEL_BARS}" in x,
+    cache_path=ROOT_DIR+f"data/{dataset}/tst_midi_records_unique_pr.pt",
+    path_filter_fn=lambda x: f"n_bars={MODEL_BARS}" in x if dataset=="mmd_loops" else True,
     genre_list=model.tokenizer.config["tags"],
     tokenizer=model.tokenizer,
     min_notes=8 * MODEL_BARS,
     max_notes=model.tokenizer.config["max_notes"],
 )
-
-
 RESAMPLE_IDX = 50
 
 x = ds[RESAMPLE_IDX]
@@ -144,10 +149,10 @@ mask = tokenizer.constraint_mask(
 )
 
 BATCH_SIZE = 2
-N_STEPS = 500
+N_STEPS = 100
 
 #%%
-y = model.sample(None,BATCH_SIZE,N_STEPS,device=device,argmax=True)
+y = model.sample(None,BATCH_SIZE,N_STEPS,temperature=1.0,device=device,argmax=True)
 
 import matplotlib.pyplot as plt
 import torch
@@ -159,7 +164,9 @@ y1h = torch.nn.functional.one_hot(y, num_classes=len(model.tokenizer.vocab)).flo
 plt.imshow(y1h[0].cpu().numpy().T, aspect="auto",interpolation="none")
 plt.show()
 
-from util import preview, piano_roll
+
+
+from util import preview, piano_roll, preview_sm
 
 # plot piano rolls,
 # use a 16:9 aspect ratio for each plot
@@ -174,10 +181,11 @@ for i in range(BATCH_SIZE):
     axs[i].imshow(pr, aspect="auto",interpolation="none")
 plt.show()
 
-#%%
+
+
 # play audio of last 
 print(f"Number of notes: {y_sm.note_num()}")
-preview(y_sm, tmp_dir="artefacts/tmp", audio=True)
+preview_sm(y_sm)
     
 
 # %%
