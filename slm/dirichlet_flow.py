@@ -19,7 +19,7 @@ import numpy as np
 from lightning.pytorch.utilities import grad_norm
 import warnings
 from train import EncoderOnlyModel
-from flow_utils import DirichletConditionalFlow, sample_cond_prob_path, expand_simplex, simplex_proj
+from flow_utils import DirichletConditionalFlow, sample_cond_prob_path, expand_simplex, simplex_proj, GaussianFourierProjection
 import time
 from types import SimpleNamespace
 import os
@@ -40,6 +40,7 @@ class DirichletFlowModel(pl.LightningModule):
         output_bias = True,
         learning_rate=1e-4,
         learning_rate_gamma=0.98,
+        fourier_t_embedding=False,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -73,9 +74,16 @@ class DirichletFlowModel(pl.LightningModule):
         self.flow_args = SimpleNamespace(**flow_args)
         self.iter_step = 0
 
+        self.fourier_t_embedding = fourier_t_embedding
+        if fourier_t_embedding:
+            self.time_embedder = nn.Sequential(GaussianFourierProjection(embedding_dim= hidden_size),nn.Linear(hidden_size, hidden_size))
+
     @torch.no_grad()
-    def generate(self, batch_size, generation_args):
-        B = batch_size
+    def generate(self, prior, generation_args):
+        prior = prior.to(self.device)
+        # assert that prior is normalized
+        assert torch.allclose(prior.sum(-1), torch.ones_like(prior.sum(-1)))
+        B = prior.shape[0]
         L = self.n_events * self.n_attributes
         x0 = torch.distributions.Dirichlet(torch.ones(B, L, self.alphabet_size, device=self.device)).sample()
         eye = torch.eye(self.alphabet_size).to(x0)
@@ -91,18 +99,22 @@ class DirichletFlowModel(pl.LightningModule):
 
         out_probss = []
 
-        
-
         for i, (s, t) in tqdm(enumerate(zip(t_span[:-1], t_span[1:]))):
 
-
-            alphas = s
-            ts = (alphas-1)/(generation_args.alpha_max-1)
+            if not self.fourier_t_embedding:
+                alphas = s
+                ts = (alphas-1)/(generation_args.alpha_max-1)
+            else:
+                ts = s
 
             logits = self.forward(xt, ts[None].expand(B))
 
             # print(f'xt.min(): {xt.min()} xt.max(): {xt.max()} logits.min(): {logits.min()} logits.max(): {logits.max()}')
             out_probs = torch.nn.functional.softmax(logits / generation_args.flow_temp, -1)
+
+            out_probs = out_probs * prior
+            out_probs = out_probs / out_probs.sum(-1, keepdim=True)
+
             out_probss.append(out_probs.detach().clone())
 
             # add some noise
@@ -113,44 +125,62 @@ class DirichletFlowModel(pl.LightningModule):
             if torch.isnan(c_factor).any():
                 print(f'NAN cfactor after: xt.min(): {xt.min()}, out_probs.min(): {out_probs.min()}')
                 c_factor = torch.nan_to_num(c_factor)
-                return logits, out_probs
+                out_logits = logits
+                out_probs = out_probs
+                break
 
             cond_flows = (eye - xt.unsqueeze(-1)) * c_factor.unsqueeze(-2)
             flow = (out_probs.unsqueeze(-2) * cond_flows).sum(-1)
+
+            print(f'flow.min(): {flow.min()} flow.max(): {flow.max()}')
+
             xt = xt + flow * (t - s)
             # norma
             if not torch.allclose(xt.sum(2), torch.ones((B, L), device=self.device), atol=1e-4) or not (xt >= 0).all():
                 print(f'WARNING: xt.min(): {xt.min()}. Some values of xt do not lie on the simplex. There are we are {(xt<0).sum()} negative values in xt of shape {xt.shape} that are negative.')
                 xt = simplex_proj(xt)
-                return logits, out_probs
+                out_logits = logits
+                out_probs = out_probs
+                break
 
             xts.append(xt.detach().clone())
 
         xts = torch.stack(xts, 0)
 
-        print(f'xts.shape: {xts.shape}')
+        cmap_scale_fn = lambda x : x ** (1/4)
 
-        xts_slice = xts[:,0,2,:]
+        # plot xts diff in first dimension
+        xts_diff = xts[1:] - xts[:-1]
 
-        print(f'xts_slice.shape: {xts_slice.shape}')
+        plt.imshow(
+            xts_diff[:,0,:,:].mean(-2).cpu().numpy().T,
+            cmap='magma', aspect='auto', interpolation="none")
+        plt.show()
 
-        plt.imshow(xts[:,0,0,:].cpu().numpy().T, cmap='gray', aspect='auto', origin='lower')
+        plt.imshow(
+            cmap_scale_fn(xts[:,0,1,:].cpu().numpy().T),
+            cmap='magma', aspect='auto', interpolation="none")
         plt.show()
 
         out_probss = torch.stack(out_probss, 0)
 
-        plt.imshow(out_probss[:,0,0,:].cpu().numpy().T, cmap='gray', aspect='auto', origin='lower')
-        plt.show()
-
-        # plot sum 
-        plt.plot(xts_slice.cpu().numpy().sum(-1))
-        plt.show()
-
-        plt.plot(xts[:,0,0,:].sum(-1).cpu().numpy())
+        plt.imshow(
+            cmap_scale_fn(out_probss[:,0,1,:].cpu().numpy().T), cmap='magma', aspect='auto', interpolation="none")
         plt.show()
 
 
-        return logits, x0
+        plt.imshow(
+            cmap_scale_fn(out_probss[:,0,1::self.n_attributes,:].mean(dim=-2).cpu().numpy().T), 
+            cmap='magma', aspect='auto', interpolation="None")
+        plt.show()
+
+        # plot t_span with a line at the last i with a label
+        plt.plot(t_span.cpu().numpy())
+        plt.axvline(i, color='r', label=f"i_f={i}")
+        plt.legend()
+        plt.show()
+
+        return out_logits, out_probs
     
     def step(self, batch, batch_idx=None):
         seq = batch
@@ -172,6 +202,12 @@ class DirichletFlowModel(pl.LightningModule):
             # plot alphas[0]
             plt.plot(alphas.cpu().numpy())
             plt.savefig(f"artefacts/dflow/alphas_{self.iter_step}.png")
+            plt.close()
+
+            # plot sorted alphas
+            alphas_s, idx = alphas.sort()
+            plt.plot(alphas_s.cpu().numpy())
+            plt.savefig(f"artefacts/dflow/alphas_sorted_{self.iter_step}.png")
             plt.close()
 
             # plot entropy
@@ -206,8 +242,25 @@ class DirichletFlowModel(pl.LightningModule):
             plt.savefig(f"artefacts/dflow/xt_max_alpha_{self.iter_step}.png")
             plt.close()
 
+            # get xt with smallest alpha
+            xt_min_alpha = xt[alphas.argmin()]
+            plt.plot(xt_min_alpha[0].cpu().numpy())
+            plt.savefig(f"artefacts/dflow/xt_min_alpha_{self.iter_step}.png")
+            plt.close()
+
+            # get xt of median alpha
+            # find median index
+            alphas_s, idx = alphas.sort()
+            median_idx = len(alphas) // 2
+            plt.plot(xt[idx[median_idx]][0].cpu().numpy())
+            plt.savefig(f"artefacts/dflow/xt_median_alpha_{self.iter_step}.png")
+            plt.close()
+
         # xt, prior_weights = expand_simplex(xt, alphas, self.flow_args.prior_pseudocount)
-        ts = (alphas-1)/(self.flow_args.alpha_max-1)
+        if not self.fourier_t_embedding:
+            ts = (alphas-1)/(self.flow_args.alpha_max-1)
+        else:
+            ts = alphas
         logits = self.forward(xt, t=ts)
         losses = torch.nn.functional.cross_entropy(
             logits.reshape(-1, self.alphabet_size),
@@ -256,8 +309,13 @@ class DirichletFlowModel(pl.LightningModule):
     def forward(self, s, t):
         s = s.clone()
         t = t.clone()
-        t_z = self.t_embedding(t[:,None])
+
+        if self.fourier_t_embedding:
+            t_z = self.time_embedder(t)
+        else:
+            t_z = self.t_embedding(t[:,None])
         format_mask = self.format_mask[None, ...].to(s.device)
+
 
         # double in last dimension
         x = s
@@ -328,12 +386,12 @@ if __name__ == "__main__":
 
     flow_args = {
             "prior_pseudocount":2,
+            # sampled during training
             "alpha_scale":10.0,
             "mode":"dirichlet",
-            "alpha_max":200.0,
             "fix_alpha":None,
-            "alpha_spacing":0.1
     }
+
 
     model = DirichletFlowModel(
     hidden_size=512,
@@ -349,6 +407,7 @@ if __name__ == "__main__":
     output_bias = False,
     learning_rate=1e-3,
     learning_rate_gamma=0.98,
+    fourier_t_embedding=True,
     )    
 
     # test step
@@ -412,7 +471,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[2],
+        devices=[3],
         max_epochs=10_000,
         # log_every_n_steps=1,
         callbacks=[
@@ -433,6 +492,7 @@ if __name__ == "__main__":
         # accumulate_grad_batches=1,
     )
 
+    #asd
     trainer.fit(
                 model,
                 trn_dl, 
