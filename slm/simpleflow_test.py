@@ -41,13 +41,18 @@ preview_sm(x_sm)
 
 #%%
 
-y = model.sample(n_steps= 100, temperature=1)
+y = model.sample(n_steps=10, temperature=0.3)
 
 y_sm = model.tokenizer.decode(y[0].cpu().numpy())
 
 print(y_sm.note_num())
 
+print(f"Got {y_sm.note_num()} notes across {len(y_sm.tracks)} tracks")
+
 preview_sm(y_sm)
+
+print(y_sm.tracks)
+
 
 #%%
 
