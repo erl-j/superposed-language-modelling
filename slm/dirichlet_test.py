@@ -31,7 +31,7 @@ ds = MidiDataset(
     max_notes=model.tokenizer.config["max_notes"],
 )
 
-RESAMPLE_IDX = 0
+RESAMPLE_IDX = 1500
 
 x = ds[RESAMPLE_IDX]
 x_sm = model.tokenizer.decode(x)
@@ -44,9 +44,16 @@ preview_sm(x_sm)
 mask = model.tokenizer.infilling_mask(
     x=x,
     beat_range=(4, 12),
-    min_notes=0,
-    max_notes=290,
+    min_notes=x_sm.note_num(),
+    max_notes=x_sm.note_num()
 )
+
+# mask = model.tokenizer.constraint_mask(
+#     instruments=["Drums","Bass","Guitar"],
+#     min_notes = 10,
+#     max_notes=  100,
+#     min_notes_per_instrument=10
+# )
 
 mask = torch.tensor(mask * model.tokenizer.get_format_mask()).float()
 
@@ -54,10 +61,10 @@ prior = mask / mask.sum(dim=-1, keepdim=True)[None,:]
 
 
 sampling_args = copy.deepcopy(model.flow_args)
-sampling_args.num_integration_steps = 10
-sampling_args.flow_temp = 0.75
-sampling_args.alpha_spacing = 0.02
-sampling_args.alpha_max = 4.0
+sampling_args.num_integration_steps = 100
+sampling_args.flow_temp = 0.5
+sampling_args.alpha_spacing = 0.002
+sampling_args.alpha_max = 5.0
 # sampling_args.alpha_max = 30.0
 # sampling_args.alpha_scale = 2.0
 # sampling_args.alpha_max = 30.0
@@ -74,11 +81,6 @@ y = y.argmax(dim=-1)
 
 y_sm = model.tokenizer.decode(y[0].cpu().numpy())
 
-
-from util import preview_sm
-
 preview_sm(y_sm)
-
-
 
 # %%

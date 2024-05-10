@@ -24,7 +24,7 @@ import time
 from types import SimpleNamespace
 import os
 
-class SimpleFlowModel(pl.LightningModule):
+class UniFlowModel(pl.LightningModule):
     def __init__(
         self,
         hidden_size,
@@ -84,41 +84,9 @@ class SimpleFlowModel(pl.LightningModule):
     def p2z(self,p):
         z = p@self.E
         return z
-
-    @torch.no_grad
-    def sample(self, n_steps, temperature):
-        self.eval()
-        B, L, V = 1, self.n_events * self.n_attributes, self.alphabet_size
-
-        zt = torch.randn(B, L, self.hidden_size, device=self.device)
-
-        for step in tqdm(range(n_steps)):
-            t = (step/n_steps) * torch.ones(B, device = self.device)
-            delta_t = (1/n_steps) * torch.ones(B, device=self.device)
-
-            pt = torch.softmax((zt@self.U)/temperature,dim=-1)
-
-            v = self.forward(pt,t)
-
-            zt = zt + delta_t * v
-
-            # z1hat = zt + (1-t[:,None,None])*v
-
-            logits = zt@self.U
-
-            logits = torch.where(self.format_mask[None,...].to(self.device) < 0.5, -torch.inf, logits)
-
-            # convert to probs
-            p1 = torch.softmax(logits, dim=-1)
-
-            # renormalize
-            p1 = p1 / torch.sum(p1,dim=-1, keepdim=True)
-
-
-        return p1.argmax(-1)
     
     @torch.no_grad
-    def sample_1step(self):
+    def sample(self):
 
         self.eval()
         B, L, V = 1, self.n_events * self.n_attributes, self.alphabet_size
@@ -154,7 +122,13 @@ class SimpleFlowModel(pl.LightningModule):
         x1h = torch.nn.functional.one_hot(batch, num_classes=self.alphabet_size).float()
         B, L, V = x1h.shape
 
+        p1 = x1h
+
         t = torch.rand(B, device=self.device)
+        p0 = torch.rand(B, L, V, device=self.device)
+
+
+
         z1 = (x1h @ self.E)#.detach()
     
         z0 = torch.randn(B, L, self.hidden_size, device=self.device)

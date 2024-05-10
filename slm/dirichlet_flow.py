@@ -118,20 +118,23 @@ class DirichletFlowModel(pl.LightningModule):
             # print(f'xt.min(): {xt.min()} xt.max(): {xt.max()} logits.min(): {logits.min()} logits.max(): {logits.max()}')
             out_probs = torch.nn.functional.softmax(logits / sampling_args.flow_temp, -1)
 
+            assert torch.isfinite(out_probs).all(), "out probs contains NaN or infinite values"
+
             if prior is not None:
                 out_probs = out_probs * prior
                 out_probs = out_probs / out_probs.sum(-1, keepdim=True)
 
             if log:
                 out_probss.append(out_probs.detach().clone())
-
-            # add some noise
-            # out_probs = out_probs + torch.randn_like(out_probs) * 0.001           
+            assert torch.isfinite(out_probs).all(), "out probs contains NaN or infinite values after prior"
 
             c_factor = self.condflow.c_factor(xt.cpu().numpy(), s.item())
             c_factor = torch.from_numpy(c_factor).to(xt)
-            if torch.isnan(c_factor).any():
-                print(f'NAN cfactor after: xt.min(): {xt.min()}, out_probs.min(): {out_probs.min()}')
+            # print min and max of c factor
+  
+            # assert torch.isfinite(c_factor).all(), "c factor contains NaN or infinite values"
+            if torch.isnan(c_factor).any() or torch.isinf(c_factor).any():
+                print(f'NAN or INF cfactor after: xt.min(): {xt.min()}, out_probs.min(): {out_probs.min()}')
                 c_factor = torch.nan_to_num(c_factor)
                 if break_on_anomaly:
                     out_logits = logits
@@ -139,10 +142,15 @@ class DirichletFlowModel(pl.LightningModule):
                     break
 
             cond_flows = (eye - xt.unsqueeze(-1)) * c_factor.unsqueeze(-2)
+            assert torch.isfinite(cond_flows).all(), "cond_flows contains NaN or infinite values"
             flow = (out_probs.unsqueeze(-2) * cond_flows).sum(-1)
+
+            assert torch.isfinite(xt).all(), "xt contains NaN or infinite values"
+            assert torch.isfinite(flow).all(), "flow contains NaN or infinite values"
 
             xt = xt + flow * (t - s)
             # norma
+            assert not torch.isnan(xt).any(), "xt is nan"
             if not torch.allclose(xt.sum(2), torch.ones((B, L), device=self.device), atol=1e-4) or not (xt >= 0).all():
                 print(f'WARNING: xt.min(): {xt.min()}. Some values of xt do not lie on the simplex. There are we are {(xt<0).sum()} negative values in xt of shape {xt.shape} that are negative.')
                 xt = simplex_proj(xt)
@@ -161,7 +169,7 @@ class DirichletFlowModel(pl.LightningModule):
 
             xts = torch.stack(xts, 0)
 
-            cmap_scale_fn = lambda x : x ** (1/4)
+            cmap_scale_fn = lambda x : x ** (1)
 
             # plot xts diff in first dimension
             xts_diff = xts[1:] - xts[:-1]
@@ -337,7 +345,6 @@ class DirichletFlowModel(pl.LightningModule):
         else:
             t_z = self.t_embedding(t[:,None])
         format_mask = self.format_mask[None, ...].to(s.device)
-
 
         # double in last dimension
         x = s
