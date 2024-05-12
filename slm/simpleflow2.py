@@ -24,7 +24,7 @@ import time
 from types import SimpleNamespace
 import os
 
-class SimpleFlowModel(pl.LightningModule):
+class SimpleFlow2Model(pl.LightningModule):
     def __init__(
         self,
         hidden_size,
@@ -68,6 +68,10 @@ class SimpleFlowModel(pl.LightningModule):
         # self.decoder_output_layer = nn.Linear(hidden_size, vocab_size, bias=output_bias)
         self.n_attributes = len(self.tokenizer.note_attribute_order)
         self.n_events = self.tokenizer.config["max_notes"]
+        self.attribute_layers = nn.ModuleList([
+            nn.Linear(hidden_size, hidden_size) for _ in range(self.n_attributes)
+        ])
+
         self.t_embedding = torch.nn.Linear(1, hidden_size)
         self.alphabet_size = len(vocab)
 
@@ -92,7 +96,6 @@ class SimpleFlowModel(pl.LightningModule):
 
         if prior is not None:
             prior = prior.to(self.device)
-            print(prior.shape)
             z_prior = self.p2z(prior)
 
         zt = torch.randn(B, L, self.hidden_size, device=self.device)
@@ -104,19 +107,20 @@ class SimpleFlowModel(pl.LightningModule):
             delta_t = (1/n_steps) * torch.ones(B, device=self.device)
 
 
-            pt = torch.softmax((zt@self.U)/temperature,dim=-1)
+            pt = torch.softmax((zt@self.U),dim=-1)
 
             if prior is not None:
                 pt = pt * prior
-                pt = pt / (pt.sum(dim=-1, keepdim=True) + 1e-12)
-                zt = pt @ self.E
-                # print(f"min pt {pt.min()} max pt {pt.max()}")
+                pt = pt / (pt.sum(dim=-1, keepdim=True)+1e-12)
+                # print min and max
                 # assert torch.allclose(pt.sum(dim=-1),torch.ones(B,device=self.device))
+                zt = (pt @ self.E)
+            
+                pt = torch.softmax((zt@self.U)/temperature,dim=-1)
 
             pts.append(pt.detach())
 
             v = self.forward(pt,t)
-
 
             zt = zt + delta_t * v
                 
@@ -127,64 +131,38 @@ class SimpleFlowModel(pl.LightningModule):
             # convert to probs
             p1 = torch.softmax(logits, dim=-1)
 
-            # renormalize
-            p1 = p1 / torch.sum(p1,dim=-1, keepdim=True)
 
         pts = torch.stack(pts,dim=0)
 
         cmap_scale_fn = lambda x: x ** (1/4)
 
+        print(pts.shape)
 
         plt.imshow(
             cmap_scale_fn(pts[:,0,:,:].mean(-2).cpu().T),
             cmap="magma", aspect="auto",interpolation="none")
+        plt.title("pt")
+        plt.show()
+
+        # now plot pt diff
+        pt_diff = pts[1:] - pts[:-1]
+        plt.imshow(
+            cmap_scale_fn(pt_diff[:,0,:,:].mean(-2).cpu().T),
+            cmap="magma", aspect="auto",interpolation="none")
+        plt.title("pt diff")
         plt.show()
 
         return p1.argmax(-1)
     
-    @torch.no_grad
-    def sample_1step(self):
-
-        self.eval()
-        B, L, V = 1, self.n_events * self.n_attributes, self.alphabet_size
-
-        # t = torch.rand(B, device=self.device)
-        # z1 = (x1h @ self.E)
-    
-        zt = torch.randn(B, L, self.hidden_size, device=self.device)
-
-        pt = self.z2p(zt)
-
-        t = torch.zeros([1],device=self.device)
-
-        v = self.forward(pt,t)
-
-        z1hat = zt + (1-t[:,None,None])*v
-
-        logits = z1hat@self.U
-
-        logits = torch.where(self.format_mask[None,...].to(self.device) < 0.5, -torch.inf, logits)
-
-        # convert to probs
-        p1 = torch.softmax(logits, dim=-1)
-
-        # renormalize
-        p1 = p1 / torch.sum(p1,dim=-1, keepdim=True)
-
-        return p1.argmax(-1)
-
-
     def step(self, batch, batch_idx=None):
         x = batch
         x1h = torch.nn.functional.one_hot(batch, num_classes=self.alphabet_size).float()
         B, L, V = x1h.shape
 
-        p1 = x1h
         t = torch.rand(B, device=self.device)
-        z0 = torch.randn(B, L, self.hidden_size, device=self.device)
-
         z1 = (x1h @ self.E)#.detach()
     
+        z0 = torch.randn(B, L, self.hidden_size, device=self.device)
 
         zt = t[:,None,None] * z1 + (1-t[:,None,None]) * z0
 
@@ -192,14 +170,12 @@ class SimpleFlowModel(pl.LightningModule):
 
         v = self.forward(pt,t)
 
-        # problem?, inconsistency between mse and ce losses since z0 contains syntactically irrelevant attribute embedding directions
+
         mse_loss = ((v - (z1-z0))**2).mean()
 
         z1hat = zt + (1-t[:,None,None])*v
 
         logits = z1hat@self.U
-
-        logits = torch.where(self.format_mask[None,...].to(self.device) < 0.5, -torch.inf, logits)
 
         ce_loss = torch.nn.functional.cross_entropy(
             logits.reshape(-1, V),
@@ -270,20 +246,18 @@ class SimpleFlowModel(pl.LightningModule):
         ze = ze.sum(dim=2)
 
         # pass through transformer
-        zl = self.transformer(ze)
+        zo = self.transformer(ze)
         # get output part
         # note embeddings
-        note_z = einops.rearrange(zl, "b t ft -> b t 1 ft")
-        note_z = note_z.repeat(1, 1, self.n_attributes, 1)
+        za = einops.repeat(zo, "b n d-> b n a d", a=self.n_attributes)
+
+        attr_z = []
+        for i, layer in enumerate(self.attribute_layers):
+            attr_z.append(layer(za[:, :, i, :]))
+        za = torch.stack(attr_z, dim=2)
         # rearrange
-        out_z = einops.rearrange(note_z, "b n a ft -> b (n a) ft")
-        # decoder_logits = self.decoder_output_layer(note_z)
-        # # apply format mask
-        # decoder_logits = einops.rearrange(
-        #     decoder_logits, "b t a v -> b (t a) v", a=self.n_attributes
-        # )
-        # decoder_logits[format_mask.expand_as(decoder_logits) < 0.5] = -1e12
-        return out_z
+        za = einops.rearrange(za, "b n a d -> b (n a) d")
+        return za
     
     def configure_optimizers(self):
         # learning rate decay
@@ -297,7 +271,7 @@ if __name__ == "__main__":
 
     DATASET = "mmd_loops"
 
-    BATCH_SIZE = 200
+    BATCH_SIZE = 100
 
     tag_list = open(f"./data/{DATASET}/tags.txt").read().splitlines()
 
@@ -328,7 +302,7 @@ if __name__ == "__main__":
 
 
 
-    model = SimpleFlowModel(
+    model = SimpleFlow2Model(
     hidden_size=512,
     n_heads=4,
     feed_forward_size=2*512,
@@ -404,7 +378,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[5],
+        devices=[2],
         max_epochs=10_000,
         # log_every_n_steps=1,
         callbacks=[

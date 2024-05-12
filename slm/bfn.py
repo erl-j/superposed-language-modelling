@@ -247,7 +247,7 @@ class BFNModel(pl.LightningModule):
 
     def sample(
         self,
-        mask=None,
+        prior,
         batch_size=1,
         nb_steps=10,
         temperature=1.0,
@@ -269,9 +269,9 @@ class BFNModel(pl.LightningModule):
             theta = theta / theta.sum(dim=-1, keepdim=True)
 
         # mult with mask
-        if mask is not None:
-            mask = mask[None, ...].to(theta.device)
-            theta = theta * mask
+        if prior is not None:
+            prior = prior[None, ...].to(theta.device)
+            theta = theta * prior
             # normalize
             theta = theta / theta.sum(dim=-1, keepdim=True)
 
@@ -304,7 +304,6 @@ class BFNModel(pl.LightningModule):
                 plt.show()
 
             k = torch.distributions.Categorical(probs=k_probs).sample()  # (B, D)
-            print(k.shape)
             # assert k.shape == k_probs
             alpha = self.beta1 * (2 * i - 1) / (nb_steps**2)
 
@@ -317,8 +316,8 @@ class BFNModel(pl.LightningModule):
 
             theta = F.softmax(y + torch.log(theta + eps_), dim=-1)
 
-            if mask is not None:
-                theta = theta * mask
+            if prior is not None:
+                theta = theta * prior
                 # normalize
                 theta = theta / theta.sum(dim=-1, keepdim=True)
 
@@ -339,27 +338,28 @@ class BFNModel(pl.LightningModule):
         else:
             k_final = torch.distributions.Categorical(probs=k_probs_final).sample()
 
-        # plot entropies
-        plt.plot(entropies)
-        plt.show()
-
-        # plot first event probs
-        first_event_probs = torch.stack(first_event_probs, dim=0)
-
-        # first_event_probs = torch.log(first_event_probs + eps_)
-
-        first_event_thetas = torch.stack(first_event_thetas, dim=0)
-
-
-        for i in range(self.n_attributes):
-            # plot first event thetas
-            plt.imshow(first_event_thetas[:,i].T, aspect="auto", interpolation="none")
-            plt.title(f"Thetas for attribute {self.tokenizer.note_attribute_order[i]}")
+        if plot_interval > 0:
+            # plot entropies
+            plt.plot(entropies)
             plt.show()
 
-            plt.imshow(first_event_probs[:,i].T, aspect="auto", interpolation="none")
-            plt.title(f"Probs for attribute {self.tokenizer.note_attribute_order[i]}")
-            plt.show()
+            # plot first event probs
+            first_event_probs = torch.stack(first_event_probs, dim=0)
+
+            # first_event_probs = torch.log(first_event_probs + eps_)
+
+            first_event_thetas = torch.stack(first_event_thetas, dim=0)
+
+
+            for i in range(self.n_attributes):
+                # plot first event thetas
+                plt.imshow(first_event_thetas[:,i].T, aspect="auto", interpolation="none")
+                plt.title(f"Thetas for attribute {self.tokenizer.note_attribute_order[i]}")
+                plt.show()
+
+                plt.imshow(first_event_probs[:,i].T, aspect="auto", interpolation="none")
+                plt.title(f"Probs for attribute {self.tokenizer.note_attribute_order[i]}")
+                plt.show()
 
 
 

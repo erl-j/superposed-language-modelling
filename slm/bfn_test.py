@@ -16,7 +16,9 @@ checkpoint = "../checkpoints/kind-oath-66/last.ckpt"
 checkpoint = "../checkpoints/ethereal-star-75/last.ckpt"
 checkpoint = "../checkpoints/crisp-surf-78/last.ckpt"
 
-model = BFNModel.load_from_checkpoint(checkpoint, map_location=device)
+device="cuda:0"
+
+model = BFNModel.load_from_checkpoint(checkpoint, map_location="cpu").to(device)
 
 # print model
 print(model)
@@ -125,7 +127,9 @@ ds = MidiDataset(
     min_notes=8 * MODEL_BARS,
     max_notes=model.tokenizer.config["max_notes"],
 )
-RESAMPLE_IDX = 50
+
+#%%
+RESAMPLE_IDX = 1400
 
 x = ds[RESAMPLE_IDX]
 x_sm = model.tokenizer.decode(x)
@@ -141,18 +145,34 @@ sns.set_style("whitegrid", {'axes.grid' : False})
 tokenizer = model.tokenizer
 
 mask = tokenizer.constraint_mask(
-    # scale="C major",
-    instruments = ["Drums"],
-    min_notes = 50,
-    max_notes = 100,
-    min_notes_per_instrument=30,
+    scale="C major",
+    instruments = ["Piano","Guitar","Drums","Bass"],
+    min_notes = 20,
+    max_notes = 280,
+    min_notes_per_instrument=10,
+    tempos=["128"]
 )
 
-BATCH_SIZE = 2
-N_STEPS = 100
 
-#%%
-y = model.sample(None,BATCH_SIZE,N_STEPS,temperature=1.0,device=device,argmax=True)
+
+# mask = model.tokenizer.infilling_mask(
+#     x=x,
+#     beat_range=(4, 12),
+#     min_notes=10,
+#     max_notes=275,
+#     # min_notes=x_sm.note_num(),
+#     # max_notes=x_sm.note_num()
+# ).float()
+
+mask = mask * model.format_mask
+prior = (mask / mask.sum(-1, keepdim=True))
+
+
+
+BATCH_SIZE = 2
+N_STEPS = 300
+TEMPERATURE=1.0
+y = model.sample(prior,BATCH_SIZE,N_STEPS, temperature=TEMPERATURE ,device=device,argmax=True, plot_interval=-1)
 
 import matplotlib.pyplot as plt
 import torch

@@ -1,15 +1,27 @@
 #%%
 from simpleflow import SimpleFlowModel
+from simpleflow2 import SimpleFlow2Model
 import torch
 from data import MidiDataset
 import copy
 from util import preview_sm
-device = 'cuda:4'
+from matplotlib import pyplot as plt
+device = 'cuda:0'
 
-ckpt = "../checkpoints/light-bee-20/last.ckpt"
+# ckpt = "../checkpoints/light-bee-20/last.ckpt"
+# # ckpt = "../checkpoints/eager-vortex-26/last.ckpt"
+# # ckpt = "../checkpoints/hardy-bush-25/last.ckpt"
+# model = SimpleFlowModel.load_from_checkpoint(
+#     ckpt, map_location="cpu"
+# ).to(device)
+
+
+#%%
+
+ckpt = "../checkpoints/valiant-durian-29/last.ckpt"
 # ckpt = "../checkpoints/eager-vortex-26/last.ckpt"
 # ckpt = "../checkpoints/hardy-bush-25/last.ckpt"
-model = SimpleFlowModel.load_from_checkpoint(
+model = SimpleFlow2Model.load_from_checkpoint(
     ckpt, map_location="cpu"
 ).to(device)
 
@@ -40,8 +52,31 @@ x_sm = model.tokenizer.decode(x)
 preview_sm(x_sm)
 
 #%%
+mask = model.tokenizer.infilling_mask(
+    x=x,
+    beat_range=(4, 12),
+    min_notes=x_sm.note_num(),
+    max_notes=x_sm.note_num()
+)
 
-y = model.sample(n_steps=10, temperature=0.3)
+mask = model.tokenizer.constraint_mask(
+    instruments=["Drums"],
+    min_notes = 10,
+    max_notes=  100,
+    min_notes_per_instrument=10
+)
+
+mask = mask * model.format_mask
+
+
+mask = torch.tensor(mask * model.tokenizer.get_format_mask()).float()
+
+prior = mask / mask.sum(dim=-1, keepdim=True)[None,:]
+
+plt.imshow(prior[0].T, aspect="auto", cmap="magma")
+plt.show()
+
+y = model.sample(prior=prior, n_steps=500, temperature=1.0)
 
 y_sm = model.tokenizer.decode(y[0].cpu().numpy())
 
@@ -54,38 +89,7 @@ preview_sm(y_sm)
 print(y_sm.tracks)
 
 
-#%%
 
-mask = model.tokenizer.infilling_mask(
-    x=x,
-    beat_range=(4, 12),
-    min_notes=x_sm.note_num(),
-    max_notes=x_sm.note_num()
-)
-
-# mask = model.tokenizer.constraint_mask(
-#     instruments=["Drums","Bass","Guitar"],
-#     min_notes = 10,
-#     max_notes=  100,
-#     min_notes_per_instrument=10
-# )
-
-mask = torch.tensor(mask * model.tokenizer.get_format_mask()).float()
-
-prior = mask / mask.sum(dim=-1, keepdim=True)[None,:]
-
-l,y = model.sample(
-    prior=prior,
-    sampling_args=sampling_args,
-    break_on_anomaly=True,
-    log= True,
-)
-
-y = y.argmax(dim=-1)
-
-y_sm = model.tokenizer.decode(y[0].cpu().numpy())
-
-preview_sm(y_sm)
 
 # %%
 
@@ -173,7 +177,6 @@ values = [v.split(":")[1] for v in vocab]
 # use tsne instead
 from sklearn.manifold import MDS, TSNE
 
-
 for zs in [embedding, projection]:
     # mds = MDS(n_components=2, dissimilarity="precomputed")
     m = TSNE(n_components=2, perplexity=30)
@@ -185,6 +188,21 @@ for zs in [embedding, projection]:
         plt.annotate(txt, (zs_mds[i,0], zs_mds[i,1]), textcoords="offset points", xytext=(0,10), ha='center')
     plt.title("TSNE of Embedding")
     plt.show()
+
+#%%
+# now do seperate tsne for pitch, onset beat
+for attribute in ["pitch","onset/beat"]:
+    for zs in [embedding, projection]:
+        # mds = MDS(n_components=2, dissimilarity="precomputed")
+        m = TSNE(n_components=2, perplexity=30)
+        zs_mds = m.fit_transform(zs)
+
+        plt.figure(figsize=(10, 10))
+        sns.scatterplot(x=zs_mds[:,0], y=zs_mds[:,1], hue=attributes, palette="tab20")
+        for i, txt in enumerate(values):
+            plt.annotate(txt, (zs_mds[i,0], zs_mds[i,1]), textcoords="offset points", xytext=(0,10), ha='center')
+        plt.title("TSNE of Embedding")
+        plt.show()
 
 
 
