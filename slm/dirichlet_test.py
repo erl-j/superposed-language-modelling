@@ -8,10 +8,11 @@ device = 'cuda:0'
 
 # ckpt = "../checkpoints/zany-thunder-48/last.ckpt"
 ckpt = "../checkpoints/leafy-wood-51/last.ckpt"
+# ckpt = "../checkpoints/zesty-smoke-63/last.ckpt"
 model = DirichletFlowModel.load_from_checkpoint(
     ckpt, device=device
 ).to(device)
-
+#%%
 
 dataset = "mmd_loops"
 
@@ -31,7 +32,7 @@ ds = MidiDataset(
     max_notes=model.tokenizer.config["max_notes"],
 )
 
-RESAMPLE_IDX = 1500
+RESAMPLE_IDX = 1400
 
 x = ds[RESAMPLE_IDX]
 x_sm = model.tokenizer.decode(x)
@@ -61,10 +62,10 @@ prior = mask / mask.sum(dim=-1, keepdim=True)[None,:]
 
 
 sampling_args = copy.deepcopy(model.flow_args)
-sampling_args.num_integration_steps = 10
-sampling_args.flow_temp = 0.85
-sampling_args.alpha_spacing = 0.002
-sampling_args.alpha_max = 5.0
+sampling_args.num_integration_steps = 200
+sampling_args.flow_temp = 0.99
+sampling_args.alpha_spacing = 0.0002
+sampling_args.alpha_max = 6.0
 # sampling_args.alpha_max = 30.0
 # sampling_args.alpha_scale = 2.0
 # sampling_args.alpha_max = 30.0

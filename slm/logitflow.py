@@ -24,7 +24,7 @@ import time
 from types import SimpleNamespace
 import os
 
-class SimpleFlow2Model(pl.LightningModule):
+class LogitFlowModel(pl.LightningModule):
     def __init__(
         self,
         hidden_size,
@@ -294,7 +294,7 @@ class SimpleFlow2Model(pl.LightningModule):
         za = torch.stack(attr_z, dim=2)
         # rearrange
         za = einops.rearrange(za, "b n a d -> b (n a) d")
-        return za
+        return ze
     
     def configure_optimizers(self):
         # learning rate decay
@@ -339,7 +339,7 @@ if __name__ == "__main__":
 
 
 
-    model = SimpleFlow2Model(
+    model = LogitFlowModel(
     hidden_size=512,
     n_heads=4,
     feed_forward_size=2*512,

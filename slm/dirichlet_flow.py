@@ -416,7 +416,7 @@ if __name__ == "__main__":
     flow_args = {
             "prior_pseudocount":2,
             # sampled during training
-            "alpha_scale":10.0,
+            "alpha_scale":3.0,
             "mode":"dirichlet",
             "fix_alpha":None,
     }
@@ -500,7 +500,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[3],
+        devices=[1],
         max_epochs=10_000,
         # log_every_n_steps=1,
         callbacks=[

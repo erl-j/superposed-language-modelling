@@ -1,5 +1,5 @@
 #%%
-device = "cuda:7"
+device = "cuda:1"
 from bfn import BFNModel
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -10,11 +10,13 @@ import numpy as np
 # checkpoint ="../checkpoints/still-universe-56/last.ckpt"
 # checkpoint = "../checkpoints/sparkling-paper-58/last.ckpt"
 # checkpoint ="../checkpoints/worldly-music-61/last.ckpt"
-checkpoint = "../checkpoints/kind-oath-66/last.ckpt"
+# checkpoint = "../checkpoints/kind-oath-66/last.ckpt"
 # checkpoint = "../checkpoints/golden-capybara-67/last.ckpt"
 # checkpoint = "../checkpoints/avid-durian-68/last.ckpt"
-checkpoint = "../checkpoints/ethereal-star-75/last.ckpt"
-checkpoint = "../checkpoints/crisp-surf-78/last.ckpt"
+# checkpoint = "../checkpoints/ethereal-star-75/last.ckpt"
+# checkpoint = "../checkpoints/crisp-surf-78/last.ckpt"
+# checkpoint = "../checkpoints/polished-pine-82/last.ckpt"
+checkpoint = "../checkpoints/fallen-resonance-102/last.ckpt"
 
 device="cuda:0"
 
@@ -23,9 +25,12 @@ model = BFNModel.load_from_checkpoint(checkpoint, map_location="cpu").to(device)
 # print model
 print(model)
 
+#%%
+# encode the input
+
+
 
 #%%
-
 # repeat in first dim
 batch = model.format_mask[None,:].repeat(10,1,1).argmax(-1)
 
@@ -34,17 +39,17 @@ model.preview_beta(batch)
 
 #%% no grid
 
-
-
 # get the embedding
 embedding = model.embedding_layer.weight.detach().cpu().numpy().T
 projection = model.decoder_output_layer.weight.detach().cpu().numpy()
 
+print(embedding.shape)
+print(projection.shape)
 # get vocab
 vocab = model.tokenizer.vocab
 
 embedding_norm = np.linalg.norm(embedding, axis=1, keepdims=True)
-projection_norm = np.linalg.norm(projection, axis=0, keepdims=True)
+projection_norm = np.linalg.norm(projection, axis=1, keepdims=True)
 
 # normalize the embedding
 embedding = embedding / embedding_norm
@@ -102,9 +107,6 @@ for attr in model.tokenizer.note_attribute_order:
     plt.title(attr)
     plt.show()
 
-
-
-
 #%%
 from data import MidiDataset
 ROOT_DIR = "../"
@@ -129,50 +131,78 @@ ds = MidiDataset(
 )
 
 #%%
+from util import preview_sm
 RESAMPLE_IDX = 1400
 
 x = ds[RESAMPLE_IDX]
 x_sm = model.tokenizer.decode(x)
+preview_sm(x_sm)
 
 #%%
-batch = x.unsqueeze(0).to(device)
-model.preview_beta(batch)
 
-# %%
+print(x)
+
+#%%
+
 sns.set_style("whitegrid", {'axes.grid' : False})
-
 
 tokenizer = model.tokenizer
 
-mask = tokenizer.constraint_mask(
-    scale="C major",
-    instruments = ["Piano","Guitar","Drums","Bass"],
-    min_notes = 20,
-    max_notes = 280,
-    min_notes_per_instrument=10,
-    tempos=["128"]
-)
+# mask = tokenizer.constraint_mask(
+#     # scale="C major",
+#     instruments = ["Drums","Bass","Guitar"],
+#     min_notes = 40,
+#     max_notes = 280,
+#     min_notes_per_instrument=5,
+#     # tempos=["158"]
+# )
+
+mask = model.tokenizer.infilling_mask(
+    x=x,
+    beat_range=(4, 12),
+    min_notes=10,
+    max_notes=250,
+    # min_notes=x_sm.note_num(),
+    # max_notes=x_sm.note_num()
+).float()
 
 
+# import symusic as sm
+# from util import preview, piano_roll, preview_sm
+# import torch
 
-# mask = model.tokenizer.infilling_mask(
+# x_sm = sm.Score("../data/bob.mid")
+
+# def crop_sm(x_sm, start_beat, end_beat):
+#     tpq = x_sm.tpq
+#     start = start_beat * tpq
+#     end = end_beat * tpq
+#     x_sm = x_sm.copy()
+#     for track in x_sm.tracks:
+#         track.notes = [note for note in track.notes if note.start >= start and note.end <= end]
+#     return x_sm
+
+# x_sm = crop_sm(x_sm, 0, 16)
+
+# x = torch.tensor(model.tokenizer.encode(x_sm,tag="traditional"))
+
+# preview_sm(x_sm)
+
+
+# mask = model.tokenizer.replace_instruments_mask(
 #     x=x,
-#     beat_range=(4, 12),
-#     min_notes=10,
-#     max_notes=275,
-#     # min_notes=x_sm.note_num(),
-#     # max_notes=x_sm.note_num()
-# ).float()
+#     instruments_to_remove=[],
+#     instruments_to_add=["Drums","Bass","Guitar"],
+#     min_notes_per_instrument=10,
+# )
 
 mask = mask * model.format_mask
-prior = (mask / mask.sum(-1, keepdim=True))
-
-
+prior = (mask / mask.sum(-1, keepdim=True)).float()
 
 BATCH_SIZE = 2
-N_STEPS = 300
+N_STEPS = 500
 TEMPERATURE=1.0
-y = model.sample(prior,BATCH_SIZE,N_STEPS, temperature=TEMPERATURE ,device=device,argmax=True, plot_interval=-1)
+y = model.sample(prior,BATCH_SIZE,N_STEPS, temperature=TEMPERATURE ,device=device,argmax=True, plot_interval=10)
 
 import matplotlib.pyplot as plt
 import torch
@@ -180,13 +210,9 @@ y1h = torch.nn.functional.one_hot(y, num_classes=len(model.tokenizer.vocab)).flo
 
 # no grid theme
 
-
 plt.imshow(y1h[0].cpu().numpy().T, aspect="auto",interpolation="none")
 plt.show()
 
-
-
-from util import preview, piano_roll, preview_sm
 
 # plot piano rolls,
 # use a 16:9 aspect ratio for each plot
@@ -197,18 +223,13 @@ for i in range(BATCH_SIZE):
     # print number of notes
     print(f"Number of notes: {y_sm.note_num()}")
 
-    pr = piano_roll(y_sm, tpq=4)
-    axs[i].imshow(pr, aspect="auto",interpolation="none")
+    # pr = piano_roll(y_sm, tpq=4)
+    # axs[i].imshow(pr, aspect="auto",interpolation="none")
 plt.show()
-
-
 
 # play audio of last 
 print(f"Number of notes: {y_sm.note_num()}")
 preview_sm(y_sm)
     
-
-# %%
-
 
 # %%

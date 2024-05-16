@@ -8,15 +8,14 @@ from util import preview_sm
 from matplotlib import pyplot as plt
 device = 'cuda:0'
 
-# ckpt = "../checkpoints/light-bee-20/last.ckpt"
-# # ckpt = "../checkpoints/eager-vortex-26/last.ckpt"
-# # ckpt = "../checkpoints/hardy-bush-25/last.ckpt"
-# model = SimpleFlowModel.load_from_checkpoint(
-#     ckpt, map_location="cpu"
-# ).to(device)
+ckpt = "../checkpoints/light-bee-20/last.ckpt"
+# ckpt = "../checkpoints/eager-vortex-26/last.ckpt"
+# ckpt = "../checkpoints/hardy-bush-25/last.ckpt"
+model = SimpleFlowModel.load_from_checkpoint(
+    ckpt, map_location="cpu"
+).to(device)
 
 
-#%%
 
 ckpt = "../checkpoints/valiant-durian-29/last.ckpt"
 # ckpt = "../checkpoints/eager-vortex-26/last.ckpt"
@@ -76,7 +75,7 @@ prior = mask / mask.sum(dim=-1, keepdim=True)[None,:]
 plt.imshow(prior[0].T, aspect="auto", cmap="magma")
 plt.show()
 
-y = model.sample(prior=prior, n_steps=500, temperature=1.0)
+y = model.sample(prior=None, n_steps=50, temperature=0.5)
 
 y_sm = model.tokenizer.decode(y[0].cpu().numpy())
 

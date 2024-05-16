@@ -16,7 +16,7 @@ import einops
 from tqdm import tqdm
 from util import top_k_top_p_filtering
 from flow_utils import GaussianFourierProjection
-
+import math
 
 class BFNModel(pl.LightningModule):
     def __init__(
@@ -26,9 +26,11 @@ class BFNModel(pl.LightningModule):
         feed_forward_size,
         n_layers,
         vocab,
-        max_seq_len,
         learning_rate,
-        tokenizer_config,
+        tokenizer_config,  
+        warmup_steps=1_000,
+        annealing_steps=200_000,
+        min_lr_ratio=0.1,
         one_hot_input=False,
         normalize_by_masking_ratio=False,
         learning_rate_gamma=0.9,
@@ -61,7 +63,6 @@ class BFNModel(pl.LightningModule):
         self.decoder_output_layer = nn.Linear(hidden_size, vocab_size)
         self.n_attributes = len(self.tokenizer.note_attribute_order)
         self.n_events = self.tokenizer.config["max_notes"]
-        self.learning_rate_gamma = learning_rate_gamma
 
         self.t_embedding = torch.nn.Linear(1, hidden_size)
 
@@ -70,6 +71,13 @@ class BFNModel(pl.LightningModule):
         self.vocab_theta = vocab_theta
 
         self.time_embedder = nn.Sequential(GaussianFourierProjection(embedding_dim= hidden_size),nn.Linear(hidden_size, hidden_size))
+
+        self.warmup_steps = warmup_steps
+        self.annealing_steps = annealing_steps
+        self.min_lr_ratio = min_lr_ratio
+        self.learning_rate = learning_rate
+        self.learning_rate_gamma = learning_rate_gamma
+
 
     def forward(self, theta, t):
         theta = theta.clone()
@@ -137,13 +145,17 @@ class BFNModel(pl.LightningModule):
         for beta_idx, beta in enumerate(betas):
             for i in range(T):
                 theta = self.step(batch,0, tmp_beta1=beta,tmp_t=t[i], preview_input_dist=True)
+
+                # multiply with format mask
+                theta = theta * self.format_mask[None, ...].to(theta.device)
+
+                # renormalize
+                theta = theta / theta.sum(dim=-1, keepdim=True)
+                
                 # calculate entropy
                 entropies[i,beta_idx] = -torch.sum(theta * torch.log(theta + 1e-12),dim=-1).mean()
 
-                # plot
-                #plt.plot(theta[0,:self.n_attributes].cpu().detach().numpy().T)
-                #plt.show()
-                # plot
+
                 # no axis labels
                 axs[i,beta_idx].axis("off")
                 axs[i,beta_idx].plot(theta[0,:self.n_attributes].cpu().detach().numpy().T)
@@ -292,16 +304,16 @@ class BFNModel(pl.LightningModule):
             )
 
             k_probs = self.discrete_output_distribution(theta, t, temperature=temperature)  # (B, D, K)
-            if plot_interval > 0 and i % plot_interval == 0:
-                # plt.imshow(k_probs[0].cpu().detach().numpy().T, aspect="auto", interpolation="none")
-                # plt.show()
-                # create subplot for each attribute
-                fig, axs = plt.subplots(self.n_attributes, 1, figsize=(12, 8))
-                for j in range(self.n_attributes):
-                    # axs[j].plot(k_probs[0, j].cpu().detach().numpy().T)
-                    # bar plot
-                    axs[j].bar(range(K), k_probs[0, j].cpu().detach().numpy().T)
-                plt.show()
+            # if plot_interval > 0 and i % plot_interval == 0:
+            #     # plt.imshow(k_probs[0].cpu().detach().numpy().T, aspect="auto", interpolation="none")
+            #     # plt.show()
+            #     # create subplot for each attribute
+            #     fig, axs = plt.subplots(self.n_attributes, 1, figsize=(12, 8))
+            #     for j in range(self.n_attributes):
+            #         # axs[j].plot(k_probs[0, j].cpu().detach().numpy().T)
+            #         # bar plot
+            #         axs[j].bar(range(K), k_probs[0, j].cpu().detach().numpy().T)
+            #     plt.show()
 
             k = torch.distributions.Categorical(probs=k_probs).sample()  # (B, D)
             # assert k.shape == k_probs
@@ -333,14 +345,13 @@ class BFNModel(pl.LightningModule):
 
         k_probs_final = self.discrete_output_distribution(theta, torch.ones_like(t))
 
-        if argmax:
-            k_final = k_probs_final.argmax(dim=-1)
-        else:
-            k_final = torch.distributions.Categorical(probs=k_probs_final).sample()
+        k_final = k_probs_final.argmax(dim=-1)
 
         if plot_interval > 0:
             # plot entropies
             plt.plot(entropies)
+            # add horizontal line at 0
+            plt.axhline(0, color="black", linestyle="--")
             plt.show()
 
             # plot first event probs
@@ -402,13 +413,38 @@ class BFNModel(pl.LightningModule):
         )
         return loss
 
+    # def configure_optimizers(self):
+    #     # learning rate decay
+    #     optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
+    #     scheduler = torch.optim.lr_scheduler.StepLR(
+    #         optimizer, gamma=self.learning_rate_gamma, step_size=1
+    #     )
+    #     return [optimizer], [scheduler]
+    
     def configure_optimizers(self):
-        # learning rate decay
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
-        scheduler = torch.optim.lr_scheduler.StepLR(
-            optimizer, gamma=self.learning_rate_gamma, step_size=1
-        )
-        return [optimizer], [scheduler]
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.hparams.learning_rate)
+
+        # get number of batches per epoch
+
+        def warmup_cosine_lambda(current_step):
+            # Assumes 1 epoch = len(train_dataloader) steps
+            num_warmup_steps = self.warmup_steps
+            num_annealing_steps = self.annealing_steps
+            min_lr_ratio = self.min_lr_ratio
+
+            if current_step < num_warmup_steps:
+                return float(current_step) / float(max(1, num_warmup_steps))
+            else:
+                progress = (current_step - num_warmup_steps) / num_annealing_steps
+                return max(min_lr_ratio, 0.5 * (1.0 + math.cos(math.pi * progress)))
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(
+            optimizer, 
+            lr_lambda=lambda step: warmup_cosine_lambda(
+                step
+        ))
+
+        return [ optimizer ], [{"scheduler": scheduler,"interval":"step"}]
 
 
 if __name__ == "__main__":
@@ -448,15 +484,17 @@ if __name__ == "__main__":
         hidden_size=512,
         n_heads=4,
         feed_forward_size=2 * 512,
-        n_layers=6,
+        n_layers=8,
         vocab=tokenizer.vocab,
-        max_seq_len=tokenizer.total_len,
         learning_rate=1e-4,
         tokenizer_config=tokenizer_config,
         learning_rate_gamma=0.99,
         norm_first=True,
-        beta1=0.065,
+        beta1=0.1,
         vocab_theta=False,
+        warmup_steps=1_000,
+        annealing_steps=200_000,
+        min_lr_ratio=0.1,
     )
 
     format_mask = torch.Tensor(tokenizer.get_format_mask())
@@ -519,7 +557,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[6],
+        devices=[2],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[

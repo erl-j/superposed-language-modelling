@@ -4,7 +4,7 @@ from simplex_diffusion import SimplexDiffusionModel
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
-from util import preview_sm,piano_roll, load_merged_models, clear_overlap_notes, sm_reduce_dynamics
+from util import preview_sm,piano_roll, load_merged_models, sm_reduce_dynamics, sm_fix_overlap_notes
 import matplotlib.pyplot as plt
 import seaborn as sns
 from data import MidiDataset
@@ -15,8 +15,14 @@ import os
 
 #%%
 
-#model = SimplexDiffusionModel.load_from_checkpoint("../checkpoints/dark-sky-67/last.ckpt").to(device)
-model = SimplexDiffusionModel.load_from_checkpoint("../checkpoints/flowing-paper-64/last.ckpt").to(device)
+#model = SimplexDiffusionModel.load_from_checkpoint("../checkpoints/dark-sky-67/last.ckpt")
+#model = SimplexDiffusionModel.load_from_checkpoint("../checkpoints/flowing-paper-64/last.ckpt")
+
+#print(model.device)
+
+#model.to(device)
+
+#%%
 #model = load_merged_models("../checkpoints/flowing-paper-64/**/*.ckpt",SimplexDiffusionModel).to(device)
 
 #model = SimplexDiffusionModel.load_from_checkpoint("../checkpoints/daily-armadillo-82/last.ckpt").to(device)
@@ -67,50 +73,78 @@ sns.set_style("whitegrid", {'axes.grid' : False})
 
 
 
+import symusic as sm
+from util import preview, piano_roll, preview_sm
+import torch
 
-mask = model.tokenizer.constraint_mask(
-    # tags=["funk"],
-    # tags=["chords"],
-    # scale="C major",
-    # tags=["alternative-indie"],
+x_sm = sm.Score("../data/bob.mid")
 
-    instruments=["Piano"],
-    tempos=["126"],
-    min_notes = 40,
-    max_notes = 150,
-    # max_notes = 290,
-    # min_notes_per_instrument=10,
-)
+def crop_sm(x_sm, start_beat, end_beat):
+    tpq = x_sm.tpq
+    start = start_beat * tpq
+    end = end_beat * tpq
+    x_sm = x_sm.copy()
+    for track in x_sm.tracks:
+        track.notes = [note for note in track.notes if note.start >= start and note.end <= end]
+    return x_sm
 
+x_sm = crop_sm(x_sm, 0, 16)
 
-mask = model.tokenizer.infilling_mask(
+x = torch.tensor(model.tokenizer.encode(x_sm,tag="rock"))
+
+preview_sm(x_sm)
+
+mask = model.tokenizer.replace_instruments_mask(
     x=x,
-    beat_range=(4, 12),
-    min_notes=0,
-    max_notes=290,
+    instruments_to_remove=[],
+    instruments_to_add=["Pipe","Strings"],
+    min_notes_per_instrument=10,
 )
 
 
-beat_range=(0,16)
-#pitch_range = [f"pitch:{i}" for i in range(50,108) ]+["pitch:-"]
-pitch_range = [f"pitch:{i}" for i in range(0,50) ]+["pitch:-"]
-#make infilling mask
-mask = (
-    model.tokenizer.infilling_mask(
-        x,
-        beat_range,
-        min_notes=x_sm.note_num(),
-        max_notes=x_sm.note_num(),
-        pitches=pitch_range,
-        mode ="harmonic"
-    )[None, ...]    
-    .to(model.device)
-    .float()
-) 
+# mask = model.tokenizer.constraint_mask(
+#     # tags=["funk"],
+#     # tags=["chords"],
+#     # scale="C major",
+#     # tags=["alternative-indie"],
+
+#     instruments=["Piano"],
+#     tempos=["126"],
+#     min_notes = 40,
+#     max_notes = 150,
+#     # max_notes = 290,
+#     # min_notes_per_instrument=10,
+# )
+
+
+# mask = model.tokenizer.infilling_mask(
+#     x=x,
+#     beat_range=(4, 12),
+#     min_notes=0,
+#     max_notes=290,
+# )
+
+
+# beat_range=(0,16)
+# #pitch_range = [f"pitch:{i}" for i in range(50,108) ]+["pitch:-"]
+# pitch_range = [f"pitch:{i}" for i in range(0,50) ]+["pitch:-"]
+# #make infilling mask
+# mask = (
+#     model.tokenizer.infilling_mask(
+#         x,
+#         beat_range,
+#         min_notes=x_sm.note_num(),
+#         max_notes=x_sm.note_num(),
+#         pitches=pitch_range,
+#         mode ="harmonic"
+#     )[None, ...]    
+#     .to(model.device)
+#     .float()
+# ) 
 
 # chromatic percussion is fun!
 #mask = model.tokenizer.replace_instruments(x,["Piano","Guitar"],["Chromatic Percussion"],20,275)[None, ...].to(model.device).float()
-mask = model.tokenizer.replace_instruments(x,["Piano","Guitar"],["Piano","Guitar"],20,275)[None, ...].to(model.device).float()
+# mask = model.tokenizer.replace_instruments(x,["Piano","Guitar"],["Piano","Guitar"],20,275)[None, ...].to(model.device).float()
 
 # mask = torch.nn.functional.one_hot(x, num_classes=len(model.tokenizer.vocab)).float()
 
@@ -145,7 +179,7 @@ torch.manual_seed(1)
 # infilling top-p 0.5
 BATCH_SIZE = 3
 N_STEPS = 50
-TOP_P = 0.75
+TOP_P = 1.0
 PRIOR_STRENGTH = 1.0
 REFINEMENT_STEPS = 0
 ENFORCE_MULTIPLY = True
@@ -207,7 +241,7 @@ y = model.sample2(prior,
 for i in range(BATCH_SIZE):
     y_sm = model.tokenizer.decode(y[i])
     print(f"Number of notes: {y_sm.note_num()}")
-    y_sm = clear_overlap_notes(y_sm)
+    y_sm = sm_fix_overlap_notes(y_sm)
     print(f"Number of notes after clearing overlap: {y_sm.note_num()}")
     preview_sm(y_sm)
     # export to midi
