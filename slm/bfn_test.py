@@ -1,10 +1,10 @@
 #%%
-device = "cuda:1"
+device = "cuda:5"
 from bfn import BFNModel
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
-
+from util import preview_sm
 
 # checkpoint = "../checkpoints/valiant-butterfly-54/last.ckpt"
 # checkpoint ="../checkpoints/still-universe-56/last.ckpt"
@@ -14,20 +14,28 @@ import numpy as np
 # checkpoint = "../checkpoints/golden-capybara-67/last.ckpt"
 # checkpoint = "../checkpoints/avid-durian-68/last.ckpt"
 # checkpoint = "../checkpoints/ethereal-star-75/last.ckpt"
-# checkpoint = "../checkpoints/crisp-surf-78/last.ckpt"
-# checkpoint = "../checkpoints/polished-pine-82/last.ckpt"
-checkpoint = "../checkpoints/fallen-resonance-102/last.ckpt"
+checkpoint = "../checkpoints/crisp-surf-78/last.ckpt"
+checkpoint = "../checkpoints/polished-pine-82/last.ckpt"
+#checkpoint = "../checkpoints/fallen-resonance-102/last.ckpt"
+# checkpoint = "../checkpoints/fallen-resonance-102/last.ckpt"
+# checkpoint = "../checkpoints/major-wood-115/last.ckpt"
+# checkpoint = "../checkpoints/azure-surf-114/last.ckpt"
+checkpoint = "../checkpoints/deft-puddle-113/last.ckpt"
+# checkpoint = "../checkpoints/stellar-breeze-112/last.ckpt"
+# checkpoint = "../checkpoints/worthy-planet-105/last.ckpt"
+# checkpoint = "../checkpoints/feasible-violet-110/last.ckpt"
+checkpoint = "../checkpoints/polished-dream-124/last.ckpt"
+# checkpoint = "../checkpoints/skilled-wave-136/last.ckpt"
 
+checkpoint = "../checkpoints/light-deluge-138/last.ckpt"
+
+# checkpoint = "../checkpoints/devout-cherry-140/last.ckpt"
 device="cuda:0"
 
 model = BFNModel.load_from_checkpoint(checkpoint, map_location="cpu").to(device)
 
 # print model
 print(model)
-
-#%%
-# encode the input
-
 
 
 #%%
@@ -77,7 +85,7 @@ sns.set(font_scale=0.5)
 sns.heatmap(projection_similarity, cmap=cmap, xticklabels=vocab, yticklabels=vocab, mask = np.eye(len(vocab)),vmax=1,vmin=-1)
 plt.show()
 
-#%%
+ #%%
 
 # per attribute embedding_similarity
 for attr in model.tokenizer.note_attribute_order:
@@ -115,10 +123,6 @@ OUTPUT_DIR = ROOT_DIR + "artefacts/output"
 
 dataset = "mmd_loops"
 
-ROOT_DIR = "../"
-TMP_DIR = ROOT_DIR + "artefacts/tmp"
-OUTPUT_DIR = ROOT_DIR + "artefacts/output"
-
 MODEL_BARS = 4
 # Load the dataset
 ds = MidiDataset(
@@ -140,31 +144,29 @@ preview_sm(x_sm)
 
 #%%
 
-print(x)
-
-#%%
-
 sns.set_style("whitegrid", {'axes.grid' : False})
 
 tokenizer = model.tokenizer
 
-# mask = tokenizer.constraint_mask(
-#     # scale="C major",
-#     instruments = ["Drums","Bass","Guitar"],
-#     min_notes = 40,
-#     max_notes = 280,
-#     min_notes_per_instrument=5,
-#     # tempos=["158"]
-# )
+mask = tokenizer.constraint_mask(
+    # scale="C pentatonic",
+    tags = ["metal"],
+    instruments = ["Drums","Bass","Guitar"],
+    min_notes = 1,
+    max_notes = 299,
+    min_notes_per_instrument=20,
+    tempos=["138"]
+)
 
-mask = model.tokenizer.infilling_mask(
-    x=x,
-    beat_range=(4, 12),
-    min_notes=10,
-    max_notes=250,
-    # min_notes=x_sm.note_num(),
-    # max_notes=x_sm.note_num()
-).float()
+# mask = model.tokenizer.infilling_mask(
+#     x=x,
+#     # beat_range=(4, 15),
+#     pitches=[f"pitch:{i}" for i in range(50, 72)],
+#     # min_notes=10,
+#     # max_notes=250,
+#     min_notes=x_sm.note_num(),
+#     max_notes=x_sm.note_num()
+# ).float()
 
 
 # import symusic as sm
@@ -200,8 +202,8 @@ mask = mask * model.format_mask
 prior = (mask / mask.sum(-1, keepdim=True)).float()
 
 BATCH_SIZE = 2
-N_STEPS = 500
-TEMPERATURE=1.0
+N_STEPS = 400
+TEMPERATURE = 0.7
 y = model.sample(prior,BATCH_SIZE,N_STEPS, temperature=TEMPERATURE ,device=device,argmax=True, plot_interval=10)
 
 import matplotlib.pyplot as plt

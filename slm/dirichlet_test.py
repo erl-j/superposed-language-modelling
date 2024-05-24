@@ -62,8 +62,8 @@ prior = mask / mask.sum(dim=-1, keepdim=True)[None,:]
 
 
 sampling_args = copy.deepcopy(model.flow_args)
-sampling_args.num_integration_steps = 200
-sampling_args.flow_temp = 0.99
+sampling_args.num_integration_steps = 100
+sampling_args.flow_temp = 0.5
 sampling_args.alpha_spacing = 0.0002
 sampling_args.alpha_max = 6.0
 # sampling_args.alpha_max = 30.0

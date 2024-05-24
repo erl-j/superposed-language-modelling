@@ -17,6 +17,7 @@ from tqdm import tqdm
 from util import top_k_top_p_filtering
 from flow_utils import GaussianFourierProjection
 import math
+from simplex_diffusion import SimplexDiffusionModel
 
 class BFNModel(pl.LightningModule):
     def __init__(
@@ -32,11 +33,15 @@ class BFNModel(pl.LightningModule):
         annealing_steps=200_000,
         min_lr_ratio=0.1,
         one_hot_input=False,
+        tied_embeddings=False,
         normalize_by_masking_ratio=False,
         learning_rate_gamma=0.9,
         norm_first=False,
         beta1=1.0,
         vocab_theta=True,
+        fourier_t_embedding=False,
+        output_bias=True,
+        use_adamw=True,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -47,7 +52,6 @@ class BFNModel(pl.LightningModule):
         self.tokenizer = MergedTokenizer(tokenizer_config)
         self.format_mask = torch.Tensor(self.tokenizer.get_format_mask())
         self.vocab = vocab
-        self.embedding_layer = nn.Linear(vocab_size, hidden_size, bias=False)
         self.one_hot_input = one_hot_input
         self.transformer = torch.nn.TransformerEncoder(
             encoder_layer=torch.nn.TransformerEncoderLayer(
@@ -60,31 +64,43 @@ class BFNModel(pl.LightningModule):
             ),
             num_layers=n_layers,
         )
-        self.decoder_output_layer = nn.Linear(hidden_size, vocab_size)
+
+        self.embedding_layer = nn.Linear(vocab_size, hidden_size, bias=False)
+        self.decoder_output_layer = nn.Linear(hidden_size, vocab_size, bias=output_bias)
+
+        # doesnt work
+        self.tied_embeddings = tied_embeddings
+        if tied_embeddings:
+            raise NotImplementedError("Tied embeddings not implemented")
+            # self.embedding_layer.weight = self.decoder_output_layer.weight.T
+        
         self.n_attributes = len(self.tokenizer.note_attribute_order)
         self.n_events = self.tokenizer.config["max_notes"]
-
-        self.t_embedding = torch.nn.Linear(1, hidden_size)
-
         self.beta1 = beta1
-
         self.vocab_theta = vocab_theta
-
-        self.time_embedder = nn.Sequential(GaussianFourierProjection(embedding_dim= hidden_size),nn.Linear(hidden_size, hidden_size))
-
         self.warmup_steps = warmup_steps
         self.annealing_steps = annealing_steps
         self.min_lr_ratio = min_lr_ratio
         self.learning_rate = learning_rate
         self.learning_rate_gamma = learning_rate_gamma
 
-
+        self.fourier_t_embedding = fourier_t_embedding
+        if fourier_t_embedding:
+            self.time_embedder = nn.Sequential(GaussianFourierProjection(embedding_dim=hidden_size),nn.Linear(hidden_size, hidden_size))
+        else:
+            self.time_embedder = torch.nn.Linear(1, hidden_size)
+        
     def forward(self, theta, t):
         theta = theta.clone()
         t = t.clone()
-        t_z = self.time_embedder(t)
+
+        if self.fourier_t_embedding:
+            t_z = self.time_embedder(t)
+        else:
+            t_z = self.time_embedder(t[:,None])
+
         format_mask = self.format_mask[None, ...].to(theta.device)
-        theta = theta * format_mask
+        theta[format_mask.expand_as(theta)<0.5] = 0
         # renormalize
         theta = theta / theta.sum(dim=-1, keepdim=True)
         x = theta
@@ -125,7 +141,7 @@ class BFNModel(pl.LightningModule):
         return loss
     
     def preview_beta(self,batch):
-        betas = [0.05,0.065,0.075,0.1,0.2,0.5]
+        betas = [0.03,0.04,0.05,0.065,0.075,0.1,0.2,0.5]
         T = 10
 
         # linspace from 0 to 1 and includes 0 and 1
@@ -134,17 +150,12 @@ class BFNModel(pl.LightningModule):
         assert t[-1] == 1
 
         # append 1
-        
-
         BETAS = len(betas)
-
-        # make subplot for each t, each beta
-        fig, axs = plt.subplots(T,BETAS,figsize=(12,8))
         
-        entropies = torch.zeros((T,BETAS))
+        entropies = torch.zeros((T, BETAS, self.n_attributes))
         for beta_idx, beta in enumerate(betas):
             for i in range(T):
-                theta = self.step(batch,0, tmp_beta1=beta,tmp_t=t[i], preview_input_dist=True)
+                theta = self.step(batch.clone(),0, tmp_beta1=beta,tmp_t=t[i], preview_input_dist=True)
 
                 # multiply with format mask
                 theta = theta * self.format_mask[None, ...].to(theta.device)
@@ -152,66 +163,21 @@ class BFNModel(pl.LightningModule):
                 # renormalize
                 theta = theta / theta.sum(dim=-1, keepdim=True)
                 
+                x1h = torch.nn.functional.one_hot(batch, num_classes=len(self.vocab)).float()
                 # calculate entropy
-                entropies[i,beta_idx] = -torch.sum(theta * torch.log(theta + 1e-12),dim=-1).mean()
+                entropy = -torch.sum(x1h * torch.log(theta+1e-12),dim=-1)
 
+                entropy = einops.rearrange(entropy, "b (n a) -> b n a", a=self.n_attributes).mean(dim=-2).mean(0)
 
-                # no axis labels
-                axs[i,beta_idx].axis("off")
-                axs[i,beta_idx].plot(theta[0,:self.n_attributes].cpu().detach().numpy().T)
+                entropies[i, beta_idx,:] = entropy 
 
-          # label rows and columns
-        for i in range(T):
-            axs[i,0].set_ylabel(f"t={t[i]:.2f}")
-        for i in range(BETAS):
-            axs[0,i].set_title(f"beta={betas[i]}")
-        plt.title("All attributes")
-        plt.show()
-        print("done")
-
-              
-        # plot entropies
-        fig, ax = plt.subplots(1,1,figsize=(12,8))
-        for i in range(BETAS):
-            ax.plot(entropies[:,i].cpu().detach().numpy(),label=f"beta={betas[i]}")
-        # labels
-        plt.title("Entropy (all attributes)")
-        plt.legend()
-        plt.show()
-
-
-        for attr_idx, attr_name in enumerate(self.tokenizer.note_attribute_order):
-            attr_entropies = torch.zeros((T,BETAS))
-            # make subplot for each t, each beta
-            fig, axs = plt.subplots(T,BETAS,figsize=(12,8))
-
-            for beta_idx, beta in enumerate(betas):
-                for i in range(T):
-                    theta = self.step(batch,0, tmp_beta1=beta,tmp_t=t[i], preview_input_dist=True)
-                    # only consider attribute
-                    attr_theta = theta[0,attr_idx::self.n_attributes]
-                    # calculate entropy
-                    attr_entropies[i,beta_idx] = -torch.sum(attr_theta * torch.log(attr_theta + 1e-12),dim=-1).mean()
-
-                    axs[i,beta_idx].axis("off")
-                    axs[i,beta_idx].plot(theta[0,attr_idx].cpu().detach().numpy().T)
-            for i in range(T):
-                axs[i,0].set_ylabel(f"t={t[i]:.2f}")
-            for i in range(BETAS):
-                axs[0,i].set_title(f"beta={betas[i]}")
-            plt.title(f"Attribute {attr_name}")
-            plt.show()
-            print("done")
-
-            # plot entropies
-            fig, ax = plt.subplots(1,1,figsize=(12,8))
-            for i in range(BETAS):
-                ax.plot(attr_entropies[:,i].cpu().detach().numpy(),label=f"beta={betas[i]}")
-            # labels
-            plt.title(f"Entropy of attribute {attr_name}")
+        # for each beta, plot entropy over t for all attributes
+        for beta_idx, beta in enumerate(betas):
+            for i in range(self.n_attributes):
+                plt.plot(t, entropies[:,beta_idx,i].detach().cpu().numpy(), label=f"{self.tokenizer.note_attribute_order[i]}")
+            plt.title(f"Beta={beta}")
             plt.legend()
             plt.show()
-
 
     def step(self, batch, batch_idx, tmp_beta1=None, preview_input_dist=False, tmp_t=None):
         if self.one_hot_input:
@@ -296,8 +262,8 @@ class BFNModel(pl.LightningModule):
 
         first_event_thetas.append(theta[0, : self.n_attributes, :].detach().cpu())
 
-
-        for i in tqdm(range(1, nb_steps + 1)):
+        k = torch.zeros((batch_size, self.n_events * self.n_attributes), device=device, dtype=torch.long)
+        for i in tqdm(range(1, nb_steps + 2)):
             t = (i - 1) / nb_steps
             t = t * torch.ones(
                 (theta.shape[0], 1, 1), device=theta.device, dtype=theta.dtype
@@ -315,7 +281,19 @@ class BFNModel(pl.LightningModule):
             #         axs[j].bar(range(K), k_probs[0, j].cpu().detach().numpy().T)
             #     plt.show()
 
-            k = torch.distributions.Categorical(probs=k_probs).sample()  # (B, D)
+            k_new = torch.distributions.Categorical(probs=k_probs).sample()  # (B, D)
+            k = k_new
+            # if (k_new == k).all():
+            #     print(f"Converged at step {i}")
+            #     k = k_new
+            #     break
+                
+            # else:
+            #     # count differences
+            #     diff = (k_new != k).sum()
+            #     print(f"Step {i}, {diff} differences")
+            #     k = k_new
+            
             # assert k.shape == k_probs
             alpha = self.beta1 * (2 * i - 1) / (nb_steps**2)
 
@@ -329,7 +307,7 @@ class BFNModel(pl.LightningModule):
             theta = F.softmax(y + torch.log(theta + eps_), dim=-1)
 
             if prior is not None:
-                theta = theta * prior
+                theta = theta * prior * self.format_mask[None, ...].to(theta.device)
                 # normalize
                 theta = theta / theta.sum(dim=-1, keepdim=True)
 
@@ -361,7 +339,6 @@ class BFNModel(pl.LightningModule):
 
             first_event_thetas = torch.stack(first_event_thetas, dim=0)
 
-
             for i in range(self.n_attributes):
                 # plot first event thetas
                 plt.imshow(first_event_thetas[:,i].T, aspect="auto", interpolation="none")
@@ -371,9 +348,6 @@ class BFNModel(pl.LightningModule):
                 plt.imshow(first_event_probs[:,i].T, aspect="auto", interpolation="none")
                 plt.title(f"Probs for attribute {self.tokenizer.note_attribute_order[i]}")
                 plt.show()
-
-
-
         return k_final
 
     def training_step(self, batch, batch_idx):
@@ -422,7 +396,10 @@ class BFNModel(pl.LightningModule):
     #     return [optimizer], [scheduler]
     
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.hparams.learning_rate)
+        if self.hparams.use_adamw:
+            optimizer = torch.optim.AdamW(self.parameters(), lr=self.hparams.learning_rate)
+        else:
+            optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
 
         # get number of batches per epoch
 
@@ -434,9 +411,11 @@ class BFNModel(pl.LightningModule):
 
             if current_step < num_warmup_steps:
                 return float(current_step) / float(max(1, num_warmup_steps))
-            else:
+            elif current_step < num_warmup_steps + num_annealing_steps:
                 progress = (current_step - num_warmup_steps) / num_annealing_steps
                 return max(min_lr_ratio, 0.5 * (1.0 + math.cos(math.pi * progress)))
+            else:
+                return min_lr_ratio
 
         scheduler = torch.optim.lr_scheduler.LambdaLR(
             optimizer, 
@@ -445,6 +424,21 @@ class BFNModel(pl.LightningModule):
         ))
 
         return [ optimizer ], [{"scheduler": scheduler,"interval":"step"}]
+    
+    def initialize_from_different_model(self, src_model):
+        for token in self.vocab:
+            if token not in src_model.vocab:
+                print(f"Token {token} not found in source model")
+                continue
+            else:
+                print(f"Transplanting token {token}")
+                src_idx = src_model.vocab.index(token)
+                tgt_idx = self.vocab.index(token)
+                self.embedding_layer.weight.data[:,tgt_idx] = src_model.embedding_layer.weight.data[:,src_idx]
+                self.decoder_output_layer.weight.data[tgt_idx,:] = src_model.decoder_output_layer.weight.data[src_idx,:]
+        if self.tied_embeddings:
+            raise NotImplementedError("Tied embeddings not implemented")
+            # self.embedding_layer.weight = self.decoder_output_layer.weight.T
 
 
 if __name__ == "__main__":
@@ -480,22 +474,47 @@ if __name__ == "__main__":
     tokenizer = MergedTokenizer(tokenizer_config)
 
 
-    model = BFNModel(
-        hidden_size=512,
-        n_heads=4,
-        feed_forward_size=2 * 512,
-        n_layers=8,
-        vocab=tokenizer.vocab,
-        learning_rate=1e-4,
-        tokenizer_config=tokenizer_config,
-        learning_rate_gamma=0.99,
-        norm_first=True,
-        beta1=0.1,
-        vocab_theta=False,
-        warmup_steps=1_000,
-        annealing_steps=200_000,
-        min_lr_ratio=0.1,
+    # model = BFNModel(
+    #     hidden_size=768,
+    #     n_heads=12,
+    #     feed_forward_size=2 * 768,
+    #     n_layers=12,
+    #     vocab=tokenizer.vocab,
+    #     learning_rate=5e-5,
+    #     tokenizer_config=tokenizer_config,
+    #     learning_rate_gamma=0.99,
+    #     norm_first=True,
+    #     beta1=0.1,
+    #     vocab_theta=False,
+    #     warmup_steps=1_000,
+    #     annealing_steps=200_000,
+    #     min_lr_ratio=0.1,
+    #     tied_embeddings=False,
+    #     fourier_t_embedding=True,
+    #     output_bias=False,
+    #     use_adamw=False,
+    # )
+
+    model = BFNModel.load_from_checkpoint(
+                checkpoint_path = "./checkpoints/polished-dream-124/last.ckpt",
+                map_location="cpu",
+                learning_rate=2e-5,
+                annaling_steps=200_000*100,
+                warmup_steps=5,
+                min_lr_ratio=0.1,
     )
+
+
+    # set global step to annealing steps
+
+    # set global step manually
+
+    # src_model = SimplexDiffusionModel.load_from_checkpoint(
+    #             checkpoint_path = "./checkpoints/flowing-paper-64/last.ckpt",
+    #             map_location="cpu"
+    # )
+    # model.initialize_from_different_model(src_model)
+
 
     format_mask = torch.Tensor(tokenizer.get_format_mask())
     
@@ -557,7 +576,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[2],
+        devices=[0],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[
@@ -573,7 +592,7 @@ if __name__ == "__main__":
             ),
         ],
         logger=wandb_logger,
-        gradient_clip_val=1.0,
+        # gradient_clip_val=1.0,
     )
 
     trainer.fit(
@@ -581,4 +600,4 @@ if __name__ == "__main__":
                 trn_dl, 
                 val_dl,
     )
-                # ckpt_path="checkpoints/upbeat-dawn-53/epoch=14-step=24330-val/loss_epoch=0.00273.ckpt")
+                
