@@ -27,7 +27,7 @@ checkpoint = "../checkpoints/deft-puddle-113/last.ckpt"
 checkpoint = "../checkpoints/polished-dream-124/last.ckpt"
 # checkpoint = "../checkpoints/skilled-wave-136/last.ckpt"
 
-checkpoint = "../checkpoints/light-deluge-138/last.ckpt"
+# checkpoint = "../checkpoints/light-deluge-138/last.ckpt"
 
 # checkpoint = "../checkpoints/devout-cherry-140/last.ckpt"
 device="cuda:0"
@@ -51,8 +51,6 @@ model.preview_beta(batch)
 embedding = model.embedding_layer.weight.detach().cpu().numpy().T
 projection = model.decoder_output_layer.weight.detach().cpu().numpy()
 
-print(embedding.shape)
-print(projection.shape)
 # get vocab
 vocab = model.tokenizer.vocab
 
@@ -148,25 +146,34 @@ sns.set_style("whitegrid", {'axes.grid' : False})
 
 tokenizer = model.tokenizer
 
-mask = tokenizer.constraint_mask(
-    # scale="C pentatonic",
-    tags = ["metal"],
-    instruments = ["Drums","Bass","Guitar"],
-    min_notes = 1,
-    max_notes = 299,
-    min_notes_per_instrument=20,
-    tempos=["138"]
-)
+# mask = tokenizer.constraint_mask(
+#     # scale="C pentatonic",
+#     tags = ["metal"],
+#     instruments = ["Drums","Bass","Guitar"],
+#     min_notes = 1,
+#     max_notes = 299,
+#     min_notes_per_instrument=20,
+#     tempos=["138"]
+# )
 
 # mask = model.tokenizer.infilling_mask(
 #     x=x,
 #     # beat_range=(4, 15),
-#     pitches=[f"pitch:{i}" for i in range(50, 72)],
+#     pitches=[f"pitch:{i}" for i in range(49, 100)],
 #     # min_notes=10,
 #     # max_notes=250,
 #     min_notes=x_sm.note_num(),
-#     max_notes=x_sm.note_num()
+#     max_notes=x_sm.note_num(),
+#     mode="harmonic"
 # ).float()
+
+
+mask =  model.tokenizer.replace_instruments_mask(
+    x=x,
+    instruments_to_remove=["Bass"],
+    instruments_to_add=["Bass"],
+    min_notes_per_instrument=20,
+)
 
 
 # import symusic as sm
@@ -202,9 +209,10 @@ mask = mask * model.format_mask
 prior = (mask / mask.sum(-1, keepdim=True)).float()
 
 BATCH_SIZE = 2
-N_STEPS = 400
+N_STEPS = 100
 TEMPERATURE = 0.7
-y = model.sample(prior,BATCH_SIZE,N_STEPS, temperature=TEMPERATURE ,device=device,argmax=True, plot_interval=10)
+
+y = model.sample(prior,BATCH_SIZE,N_STEPS, temperature=TEMPERATURE ,device=device,argmax=True, plot_interval=-1)
 
 import matplotlib.pyplot as plt
 import torch

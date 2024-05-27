@@ -283,7 +283,7 @@ if __name__ == "__main__":
         feed_forward_size=2*512,
         n_layers=8,
         vocab=tokenizer.vocab,
-        learning_rate=1e-3,
+        learning_rate=1e-4,
         tokenizer_config=tokenizer_config,
         learning_rate_gamma=0.99,
         norm_first=True,
@@ -354,7 +354,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[1],
+        devices=[4],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[
@@ -377,6 +377,5 @@ if __name__ == "__main__":
                 model,
                 trn_dl, 
                 val_dl,
-                ckpt_path="./checkpoints/honest-tree-11/last.ckpt"
     )
                 

@@ -4,7 +4,7 @@ import numpy as np
 import seaborn as sns
 from data import MidiDataset
 from train import EncoderOnlyModel
-from util import preview
+from util import preview_sm
 import os
 import IPython.display as ipd
 from paper_checkpoints import checkpoints
@@ -33,53 +33,59 @@ model = (
 #     model.mlm_restricted_sampling = True
 #%%
 
-print(model.standard_mlm_forward)
-
-print(model.hparams)
-
 
 #%%
 
-
-
 a = model.format_mask[None, ...].to(model.device)
 c = model.tokenizer.constraint_mask(
-    tags=["classical"],
+    tags=["rock"],
     # tags=["other"],
-    instruments=["Pipe"],
+    instruments=["Drums","Bass","Guitar"],
     # tempos=["138"],
     pitches=["pitch:{i}" for i in range(60, 108)],
-    # scale="G major",
+    # scale="G pentatonic",
+    tempos=["128"],
     min_notes=10,
-    max_notes=30,
-    min_notes_per_instrument=10
+    max_notes=290,
+    min_notes_per_instrument=20
 )[None, ...].to(model.device)
 a = c * a
 
 # Generate a sequence
 y = model.generate(
     a,
-    temperature=0.9,
+    temperature=0.98,
     top_p=1.0,
     top_k=0,
 )[0].argmax(axis=1)
+
+# y = model.generate_gibbs(
+#     a,
+#     temperature=1.0,
+#     steps=300,
+#     top_p=1.0,
+#     top_k=0,
+#     pmax=0.9,
+#     pmin=0.001,
+#     alpha=0.1,
+# )[0].argmax(axis=1)
+
 
 # decode
 y_sm = model.tokenizer.decode(y)
 
 print(f"Number of notes: {y_sm.note_num()}")
 
-preview(y_sm, TMP_DIR, audio=True)
+preview_sm(y_sm)
 
 y_sm.dump_midi(OUTPUT_DIR + "/pitch_set_constraint_c.mid")
 
 #%%
 
-
 MODEL_BARS = 4
 # Load the dataset
 ds = MidiDataset(
-    cache_path=ROOT_DIR+"paper_assets/tst_midi_records_unique_pr.pt",
+    cache_path=ROOT_DIR+"data/mmd_loops/tst_midi_records_unique_pr.pt",
     path_filter_fn=lambda x: f"n_bars={MODEL_BARS}" in x,
     genre_list=model.tokenizer.config["tags"],
     tokenizer=model.tokenizer,
@@ -88,53 +94,23 @@ ds = MidiDataset(
 )
 
 
-RESAMPLE_IDX = 50
+RESAMPLE_IDX = 1400
 
 x = ds[RESAMPLE_IDX]
 x_sm = model.tokenizer.decode(x)
 
-preview(x_sm, TMP_DIR)
+preview_sm(x_sm)
 
 x_sm.dump_midi(OUTPUT_DIR + "/resample_original.mid")
 
 #%%
 
-x_sm = model.tokenizer.decode(x)
-x_tokens = model.tokenizer.indices_to_tokens(x)
-
-pitch_tokens = [token for token in x_tokens if "pitch:" in token]
-# take unique
-pitch_tokens = list(set(pitch_tokens))
-instrument_tokens = [token for token in x_tokens if ("instrument:" in token and ":-" not in token)]
-instruments = [token.split(":")[1] for token in instrument_tokens]
-# take unique
-instruments = list(set(instruments))
-
-tempo_tokens = [token for token in x_tokens if "tempo:" in token]
-tempos = [token.split(":")[1] for token in tempo_tokens if ":-" not in token]
-tempos = list(set(tempos))
-tag_tokens = [token for token in x_tokens if "tag:" in token if ":-" not in token]
-tags = [token.split(":")[1] for token in tag_tokens]
-tags = list(set(tags))
-
-# onset beats
-onset_beat_tokens = [token for token in x_tokens if "onset/beat:" in token if ":-" not in token]
-# get unique
-onset_beat_tokens = list(set(onset_beat_tokens))
-
-n_notes = x_sm.note_num()
-
-mask = model.tokenizer.constraint_mask(
-    pitches = pitch_tokens,
-    instruments = instruments,
-    onset_beats=onset_beat_tokens,
-    tempos = tempos,
-    # tags = tags,
-    min_notes=n_notes,
-    max_notes=n_notes,
-    min_notes_per_instrument=1,
-)[None, ...].to(model.device).float()
-
+mask = model.tokenizer.infilling_mask(
+    x=x,
+    beat_range=(4, 15),
+    min_notes=10,
+    max_notes=250,
+)[None,...].float().to(model.device)
 
 plt.figure(figsize=(10,10))
 plt.imshow(mask[0].cpu().numpy().T, aspect="auto",interpolation="nearest")
@@ -156,16 +132,18 @@ y_sm = model.tokenizer.decode(y)
 
 print(f"Number of notes: {y_sm.note_num()}")
 
-preview(y_sm, TMP_DIR)
+preview_sm(y_sm)
+
+#%%
+from util import preview_sm
+
+preview_sm(y_sm)
 
 for track in y_sm.tracks:
     print(track.name)
 print("\n")
 for track in x_sm.tracks:
     print(track.name)
-
-
-
 
 #%%
 

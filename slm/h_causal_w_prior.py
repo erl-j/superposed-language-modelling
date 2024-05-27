@@ -49,6 +49,19 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
         self.tokenizer = MergedTokenizer(tokenizer_config)
         self.vocab = vocab
         self.one_hot_input = one_hot_input
+
+        self.prior_transformer = torch.nn.TransformerEncoder(
+            encoder_layer=torch.nn.TransformerEncoderLayer(
+                d_model=hidden_size,
+                nhead=n_heads,
+                dim_feedforward=feed_forward_size,
+                norm_first=norm_first,
+                dropout=0.1,
+                batch_first=True,
+            ),
+            num_layers=n_layers,
+        )
+
         self.event_transformer = torch.nn.TransformerEncoder(
             encoder_layer=torch.nn.TransformerEncoderLayer(
                 d_model=hidden_size,
@@ -74,6 +87,7 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
         )
 
         # make causal mask
+        self.prior_embedding_layer = torch.nn.Linear(vocab_size, hidden_size)
         
         self.embedding_layer = nn.Embedding(vocab_size, hidden_size)
         self.decoder_output_layer = nn.Linear(hidden_size, vocab_size, bias=output_bias)
@@ -91,20 +105,27 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
 
         self.event_embedding = torch.nn.Parameter(torch.randn(self.n_events, hidden_size))
 
-    def sample(self, temperature=1.0, top_k=0, top_p=1.0):
+        self.format_mask = torch.Tensor(einops.rearrange(self.tokenizer.get_format_mask(), "(e a) v -> e a v", e=self.n_events))
+    
+    def sample(self, mask, temperature=1.0, top_k=0, top_p=1.0):
         x = torch.zeros(1, self.n_events, self.n_attributes, dtype=torch.long).to(self.device)
+        mask = einops.rearrange(mask, "1 (e a) v -> 1 e a v", e=self.n_events)
         for i in tqdm(range(self.n_events)):
-            event_z = self.event_forward(x[:,:-1])
+            event_z = self.event_forward(x[:,:-1], mask)
             for j in range(self.n_attributes):
                 logits = self.attribute_forward(x[:,:,:-1], event_z)
                 logits = logits[:,i,j]
                 logits = logits / temperature
                 logits = top_k_top_p_filtering(logits, top_k=top_k, top_p=top_p)
                 probs = F.softmax(logits, dim=-1)
+                # mutliply with format mask
+                probs = probs * mask[:,i,j]
+                # normalize
+                probs = probs / probs.sum(-1, keepdim=True)
                 x[:,i,j] = torch.multinomial(probs, 1).squeeze(-1)
         return x
     
-    def event_forward(self, x):
+    def event_forward(self, x, mask):
         '''
         Forward pass for the event layer.
 
@@ -114,23 +135,30 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
         Returns:
             (batch_size, events, d) tensor
         '''
+        # embed mask
+        maskz = self.prior_embedding_layer(mask)
+        maskz = maskz.sum(-2)
+        # add event embedding
+        ez = einops.rearrange(self.event_embedding.to(x.device), "e d -> 1 e d")
+        maskz = maskz + ez
+
         xz = self.embedding_layer(x)
         xz = xz.sum(-2)
-
-        b, et, a = xz.shape
-
+        b, t, d = xz.shape
+        sos_z = einops.repeat(self.e_sos_z, "d -> b 1 d", b=b)
+        xz = torch.cat([sos_z, xz], dim=1)
+        xz = xz + ez
         causal_mask = torch.nn.Transformer.generate_square_subsequent_mask(
             self.tokenizer.config["max_notes"]
         ).to(x.device)
-        b, t, d = xz.shape
-        sos_z = einops.repeat(self.e_sos_z, "d -> b 1 d", b=b)
-        # concat with sos token
-        xz = torch.cat([sos_z, xz], dim=1)
-        # add event and attribute embeddings
-        ez = einops.rearrange(self.event_embedding.to(x.device), "e d -> 1 e d")
-        xz = xz + ez
-        xz_out = self.event_transformer(xz, mask=causal_mask, is_causal=True)
-        return xz_out
+
+        # for each layer, apply the transformers
+        for i in range(self.event_transformer.num_layers):
+            maskz = self.prior_transformer.layers[i](maskz)
+            xz = self.event_transformer.layers[i](xz, src_mask=causal_mask)
+            # add maskz to xz
+            xz = xz + maskz
+        return xz
 
     def attribute_forward(self, x, event_z):
         '''
@@ -160,16 +188,38 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
         logits = einops.rearrange(logits, "(b e) a d -> b e a d", b=x.size(0))
         return logits
     
-    def forward(self, x):
-        event_z = self.event_forward(x[:,:-1])
+    def forward(self, x, mask):
+        event_z = self.event_forward(x[:,:-1], mask)
         logits = self.attribute_forward(x[:,:,:-1], event_z)
         return logits
     
     def step(self, batch, batch_idx):
-        x = batch
+        x = batch        
         targets = x
         inputs_ = einops.rearrange(x, "b (e a) -> b e a", e=self.n_events)
-        logits = self(inputs_)
+
+        b, e, a = inputs_.shape 
+
+        x1h = torch.nn.functional.one_hot(inputs_, num_classes=len(self.vocab)).float()
+
+        masking_probs = torch.rand(b, device=self.device)
+        position_mask = (
+            torch.rand((b, e, a), device=self.device)
+            < masking_probs[:, None,None]
+        )
+
+        # create masking ratios
+        superposition_probs = torch.rand(b, device=self.device)
+        superposition = torch.rand_like(x1h, device=self.device)<superposition_probs[:,None,None,None]
+
+        mask = position_mask[:,:,:,None] * superposition
+
+        masked_x = torch.clamp(x1h + mask, 0, 1)
+
+        # multiply by format mask
+        masked_x = masked_x * self.format_mask[None, ...].to(masked_x.device)
+
+        logits = self(inputs_, masked_x)
         logits = einops.rearrange(logits, "b e a d -> b (e a) d")
         loss = F.cross_entropy(
             logits.view(-1, logits.size(-1)), targets.flatten()
@@ -247,7 +297,7 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
 if __name__ == "__main__":
     DATASET = "mmd_loops"
 
-    BATCH_SIZE = 100
+    BATCH_SIZE = 40
 
     tag_list = open(f"./data/{DATASET}/tags.txt").read().splitlines()
 
@@ -343,7 +393,7 @@ if __name__ == "__main__":
         pin_memory=True,
     )
 
-    wandb_logger = WandbLogger(log_model="all", project="causal")
+    wandb_logger = WandbLogger(log_model="all", project="causal-w-prior")
     # get name
     name = wandb_logger.experiment.name
 
@@ -354,7 +404,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[1],
+        devices=[2],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[
@@ -377,6 +427,5 @@ if __name__ == "__main__":
                 model,
                 trn_dl, 
                 val_dl,
-                ckpt_path="./checkpoints/honest-tree-11/last.ckpt"
     )
                 

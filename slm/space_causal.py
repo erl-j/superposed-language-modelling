@@ -18,7 +18,7 @@ from util import top_k_top_p_filtering
 from flow_utils import GaussianFourierProjection
 import math
 
-class HierarchicalCausalDecoderModel(pl.LightningModule):
+class SpaceCausalDecoderModel(pl.LightningModule):
     def __init__(
         self,
         hidden_size,
@@ -75,7 +75,7 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
 
         # make causal mask
         
-        self.embedding_layer = nn.Embedding(vocab_size, hidden_size)
+        self.embedding_layer = nn.Embedding(vocab_size+1, hidden_size)
         self.decoder_output_layer = nn.Linear(hidden_size, vocab_size, bias=output_bias)
 
         self.n_attributes = len(self.tokenizer.note_attribute_order)
@@ -90,85 +90,24 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
         self.e_sos_z = torch.nn.Parameter(torch.randn(hidden_size))
 
         self.event_embedding = torch.nn.Parameter(torch.randn(self.n_events, hidden_size))
-
-    def sample(self, temperature=1.0, top_k=0, top_p=1.0):
-        x = torch.zeros(1, self.n_events, self.n_attributes, dtype=torch.long).to(self.device)
-        for i in tqdm(range(self.n_events)):
-            event_z = self.event_forward(x[:,:-1])
-            for j in range(self.n_attributes):
-                logits = self.attribute_forward(x[:,:,:-1], event_z)
-                logits = logits[:,i,j]
-                logits = logits / temperature
-                logits = top_k_top_p_filtering(logits, top_k=top_k, top_p=top_p)
-                probs = F.softmax(logits, dim=-1)
-                x[:,i,j] = torch.multinomial(probs, 1).squeeze(-1)
-        return x
-    
-    def event_forward(self, x):
-        '''
-        Forward pass for the event layer.
-
-        Args:
-            x: (batch_size, events, attributes) tensor
-
-        Returns:
-            (batch_size, events, d) tensor
-        '''
-        xz = self.embedding_layer(x)
-        xz = xz.sum(-2)
-
-        b, et, a = xz.shape
-
-        causal_mask = torch.nn.Transformer.generate_square_subsequent_mask(
-            self.tokenizer.config["max_notes"]
-        ).to(x.device)
-        b, t, d = xz.shape
-        sos_z = einops.repeat(self.e_sos_z, "d -> b 1 d", b=b)
-        # concat with sos token
-        xz = torch.cat([sos_z, xz], dim=1)
-        # add event and attribute embeddings
-        ez = einops.rearrange(self.event_embedding.to(x.device), "e d -> 1 e d")
-        xz = xz + ez
-        xz_out = self.event_transformer(xz, mask=causal_mask, is_causal=True)
-        return xz_out
-
-    def attribute_forward(self, x, event_z):
-        '''
-        Forward pass for the attribute_forward method.
-
-        Args:
-            x (torch.Tensor): Input tensor of shape (batch_size, events, attributes-1).
-            event_z (torch.Tensor): Input tensor of shape (batch_size, events).
-
-        Returns:
-            torch.Tensor: Output tensor of shape (batch_size, events, attributes, d).
-        '''
-        causal_mask = torch.nn.Transformer.generate_square_subsequent_mask(
-            self.n_attributes
-        ).to(x.device)
-        # embed
-        xz = self.embedding_layer(x)
-        # concat event embedding
-        xz = torch.cat([event_z[...,None,:], xz], dim=-2)
-        # merge event into batch
-        xz = einops.rearrange(xz, "b e a d -> (b e) a d")
-        # through transformer
-        xz_out = self.attribute_transformer(xz, mask=causal_mask, is_causal=True)
-        # return logits
-        logits = self.decoder_output_layer(xz_out)
-        # reshape to (batch_size, events, attributes, d)
-        logits = einops.rearrange(logits, "(b e) a d -> b e a d", b=x.size(0))
-        return logits
     
     def forward(self, x):
-        event_z = self.event_forward(x[:,:-1])
-        logits = self.attribute_forward(x[:,:,:-1], event_z)
+        # embed tokens
+        x = einops.rearrange(x, "b e a -> b e a")
+        x = self.embedding_layer(x)
+        # add event embeddings
+        x = x + self.event_embedding[None, :, None, :]
+        # run through atte
+
+
         return logits
     
     def step(self, batch, batch_idx):
         x = batch
-        targets = x
         inputs_ = einops.rearrange(x, "b (e a) -> b e a", e=self.n_events)
+        soe_token_idx = len(self.vocab+1)
+        # concatenate soe token to beginning of attribute dimension
+        inputs_ = torch.cat([soe_token_idx*torch.ones_like(inputs_[:,:1]), inputs_], dim=1)
         logits = self(inputs_)
         logits = einops.rearrange(logits, "b e a d -> b (e a) d")
         loss = F.cross_entropy(
@@ -283,7 +222,7 @@ if __name__ == "__main__":
         feed_forward_size=2*512,
         n_layers=8,
         vocab=tokenizer.vocab,
-        learning_rate=1e-3,
+        learning_rate=1e-4,
         tokenizer_config=tokenizer_config,
         learning_rate_gamma=0.99,
         norm_first=True,
@@ -354,7 +293,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[1],
+        devices=[4],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[
@@ -377,6 +316,5 @@ if __name__ == "__main__":
                 model,
                 trn_dl, 
                 val_dl,
-                ckpt_path="./checkpoints/honest-tree-11/last.ckpt"
     )
                 

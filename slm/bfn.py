@@ -473,7 +473,6 @@ if __name__ == "__main__":
 
     tokenizer = MergedTokenizer(tokenizer_config)
 
-
     # model = BFNModel(
     #     hidden_size=768,
     #     n_heads=12,
@@ -504,17 +503,13 @@ if __name__ == "__main__":
                 min_lr_ratio=0.1,
     )
 
-
     # set global step to annealing steps
-
     # set global step manually
-
     # src_model = SimplexDiffusionModel.load_from_checkpoint(
     #             checkpoint_path = "./checkpoints/flowing-paper-64/last.ckpt",
     #             map_location="cpu"
     # )
     # model.initialize_from_different_model(src_model)
-
 
     format_mask = torch.Tensor(tokenizer.get_format_mask())
     
@@ -562,8 +557,6 @@ if __name__ == "__main__":
         num_workers=4,
         pin_memory=True,
     )
-
-
 
     wandb_logger = WandbLogger(log_model="all", project="bfn")
     # get name
