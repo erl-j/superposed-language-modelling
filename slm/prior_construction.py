@@ -100,6 +100,10 @@ def at_least_n_of_x(events, prototype, n):
         return event
     return transform_rejoin(events, lambda x: respects_prototype(x, prototype), lambda x: overwrite_from_prototype(x, prototype), n)
 
+
+    
+
+
 #%%
 # create 128 bpm rock loop with drums, bass, guitar with max 280 notes
 e = create_dead_events()
@@ -127,6 +131,11 @@ x = model.generate(mask, temperature=0.98)[0].argmax(axis=1)
 x_sm = model.tokenizer.decode(x)
 x_sm = sm_fix_overlap_notes(x_sm)
 preview_sm(x_sm)
+
+
+#%% replace bassline
+
+
 # %%
 # make ambient loop with 3 instruments
 e = create_dead_events()
@@ -150,7 +159,7 @@ e = at_least_n_of_x(e, {"instrument": {"Bass"}}, 5)
 
 mask = model.tokenizer.create_mask(e).to(device)
 
-x = model.generate(mask, temperature=0.98)[0].argmax(axis=1)
+x = model.generate(mask, temperature=0.97)[0].argmax(axis=1)
 x_sm = model.tokenizer.decode(x)
 x_sm = sm_fix_overlap_notes(x_sm)
 preview_sm(x_sm)

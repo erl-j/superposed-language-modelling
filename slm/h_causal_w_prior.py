@@ -18,6 +18,14 @@ from util import top_k_top_p_filtering
 from flow_utils import GaussianFourierProjection
 import math
 
+class TransposeWeightLayer(nn.Module):
+    def __init__(self, tied_layer):
+        super(TransposeWeightLayer, self).__init__()
+        self.tied_layer = tied_layer
+
+    def forward(self, x):
+        return nn.functional.linear(x, self.tied_layer.weight.T)
+    
 class HierarchicalCausalDecoderModel(pl.LightningModule):
     def __init__(
         self,
@@ -40,7 +48,9 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
         output_bias=True,
         use_adamw=True,
         same_encoder_decoder=False,
+        tie_embedding_prior=False,
         full_mask_rate = 0.0,
+        prior_embedding_bias=True,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -89,11 +99,15 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
             ),
             num_layers=1,
         )
-
         # make causal mask
-        self.prior_embedding_layer = torch.nn.Linear(vocab_size, hidden_size)
-        
+            
         self.embedding_layer = nn.Embedding(vocab_size, hidden_size)
+        if tie_embedding_prior:
+            self.prior_embedding_layer = TransposeWeightLayer(self.embedding_layer)
+        else:
+            self.prior_embedding_layer = torch.nn.Linear(vocab_size, hidden_size, bias=prior_embedding_bias)
+
+
         self.decoder_output_layer = nn.Linear(hidden_size, vocab_size, bias=output_bias)
 
         self.n_attributes = len(self.tokenizer.note_attribute_order)
@@ -128,7 +142,7 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
                 # mutliply with format mask
                 probs = probs * mask[:,i,j]
                 # normalize
-                probs = probs / probs.sum(-1, keepdim=True)
+                probs = probs / probs.sum(-1, keepdim=True) + 1e-8
                 x[:,i,j] = torch.multinomial(probs, 1).squeeze(-1)
         return x
     
@@ -358,7 +372,9 @@ if __name__ == "__main__":
         output_bias=False,
         use_adamw=False,
         same_encoder_decoder=True,
-        full_mask_rate = 0.5,
+        full_mask_rate = 0.0,
+        prior_embedding_bias=False,
+        tie_embedding_prior=True,
     )
 
     format_mask = torch.Tensor(tokenizer.get_format_mask())
@@ -419,7 +435,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[6],
+        devices=[0],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[
