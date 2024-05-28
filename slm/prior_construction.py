@@ -100,7 +100,26 @@ def at_least_n_of_x(events, prototype, n):
         return event
     return transform_rejoin(events, lambda x: respects_prototype(x, prototype), lambda x: overwrite_from_prototype(x, prototype), n)
 
+def sm_to_events(x_sm):
+    x = model.tokenizer.encode(x_sm, tag="other")
+    tokens = model.tokenizer.indices_to_tokens(x)
+    # group by n_attributes
+    n_attributes = len(model.tokenizer.note_attribute_order)
+    # n_events = model.tokenizer.config["max_notes"]
+    events = []
+    for i in range(0, len(tokens), n_attributes):
+        event = {key: set() for key in model.tokenizer.note_attribute_order}
+        for j in range(n_attributes):
+            token = tokens[i + j]
+            key, value = token.split(":")
+            event[key].add(value)
+        events.append(event)
+    return events
 
+def replace_instrument(events, instrument_to_replace, new_instrument, min_notes_per_instrument):
+    # remove all events with instrument_to_replace
+    new_events = [event for event in events if instrument_to_replace not in event["instrument"]]
+    # count     
     
 
 
@@ -132,35 +151,7 @@ x_sm = model.tokenizer.decode(x)
 x_sm = sm_fix_overlap_notes(x_sm)
 preview_sm(x_sm)
 
+#%%
 
-#%% replace bassline
 
-
-# %%
-# make ambient loop with 3 instruments
-e = create_dead_events()
-filter_fn = lambda x: True
-map_fn = lambda x: {
-    "instrument": {"Piano", "Guitar", "Bass", "-"},
-    "pitch": ALL_PITCH | {"-"},
-    "onset/beat": ALL_ONSET_BEATS | {"-"},
-    "onset/tick": ALL_ONSET_TICKS | {"-"},
-    "offset/beat": ALL_OFFSET_BEATS | {"-"},
-    "offset/tick": ALL_OFFSET_TICKS | {"-"},
-    "velocity": ALL_VELOCITIES | {"-"},
-    "tag": {"other", "-"},
-    "tempo": {"126", "-"},
-}
-
-e = transform_rejoin(e, filter_fn, map_fn, 280)
-e = at_least_n_of_x(e, {"instrument": {"Piano"}}, 5)
-e = at_least_n_of_x(e, {"instrument": {"Guitar"}}, 5)
-e = at_least_n_of_x(e, {"instrument": {"Bass"}}, 5)
-
-mask = model.tokenizer.create_mask(e).to(device)
-
-x = model.generate(mask, temperature=0.97)[0].argmax(axis=1)
-x_sm = model.tokenizer.decode(x)
-x_sm = sm_fix_overlap_notes(x_sm)
-preview_sm(x_sm)
 # %%
