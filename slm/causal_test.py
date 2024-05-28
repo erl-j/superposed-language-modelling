@@ -15,7 +15,7 @@ model = HierarchicalCausalDecoderModel.load_from_checkpoint(
 mask = model.tokenizer.constraint_mask(
     tags = ["pop"],
     tempos = ["128"],
-    instruments =["Drums","Bass","Piano"],
+    instruments =["Piano"],
     scale = "G major",
     min_notes=10,
     max_notes=290,
@@ -23,7 +23,12 @@ mask = model.tokenizer.constraint_mask(
 )[None,:]
 
 # mask = model.tokenizer.get_format_mask()[None,...]
-x = model.sample(mask,temperature=0.98)
+x = model.sample(mask,temperature=0.99, force_mask=True)
+
+#%%
+print(model.tokenizer.indices_to_tokens(x.flatten()))
+
+#%%
 
 from util import preview_sm
 x_sm = model.tokenizer.decode(x.flatten())

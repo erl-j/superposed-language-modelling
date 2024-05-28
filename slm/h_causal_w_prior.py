@@ -51,6 +51,7 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
         tie_embedding_prior=False,
         full_mask_rate = 0.0,
         prior_embedding_bias=True,
+        prior_logit_bias=False,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -126,8 +127,11 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
         self.format_mask = torch.Tensor(einops.rearrange(self.tokenizer.get_format_mask(), "(e a) v -> e a v", e=self.n_events))
 
         self.full_mask_rate = full_mask_rate
+
+        self.prior_logit_bias = prior_logit_bias
     
-    def sample(self, mask, temperature=1.0, top_k=0, top_p=1.0):
+    def sample(self, mask, temperature=1.0, top_k=0, top_p=1.0, force_mask=True):
+        format_mask = einops.rearrange(self.format_mask, "e a v -> 1 e a v").to(self.device)
         x = torch.zeros(1, self.n_events, self.n_attributes, dtype=torch.long).to(self.device)
         mask = torch.Tensor(mask).to(self.device).float()
         mask = einops.rearrange(mask, "1 (e a) v -> 1 e a v", e=self.n_events)
@@ -139,10 +143,16 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
                 logits = logits / temperature
                 logits = top_k_top_p_filtering(logits, top_k=top_k, top_p=top_p)
                 probs = F.softmax(logits, dim=-1)
-                # mutliply with format mask
-                probs = probs * mask[:,i,j]
-                # normalize
-                probs = probs / probs.sum(-1, keepdim=True) + 1e-8
+                if force_mask:
+                    probs += 1e-12
+                    # mutliply with format mask
+                    probs = probs * mask[:,i,j]
+                    # normalize
+                    probs = probs /probs.sum(-1, keepdim=True)
+                else:
+                    probs += 1e-12
+                    probs = probs * format_mask[:,i,j]
+                    probs = probs /probs.sum(-1, keepdim=True)
                 x[:,i,j] = torch.multinomial(probs, 1).squeeze(-1)
         return x
     
@@ -215,6 +225,9 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
     def forward(self, x, mask):
         event_z = self.event_forward(x[:,:-1], mask)
         logits = self.attribute_forward(x[:,:,:-1], event_z)
+        # if mask == 0, set logits to -inf
+        if self.prior_logit_bias:
+            logits[mask == 0] = -torch.inf
         return logits
     
     def step(self, batch, batch_idx):
@@ -375,6 +388,7 @@ if __name__ == "__main__":
         full_mask_rate = 0.0,
         prior_embedding_bias=False,
         tie_embedding_prior=True,
+        prior_logit_bias=True,
     )
 
     format_mask = torch.Tensor(tokenizer.get_format_mask())
@@ -435,7 +449,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[0],
+        devices=[7],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[
