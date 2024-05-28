@@ -10,7 +10,7 @@ import IPython.display as ipd
 from paper_checkpoints import checkpoints
 import torch
 
-device = "cuda:0"
+device = "cuda:7"
 ROOT_DIR = "../"
 
 MODEL = "slm"
@@ -38,12 +38,12 @@ model = (
 
 a = model.format_mask[None, ...].to(model.device)
 c = model.tokenizer.constraint_mask(
-    tags=["rock"],
+    tags=["classical"],
     # tags=["other"],
-    instruments=["Drums","Bass","Guitar"],
+    instruments=["Piano","Ensemble","Pipe"],
     # tempos=["138"],
     pitches=["pitch:{i}" for i in range(60, 108)],
-    # scale="G pentatonic",
+    scale="G major",
     tempos=["128"],
     min_notes=10,
     max_notes=290,
@@ -54,7 +54,7 @@ a = c * a
 # Generate a sequence
 y = model.generate(
     a,
-    temperature=0.98,
+    temperature=1.0,
     top_p=1.0,
     top_k=0,
 )[0].argmax(axis=1)
@@ -77,6 +77,10 @@ y_sm = model.tokenizer.decode(y)
 print(f"Number of notes: {y_sm.note_num()}")
 
 preview_sm(y_sm)
+
+from util import sm_fix_overlap_notes
+
+y_sm = sm_fix_overlap_notes(y_sm)
 
 y_sm.dump_midi(OUTPUT_DIR + "/pitch_set_constraint_c.mid")
 
@@ -118,7 +122,7 @@ plt.show()
 
 y = model.generate(
         mask,
-        temperature=1.0,
+        temperature=0.99,
         top_p=1.0,
         top_k=0,
         order = "random"

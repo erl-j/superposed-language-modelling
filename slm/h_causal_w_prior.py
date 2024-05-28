@@ -39,6 +39,8 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
         fourier_t_embedding=False,
         output_bias=True,
         use_adamw=True,
+        same_encoder_decoder=False,
+        full_mask_rate = 0.0,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -50,17 +52,19 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
         self.vocab = vocab
         self.one_hot_input = one_hot_input
 
-        self.prior_transformer = torch.nn.TransformerEncoder(
-            encoder_layer=torch.nn.TransformerEncoderLayer(
-                d_model=hidden_size,
-                nhead=n_heads,
-                dim_feedforward=feed_forward_size,
-                norm_first=norm_first,
-                dropout=0.1,
-                batch_first=True,
-            ),
-            num_layers=n_layers,
-        )
+        self.same_encoder_decoder = same_encoder_decoder
+        if not self.same_encoder_decoder:
+            self.prior_transformer = torch.nn.TransformerEncoder(
+                encoder_layer=torch.nn.TransformerEncoderLayer(
+                    d_model=hidden_size,
+                    nhead=n_heads,
+                    dim_feedforward=feed_forward_size,
+                    norm_first=norm_first,
+                    dropout=0.1,
+                    batch_first=True,
+                ),
+                num_layers=n_layers,
+            )
 
         self.event_transformer = torch.nn.TransformerEncoder(
             encoder_layer=torch.nn.TransformerEncoderLayer(
@@ -106,9 +110,12 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
         self.event_embedding = torch.nn.Parameter(torch.randn(self.n_events, hidden_size))
 
         self.format_mask = torch.Tensor(einops.rearrange(self.tokenizer.get_format_mask(), "(e a) v -> e a v", e=self.n_events))
+
+        self.full_mask_rate = full_mask_rate
     
     def sample(self, mask, temperature=1.0, top_k=0, top_p=1.0):
         x = torch.zeros(1, self.n_events, self.n_attributes, dtype=torch.long).to(self.device)
+        mask = torch.Tensor(mask).to(self.device).float()
         mask = einops.rearrange(mask, "1 (e a) v -> 1 e a v", e=self.n_events)
         for i in tqdm(range(self.n_events)):
             event_z = self.event_forward(x[:,:-1], mask)
@@ -154,7 +161,10 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
 
         # for each layer, apply the transformers
         for i in range(self.event_transformer.num_layers):
-            maskz = self.prior_transformer.layers[i](maskz)
+            if not self.same_encoder_decoder:
+                maskz = self.prior_transformer.layers[i](maskz)
+            else:
+                maskz = self.event_transformer.layers[i](maskz)
             xz = self.event_transformer.layers[i](xz, src_mask=causal_mask)
             # add maskz to xz
             xz = xz + maskz
@@ -202,6 +212,9 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
 
         x1h = torch.nn.functional.one_hot(inputs_, num_classes=len(self.vocab)).float()
 
+        full_mask = torch.rand(b, device=self.device) < self.full_mask_rate
+        full_mask = full_mask[:, None, None, None]
+
         masking_probs = torch.rand(b, device=self.device)
         position_mask = (
             torch.rand((b, e, a), device=self.device)
@@ -214,7 +227,7 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
 
         mask = position_mask[:,:,:,None] * superposition
 
-        masked_x = torch.clamp(x1h + mask, 0, 1)
+        masked_x = torch.clamp(x1h + mask + full_mask, 0, 1)
 
         # multiply by format mask
         masked_x = masked_x * self.format_mask[None, ...].to(masked_x.device)
@@ -344,6 +357,8 @@ if __name__ == "__main__":
         tied_embeddings=False,
         output_bias=False,
         use_adamw=False,
+        same_encoder_decoder=True,
+        full_mask_rate = 0.5,
     )
 
     format_mask = torch.Tensor(tokenizer.get_format_mask())
@@ -404,7 +419,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[2],
+        devices=[6],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[
@@ -427,5 +442,6 @@ if __name__ == "__main__":
                 model,
                 trn_dl, 
                 val_dl,
+
     )
                 

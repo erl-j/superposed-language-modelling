@@ -176,7 +176,14 @@ class MergedTokenizer():
         self.token2idx = {token: idx for idx, token in enumerate(self.vocab)}
 
         self.format_mask = self.get_format_mask()
-
+    
+    def create_mask(self, events):
+        mask = np.zeros((len(events) * self.attributes_per_note, len(self.vocab)), dtype=int)
+        for event_idx, event in enumerate(events):
+            for attr_idx, note_attr in enumerate(self.note_attribute_order):
+                for token in event[note_attr]:
+                    mask[event_idx * self.attributes_per_note + attr_idx, self.token2idx[f"{note_attr}:{token}"]] = 1
+        return torch.tensor(mask)
 
     def encode(self, sm, tag):
         tokens = self.sm_to_tokens(sm, tag)
