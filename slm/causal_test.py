@@ -6,27 +6,37 @@ device = "cuda:0"
 # Load the model
 model = HierarchicalCausalDecoderModel.load_from_checkpoint(
     # "../checkpoints/glowing-lion-18/last.ckpt",
-    "../checkpoints/copper-cosmos-4/last.ckpt",
-    #"../checkpoints/celestial-microwave-7/last.ckpt",
+    # "../checkpoints/copper-cosmos-4/last.ckpt",
+    "../checkpoints/celestial-microwave-7/last.ckpt",
     # "../checkpoints/still-microwave-5/last.ckpt",
     map_location=device,
 )
 
+#%%
 mask = model.tokenizer.constraint_mask(
-    tags = ["pop"],
+    tags = ["rock"],
     tempos = ["128"],
-    instruments =["Piano"],
+    instruments =["Bass","Guitar","Drums","Piano"],
     scale = "G major",
     min_notes=10,
     max_notes=290,
-    min_notes_per_instrument=50
+    min_notes_per_instrument=30
 )[None,:]
 
+
 # mask = model.tokenizer.get_format_mask()[None,...]
-x = model.sample(mask,temperature=0.99, force_mask=True)
+x = model.sample(mask,temperature=0.95, top_p=1.0, force_mask=False, reorder_mask=True)
 
 #%%
-print(model.tokenizer.indices_to_tokens(x.flatten()))
+tokens=model.tokenizer.indices_to_tokens(x.flatten())
+
+# group by 9
+tokens = [tokens[i:i+9] for i in range(0, len(tokens), 9)]
+
+for token in tokens:
+    print(token)
+
+#%%
 
 #%%
 

@@ -121,8 +121,6 @@ def replace_instrument(events, instrument_to_replace, new_instrument, min_notes_
     new_events = [event for event in events if instrument_to_replace not in event["instrument"]]
     # count     
     
-
-
 #%%
 # create 128 bpm rock loop with drums, bass, guitar with max 280 notes
 e = create_dead_events()

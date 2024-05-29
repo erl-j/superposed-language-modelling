@@ -52,6 +52,7 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
         full_mask_rate = 0.0,
         prior_embedding_bias=True,
         prior_logit_bias=False,
+        sum_event_embedding_in_note_decoder=False,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -123,18 +124,27 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
         self.e_sos_z = torch.nn.Parameter(torch.randn(hidden_size))
 
         self.event_embedding = torch.nn.Parameter(torch.randn(self.n_events, hidden_size))
-
+        
         self.format_mask = torch.Tensor(einops.rearrange(self.tokenizer.get_format_mask(), "(e a) v -> e a v", e=self.n_events))
 
         self.full_mask_rate = full_mask_rate
 
         self.prior_logit_bias = prior_logit_bias
+
+        self.sum_event_embedding_in_note_decoder = sum_event_embedding_in_note_decoder
+
     
-    def sample(self, mask, temperature=1.0, top_k=0, top_p=1.0, force_mask=True):
+    def sample(self, mask, temperature=1.0, top_k=0, top_p=1.0, force_mask=True, reorder_mask=False):
         format_mask = einops.rearrange(self.format_mask, "e a v -> 1 e a v").to(self.device)
         x = torch.zeros(1, self.n_events, self.n_attributes, dtype=torch.long).to(self.device)
         mask = torch.Tensor(mask).to(self.device).float()
         mask = einops.rearrange(mask, "1 (e a) v -> 1 e a v", e=self.n_events)
+        if reorder_mask:
+            # sort mask by events sums
+            event_mask_sums = mask.sum(-1).sum(-1)
+            mask = mask[torch.arange(mask.shape[0]), event_mask_sums.argsort()]
+            print(mask.shape)
+  
         for i in tqdm(range(self.n_events)):
             event_z = self.event_forward(x[:,:-1], mask)
             for j in range(self.n_attributes):
@@ -200,7 +210,7 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
 
         Args:
             x (torch.Tensor): Input tensor of shape (batch_size, events, attributes-1).
-            event_z (torch.Tensor): Input tensor of shape (batch_size, events).
+            event_z (torch.Tensor): Input tensor of shape (batch_size, events, hidden_size).
 
         Returns:
             torch.Tensor: Output tensor of shape (batch_size, events, attributes, d).
@@ -210,8 +220,13 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
         ).to(x.device)
         # embed
         xz = self.embedding_layer(x)
-        # concat event embedding
-        xz = torch.cat([event_z[...,None,:], xz], dim=-2)
+        if self.sum_event_embedding_in_note_decoder:
+            xz = torch.cat([torch.zeros_like(event_z[...,None,:]), xz], dim=-2)
+            xz += event_z[:,:,None,:]
+        else:
+            # concat event embedding
+            xz = torch.cat([event_z[...,None,:], xz], dim=-2)
+       
         # merge event into batch
         xz = einops.rearrange(xz, "b e a d -> (b e) a d")
         # through transformer
@@ -226,6 +241,7 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
         event_z = self.event_forward(x[:,:-1], mask)
         logits = self.attribute_forward(x[:,:,:-1], event_z)
         # if mask == 0, set logits to -inf
+        assert mask.shape == logits.shape
         if self.prior_logit_bias:
             logits[mask == 0] = -torch.inf
         return logits
@@ -368,10 +384,10 @@ if __name__ == "__main__":
 
 
     model = HierarchicalCausalDecoderModel(
-        hidden_size=512,
-        n_heads=8,
-        feed_forward_size=2*512,
-        n_layers=8,
+        hidden_size=256,
+        n_heads=4,
+        feed_forward_size=2*256,
+        n_layers=24,
         vocab=tokenizer.vocab,
         learning_rate=1e-3,
         tokenizer_config=tokenizer_config,
@@ -379,7 +395,7 @@ if __name__ == "__main__":
         norm_first=True,
         vocab_theta=False,
         warmup_steps=1_000,
-        annealing_steps=200_000,
+        annealing_steps=1_000_000,
         min_lr_ratio=0.01,
         tied_embeddings=False,
         output_bias=False,
@@ -388,7 +404,8 @@ if __name__ == "__main__":
         full_mask_rate = 0.0,
         prior_embedding_bias=False,
         tie_embedding_prior=True,
-        prior_logit_bias=True,
+        prior_logit_bias=False,
+        sum_event_embedding_in_note_decoder=False,
     )
 
     format_mask = torch.Tensor(tokenizer.get_format_mask())
@@ -449,7 +466,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[7],
+        devices=[6],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[

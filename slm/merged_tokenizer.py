@@ -645,11 +645,8 @@ class MergedTokenizer():
             (self.config["max_notes"] * len(self.note_attribute_order), len(self.vocab))
         )
         
-
-
-
-       
-     
+        # multiply with format mask
+        constraint_mask = constraint_mask * self.get_format_mask()
 
         return torch.tensor(constraint_mask)
 
