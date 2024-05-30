@@ -384,10 +384,10 @@ if __name__ == "__main__":
 
 
     model = HierarchicalCausalDecoderModel(
-        hidden_size=256,
-        n_heads=4,
-        feed_forward_size=2*256,
-        n_layers=24,
+        hidden_size=768,
+        n_heads=8,
+        feed_forward_size=2*768,
+        n_layers=8,
         vocab=tokenizer.vocab,
         learning_rate=1e-3,
         tokenizer_config=tokenizer_config,
@@ -401,7 +401,7 @@ if __name__ == "__main__":
         output_bias=False,
         use_adamw=False,
         same_encoder_decoder=True,
-        full_mask_rate = 0.0,
+        full_mask_rate = 0.5,
         prior_embedding_bias=False,
         tie_embedding_prior=True,
         prior_logit_bias=False,
@@ -466,7 +466,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[6],
+        devices=[3],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[
@@ -489,6 +489,5 @@ if __name__ == "__main__":
                 model,
                 trn_dl, 
                 val_dl,
-
     )
                 

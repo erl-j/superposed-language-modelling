@@ -9,23 +9,23 @@ model = HierarchicalCausalDecoderModel.load_from_checkpoint(
     # "../checkpoints/copper-cosmos-4/last.ckpt",
     "../checkpoints/celestial-microwave-7/last.ckpt",
     # "../checkpoints/still-microwave-5/last.ckpt",
+    # "../checkpoints/eternal-sky-16/last.ckpt",
     map_location=device,
 )
 
 #%%
 mask = model.tokenizer.constraint_mask(
-    tags = ["rock"],
+    tags = ["metal"],
     tempos = ["128"],
-    instruments =["Bass","Guitar","Drums","Piano"],
-    scale = "G major",
+    instruments =["Drums","Bass"],
+    # scale = "G major",
     min_notes=10,
     max_notes=290,
     min_notes_per_instrument=30
 )[None,:]
 
-
 # mask = model.tokenizer.get_format_mask()[None,...]
-x = model.sample(mask,temperature=0.95, top_p=1.0, force_mask=False, reorder_mask=True)
+x = model.sample(mask,temperature=0.99, top_p=1.0, force_mask=True, reorder_mask=True)
 
 #%%
 tokens=model.tokenizer.indices_to_tokens(x.flatten())

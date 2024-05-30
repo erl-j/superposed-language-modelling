@@ -183,6 +183,7 @@ def get_scale(scale, range):
         "major": [0, 2, 4, 5, 7, 9, 11],
         "pentatonic": [0, 2, 4, 7, 9],
         "blues": [0, 3, 5, 6, 7, 10],
+        "kaweco":[0,1,5,7]
     }
 
     if root not in [

@@ -27,7 +27,7 @@ checkpoint = "../checkpoints/deft-puddle-113/last.ckpt"
 checkpoint = "../checkpoints/polished-dream-124/last.ckpt"
 # checkpoint = "../checkpoints/skilled-wave-136/last.ckpt"
 
-# checkpoint = "../checkpoints/light-deluge-138/last.ckpt"
+checkpoint = "../checkpoints/light-deluge-138/last.ckpt"
 
 # checkpoint = "../checkpoints/devout-cherry-140/last.ckpt"
 device="cuda:0"
@@ -146,15 +146,15 @@ sns.set_style("whitegrid", {'axes.grid' : False})
 
 tokenizer = model.tokenizer
 
-# mask = tokenizer.constraint_mask(
-#     # scale="C pentatonic",
-#     tags = ["metal"],
-#     instruments = ["Drums","Bass","Guitar"],
-#     min_notes = 1,
-#     max_notes = 299,
-#     min_notes_per_instrument=20,
-#     tempos=["138"]
-# )
+mask = tokenizer.constraint_mask(
+    # scale="C pentatonic",
+    # tags = ["metal"],
+    instruments = ["Drums","Bass","Guitar","Piano"],
+    min_notes = 1,
+    max_notes = 299,
+    min_notes_per_instrument=20,
+    tempos=["138"]
+)
 
 # mask = model.tokenizer.infilling_mask(
 #     x=x,
@@ -168,12 +168,12 @@ tokenizer = model.tokenizer
 # ).float()
 
 
-mask =  model.tokenizer.replace_instruments_mask(
-    x=x,
-    instruments_to_remove=["Bass"],
-    instruments_to_add=["Bass"],
-    min_notes_per_instrument=20,
-)
+# mask =  model.tokenizer.replace_instruments_mask(
+#     x=x,
+#     instruments_to_remove=["Bass"],
+#     instruments_to_add=["Bass"],
+#     min_notes_per_instrument=20,
+# )
 
 
 # import symusic as sm
@@ -209,8 +209,8 @@ mask = mask * model.format_mask
 prior = (mask / mask.sum(-1, keepdim=True)).float()
 
 BATCH_SIZE = 2
-N_STEPS = 100
-TEMPERATURE = 0.7
+N_STEPS = 300
+TEMPERATURE = 0.8
 
 y = model.sample(prior,BATCH_SIZE,N_STEPS, temperature=TEMPERATURE ,device=device,argmax=True, plot_interval=-1)
 

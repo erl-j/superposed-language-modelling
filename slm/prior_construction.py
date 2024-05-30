@@ -4,7 +4,7 @@ import numpy as np
 import seaborn as sns
 from data import MidiDataset
 from train import EncoderOnlyModel
-from util import preview_sm, sm_fix_overlap_notes
+from util import preview_sm, sm_fix_overlap_notes, get_scale
 import os
 import IPython.display as ipd
 from paper_checkpoints import checkpoints
@@ -29,18 +29,225 @@ model = (
     .eval()
 )
 #%%
+# create 128 bpm rock loop with drums, bass, guitar with max 280 notes and minimum 2 drum notes and maximum 40 drum notes
 
-ALL_INSTRUMENTS = {token.split(":")[-1] for token in model.tokenizer.vocab if "instrument:" in token and token != "instrument:-"}
-ALL_TEMPOS = {token.split(":")[-1] for token in model.tokenizer.vocab if "tempo:" in token and token != "tempo:-"}
-ALL_ONSET_BEATS = {token.split(":")[-1] for token in model.tokenizer.vocab if "onset/beat:" in token and token != "onset/beat:-"}
-ALL_ONSET_TICKS = {token.split(":")[-1] for token in model.tokenizer.vocab if "onset/tick:" in token and token != "onset/tick:-"}
-ALL_OFFSET_BEATS = {token.split(":")[-1] for token in model.tokenizer.vocab if "offset/beat:" in token and token != "offset/beat:-"}
-ALL_OFFSET_TICKS = {token.split(":")[-1] for token in model.tokenizer.vocab if "offset/tick:" in token and token != "offset/tick:-"}
-ALL_VELOCITIES = {token.split(":")[-1] for token in model.tokenizer.vocab if "velocity:" in token and token != "velocity:-"}
-ALL_TAGS = {token.split(":")[-1] for token in model.tokenizer.vocab if "tag:" in token and token != "tag:-"}
-ALL_PITCH = {token.split(":")[-1] for token in model.tokenizer.vocab if "pitch:" in token and token != "pitch:-"}
+ALL_INSTRUMENTS = {
+    token.split(":")[-1]
+    for token in model.tokenizer.vocab
+    if "instrument:" in token and token != "instrument:-"
+}
 
+ALL_TEMPOS = {
+    token.split(":")[-1]
+    for token in model.tokenizer.vocab
+    if "tempo:" in token and token != "tempo:-"
+}
+ALL_ONSET_BEATS = {
+    token.split(":")[-1]
+    for token in model.tokenizer.vocab
+    if "onset/beat:" in token and token != "onset/beat:-"
+}
+ALL_ONSET_TICKS = {
+    token.split(":")[-1]
+    for token in model.tokenizer.vocab
+    if "onset/tick:" in token and token != "onset/tick:-"
+}
+ALL_OFFSET_BEATS = {
+    token.split(":")[-1]
+    for token in model.tokenizer.vocab
+    if "offset/beat:" in token and token != "offset/beat:-"
+}
+ALL_OFFSET_TICKS = {
+    token.split(":")[-1]
+    for token in model.tokenizer.vocab
+    if "offset/tick:" in token and token != "offset/tick:-"
+}
+ALL_VELOCITIES = {
+    token.split(":")[-1]
+    for token in model.tokenizer.vocab
+    if "velocity:" in token and token != "velocity:-"
+}
+ALL_TAGS = {
+    token.split(":")[-1]
+    for token in model.tokenizer.vocab
+    if "tag:" in token and token != "tag:-"
+}
+ALL_PITCH = {
+    token.split(":")[-1]
+    for token in model.tokenizer.vocab
+    if "pitch:" in token and token != "pitch:-"
+}
+
+
+# create 128 bpm rock loop with drums, bass, guitar with max 280 notes
 n_events = model.tokenizer.config["max_notes"]
+
+def sm_to_events(x_sm):
+    x = model.tokenizer.encode(x_sm, tag="other")
+    tokens = model.tokenizer.indices_to_tokens(x)
+    # group by n_attributes
+    n_attributes = len(model.tokenizer.note_attribute_order)
+    # n_events = model.tokenizer.config["max_notes"]
+    events = []
+    for i in range(0, len(tokens), n_attributes):
+        event = {key: set() for key in model.tokenizer.note_attribute_order}
+        for j in range(n_attributes):
+            token = tokens[i + j]
+            key, value = token.split(":")
+            event[key].add(value)
+        events.append(event)
+    # create event objects
+    events = [EventConstraint().intersect(event) for event in events]
+    return events
+
+class EventConstraint:
+    def __init__(self):
+        self.blank_event = {
+            "instrument": ALL_INSTRUMENTS | {"-"},
+            "pitch": ALL_PITCH | {"-"},
+            "onset/beat": ALL_ONSET_BEATS | {"-"},
+            "onset/tick": ALL_ONSET_TICKS | {"-"},
+            "offset/beat": ALL_OFFSET_BEATS | {"-"},
+            "offset/tick": ALL_OFFSET_TICKS | {"-"},
+            "velocity": ALL_VELOCITIES | {"-"},
+            "tag": ALL_TAGS | {"-"},
+            "tempo": ALL_TEMPOS | {"-"},
+        }
+
+        self.a = self.blank_event.copy()
+
+        self.all_active = {
+            "instrument": ALL_INSTRUMENTS,
+            "pitch": ALL_PITCH,
+            "onset/beat": ALL_ONSET_BEATS,
+            "onset/tick": ALL_ONSET_TICKS,
+            "offset/beat": ALL_OFFSET_BEATS,
+            "offset/tick": ALL_OFFSET_TICKS,
+            "velocity": ALL_VELOCITIES,
+            "tag": ALL_TAGS,
+            "tempo": ALL_TEMPOS,
+        }
+
+        self.not_active = {
+            "instrument": {"-"},
+            "pitch": {"-"},
+            "onset/beat": {"-"},
+            "onset/tick": {"-"},
+            "offset/beat": {"-"},
+            "offset/tick": {"-"},
+            "velocity": {"-"},
+            "tag": {"-"},
+            "tempo": {"-"},
+        }
+    
+    def intersect(self,constraint):    
+        for key in constraint:
+            self.a[key] = self.a[key] & constraint[key]
+        for key in self.a:
+            assert  len(self.a[key])>0, f"Empty set for key {key}, constraint {constraint}, attributes {self.a}"
+        return self
+    
+    def is_inactive(self):
+        for key in self.a:
+            if self.a[key] != {"-"}:
+                return False
+        return True
+
+    def is_active(self):
+        for key in self.a:
+            if self.a[key] == {"-"}:
+                return False
+        return True
+    
+    def force_active(self):
+        self.intersect(self.all_active)
+        return self
+    
+    def force_inactive(self):
+        self.intersect(self.not_active)
+        return self
+    
+    def to_dict(self):
+        return self.a
+
+scale = get_scale("C pentatonic", range=(30, 100))
+scale_constraint = {"pitch": {str(note) for note in scale} | {"-"}}
+
+
+e=[]
+e +=  [EventConstraint().intersect({"instrument":{"Drums"}}).force_active() for _ in range(20)]
+e += [
+    EventConstraint().intersect({"instrument": {"Guitar"}}).force_active()
+    for _ in range(20)
+]
+e += [
+    EventConstraint().intersect({"instrument": {"Bass"}}).force_active()
+    for _ in range(20)
+]
+e += [EventConstraint().intersect({"instrument":{"Drums","Bass","Guitar","-"}}).force_active() for _ in range(120)]
+
+
+e += [EventConstraint().force_inactive() for _ in range(n_events - len(e))]
+e = [ev.intersect({"tempo": {"126","-"},"tag": {"funk","-"}
+                   }) for ev in e]
+mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
+
+
+x = model.generate(mask, temperature=0.99)[0].argmax(axis=1)
+x_sm = model.tokenizer.decode(x)
+x_sm = sm_fix_overlap_notes(x_sm)
+preview_sm(x_sm)
+
+
+#%%
+e = sm_to_events(x_sm)
+
+infill_beat_range = (12, 16)
+
+def infill_beat_range_fn(event, infill_beat_range):
+    infill_beats = set([str(r) for r in range(infill_beat_range[0], infill_beat_range[1])])
+    if (event.a["onset/beat"] & infill_beats and event.a["offset/beat"] & infill_beats) or event.is_inactive():
+        return EventConstraint().intersect(
+            {
+            "onset/beat": infill_beats | {"-"},
+            "offset/beat": infill_beats | {"-"},
+            "onset/tick": ALL_ONSET_TICKS | {"-"},
+            "offset/tick": ALL_OFFSET_TICKS | {"-"}
+            })
+    return event
+
+# remove empty events
+e = [event for event in e if not event.is_inactive()]
+
+instrument_to_remove = "Piano"
+instrument_to_add = "Synth Lead"
+# remove drums
+e = [e for e in e if e.a["instrument"] != {instrument_to_remove}]
+# add new drums
+e += [EventConstraint().intersect({"instrument": {instrument_to_add}}).force_active() for _ in range(20)]
+# add optional drums
+e += [EventConstraint().intersect({"instrument": {instrument_to_add,"-"}}) for _ in range(30)]
+
+# e = [ev.intersect({"tempo": {"128", "-"}, "tag": {"other", "-"}}) for ev in e]
+
+e += [EventConstraint().force_inactive() for _ in range(n_events - len(e))]
+mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
+x = model.generate(mask, temperature=1.2)[0].argmax(axis=1)
+x_sm = model.tokenizer.decode(x)
+x_sm = sm_fix_overlap_notes(x_sm)
+preview_sm(x_sm)
+
+# force all events to have drums
+#%%
+
+def apply_constraint(constraint_a, new_constraint):
+    for key in new_constraint:
+        constraint_a[key] = constraint_a[key] & new_constraint[key]
+    # assert that no set is empty
+    for key in constraint_a:
+        assert len(constraint_a[key]) > 0, f"Empty set for key {key}"
+    return constraint_a
+
 
 def create_dead_events():
     events = [
@@ -150,6 +357,10 @@ x_sm = sm_fix_overlap_notes(x_sm)
 preview_sm(x_sm)
 
 #%%
+
+
+
+# create a list o
 
 
 # %%
