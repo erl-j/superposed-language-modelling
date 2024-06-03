@@ -53,6 +53,7 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
         prior_embedding_bias=True,
         prior_logit_bias=False,
         sum_event_embedding_in_note_decoder=False,
+        attribute_decoder_layers=1,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -99,7 +100,7 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
                 dropout=0.1,
                 batch_first=True,
             ),
-            num_layers=1,
+            num_layers=attribute_decoder_layers,
         )
         # make causal mask
             
@@ -386,36 +387,37 @@ if __name__ == "__main__":
     tokenizer = MergedTokenizer(tokenizer_config)
 
 
-    # model = HierarchicalCausalDecoderModel(
-    #     hidden_size=768,
-    #     n_heads=8,
-    #     feed_forward_size=2*768,
-    #     n_layers=8,
-    #     vocab=tokenizer.vocab,
-    #     learning_rate=1e-4,
-    #     tokenizer_config=tokenizer_config,
-    #     learning_rate_gamma=0.99,
-    #     norm_first=True,
-    #     vocab_theta=False,
-    #     warmup_steps=100,
-    #     annealing_steps=100_000,
-    #     min_lr_ratio=0.1,
-    #     tied_embeddings=False,
-    #     output_bias=False,
-    #     use_adamw=False,
-    #     same_encoder_decoder=True,
-    #     full_mask_rate = 0.5,
-    #     prior_embedding_bias=False,
-    #     tie_embedding_prior=True,
-    #     prior_logit_bias=False,
-    #     sum_event_embedding_in_note_decoder=False,
-    # )
-
-    model = HierarchicalCausalDecoderModel.load_from_checkpoint(
-        "./checkpoints/celestial-microwave-7/last.ckpt"
-        ,
-        map_location="cpu"
+    model = HierarchicalCausalDecoderModel(
+        hidden_size=512,
+        n_heads=8,
+        feed_forward_size=2*512,
+        n_layers=8,
+        vocab=tokenizer.vocab,
+        learning_rate=1e-3,
+        tokenizer_config=tokenizer_config,
+        learning_rate_gamma=0.99,
+        norm_first=True,
+        vocab_theta=False,
+        warmup_steps=100,
+        annealing_steps=200_000,
+        attribute_decoder_layers=2,
+        min_lr_ratio=0.01,
+        tied_embeddings=False,
+        output_bias=False,
+        use_adamw=False,
+        same_encoder_decoder=True,
+        full_mask_rate = 0.5,
+        prior_embedding_bias=False,
+        tie_embedding_prior=True,
+        prior_logit_bias=False,
+        sum_event_embedding_in_note_decoder=False,
     )
+
+    # model = HierarchicalCausalDecoderModel.load_from_checkpoint(
+    #     "./checkpoints/celestial-microwave-7/last.ckpt"
+    #     ,
+    #     map_location="cpu"
+    # )
 
     format_mask = torch.Tensor(tokenizer.get_format_mask())
     
@@ -475,7 +477,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[0],
+        devices=[1],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[

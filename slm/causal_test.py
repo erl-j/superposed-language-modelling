@@ -2,22 +2,24 @@
 #from h_causal import HierarchicalCausalDecoderModel
 from h_causal_w_prior import HierarchicalCausalDecoderModel
 
-device = "cuda:0"
+device = "cuda:5"
 # Load the model
 model = HierarchicalCausalDecoderModel.load_from_checkpoint(
     # "../checkpoints/glowing-lion-18/last.ckpt",
     # "../checkpoints/copper-cosmos-4/last.ckpt",
-    "../checkpoints/celestial-microwave-7/last.ckpt",
+    # "../checkpoints/celestial-microwave-7/last.ckpt",
     # "../checkpoints/still-microwave-5/last.ckpt",
     # "../checkpoints/eternal-sky-16/last.ckpt",
+    # "../checkpoints/hardy-fire-40/last.ckpt",
+    "../checkpoints/hopeful-sun-31/last.ckpt",
     map_location=device,
 )
 
 #%%
 mask = model.tokenizer.constraint_mask(
-    tags = ["metal"],
+    tags = ["pop"],
     tempos = ["128"],
-    instruments =["Drums","Bass"],
+    instruments =["Drums","Bass","Piano"],
     # scale = "G major",
     min_notes=10,
     max_notes=290,
@@ -25,7 +27,7 @@ mask = model.tokenizer.constraint_mask(
 )[None,:]
 
 # mask = model.tokenizer.get_format_mask()[None,...]
-x = model.sample(mask,temperature=0.99, top_p=1.0, force_mask=True, reorder_mask=True)
+x = model.sample(mask,temperature=0.9, top_p=1.0, force_mask=True, reorder_mask=True)
 
 #%%
 tokens=model.tokenizer.indices_to_tokens(x.flatten())
@@ -36,12 +38,13 @@ tokens = [tokens[i:i+9] for i in range(0, len(tokens), 9)]
 for token in tokens:
     print(token)
 
-#%%
 
 #%%
 
-from util import preview_sm
+from util import preview_sm, sm_fix_overlap_notes
 x_sm = model.tokenizer.decode(x.flatten())
+# remove overlapping notes
+x_sm = sm_fix_overlap_notes(x_sm)
 preview_sm(x_sm)
 print(x_sm.note_num())
 # %%
