@@ -136,6 +136,7 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
 
     
     def sample(self, mask, temperature=1.0, top_k=0, top_p=1.0, force_mask=True, reorder_mask=False):
+        self.eval()
         format_mask = einops.rearrange(self.format_mask, "e a v -> 1 e a v").to(self.device)
         x = torch.ones(1, self.n_events, self.n_attributes, dtype=torch.long).to(self.device)
         mask = torch.Tensor(mask).to(self.device).float()
