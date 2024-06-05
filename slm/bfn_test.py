@@ -1,5 +1,5 @@
 #%%
-device = "cuda:5"
+device = "cuda:0"
 from bfn import BFNModel
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -152,7 +152,7 @@ mask = tokenizer.constraint_mask(
     instruments = ["Drums","Bass","Guitar","Piano"],
     min_notes = 1,
     max_notes = 299,
-    min_notes_per_instrument=20,
+    min_notes_per_instrument=10,
     tempos=["138"]
 )
 
@@ -209,10 +209,10 @@ mask = mask * model.format_mask
 prior = (mask / mask.sum(-1, keepdim=True)).float()
 
 BATCH_SIZE = 2
-N_STEPS = 300
-TEMPERATURE = 0.8
+N_STEPS = 500
+TEMPERATURE = 1.0
 
-y = model.sample(prior,BATCH_SIZE,N_STEPS, temperature=TEMPERATURE ,device=device,argmax=True, plot_interval=-1)
+y = model.sample(prior,BATCH_SIZE,N_STEPS, top_p=0.85,temperature=TEMPERATURE ,device=device,argmax=True, plot_interval=-1)
 
 import matplotlib.pyplot as plt
 import torch

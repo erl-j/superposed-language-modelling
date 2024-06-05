@@ -458,7 +458,7 @@ class EncoderOnlyModel(pl.LightningModule):
 
         return x
     
-    def generate(self, x, sampling_steps=None, temperature=1, top_p=1, top_k=0, order="random", typical_sampling_t=-1, temperature_decay=False, min_temperature=0.8):
+    def generate(self, x, sampling_steps=None, temperature=1, top_p=1, top_k=0, order="random", typical_sampling_t=-1, temperature_decay=False, min_temperature=0.8, attribute_temperature=None):
         if sampling_steps is None:
             sampling_steps = self.tokenizer.config["max_notes"]*len(self.tokenizer.note_attribute_order)
         self.eval()
@@ -499,6 +499,16 @@ class EncoderOnlyModel(pl.LightningModule):
                         print(t)
                     else:
                         t = temperature
+                    
+                    if attribute_temperature is not None:
+                        # turn t into 1,1,a tensor
+                        attr_t = torch.ones(self.n_attributes, device=x.device) * temperature
+                        for k, v in attribute_temperature.items():
+                            # get attribute index
+                            attr_idx = self.tokenizer.note_attribute_order.index(k)
+                            attr_t[attr_idx] = v
+                        attr_t = einops.repeat(attr_t, "a -> (b e a) 1", e=self.tokenizer.config["max_notes"], b=batch)
+                        t = attr_t
 
                     flat_probs = F.softmax(flat_logits / t, dim=-1)
 
@@ -843,100 +853,116 @@ class EncoderOnlyModel(pl.LightningModule):
         # )
         return [optimizer], [scheduler]
 
+    def initialize_from_different_model(self, src_model):
+        for token in self.vocab:
+            if token not in src_model.vocab:
+                print(f"Token {token} not found in source model")
+                continue
+            else:
+                print(f"Transplanting token {token}")
+                src_idx = src_model.vocab.index(token)
+                tgt_idx = self.vocab.index(token)
+                self.embedding_layer.weight.data[:, tgt_idx] = (
+                    src_model.embedding_layer.weight.data[:, src_idx]
+                )
+                self.decoder_output_layer.weight.data[tgt_idx, :] = (
+                    src_model.decoder_output_layer.weight.data[src_idx, :]
+                )
+        # now copy transformer
+        self.transformer.load_state_dict(src_model.transformer.state_dict())
+
+
 
 if __name__ == "__main__":
 
-    genre_list = [
-    "other",
-    "pop",
-    "rock",
-    "italian%2cfrench%2cspanish",
-    "classical",
-    "romantic",
-    "renaissance",
-    "alternative-indie",
-    "metal",
-    "traditional",
-    "country",
-    "baroque",
-    "punk",
-    "modern",
-    "jazz",
-    "dance-eletric",
-    "rnb-soul",
-    "medley",
-    "blues",
-    "hip-hop-rap",
-    "hits of the 2000s",
-    "instrumental",
-    "midi karaoke",
-    "folk",
-    "newage",
-    "latino",
-    "hits of the 1980s",
-    "hits of 2011 2020",
-    "musical%2cfilm%2ctv",
-    "reggae-ska",
-    "hits of the 1970s",
-    "christian-gospel",
-    "world",
-    "early_20th_century",
-    "hits of the 1990s",
-    "grunge",
-    "australian artists",
-    "funk",
-    "best of british"
-    ]
+    DATASET = "clean_drums"
+
+    BATCH_SIZE = 80
+
+    tag_list = open(f"./data/{DATASET}/tags.txt").read().splitlines()
 
     N_BARS = 4
 
     tokenizer_config = {
-        "ticks_per_beat":24,
-        "pitch_range":[0, 128],
-        "max_beats":4*N_BARS,
-        "max_notes":75 * N_BARS,
-        "min_tempo":50,
-        "max_tempo":200,
+        "ticks_per_beat": 24,
+        "pitch_range": [0, 128],
+        "max_beats": 4 * N_BARS,
+        "max_notes": 75 * N_BARS,
+        "min_tempo": 50,
+        "max_tempo": 200,
         "n_tempo_bins": 16,
         "n_velocity_bins": 32,
         "time_signatures": None,
-        "tags": genre_list,
+        "tags": tag_list,
         "shuffle_notes": True,
         "use_offset": True,
-        "merge_pitch_and_beat":False,
+        "merge_pitch_and_beat": False,
         "use_program": False,
         "use_instrument": True,
-        "ignored_track_names":[f"Layers{i}" for i in range(0, 8)],
+        "ignored_track_names": [f"Layers{i}" for i in range(0, 8)],
         "separate_drum_pitch": True,
         "use_drum_duration": False,
     }
 
-    tokenizer = MergedTokenizer(
-        tokenizer_config
+    tokenizer = MergedTokenizer(tokenizer_config)
+
+    src_model = EncoderOnlyModel.load_from_checkpoint(
+        checkpoint_path="./paper_assets/slm_.ckpt",
+        map_location="cpu"
     )
+
+    model= EncoderOnlyModel(
+        hidden_size=src_model.hparams.hidden_size,
+        n_heads=src_model.hparams.n_heads,
+        feed_forward_size=src_model.hparams.feed_forward_size,
+        n_layers=src_model.hparams.n_layers,
+        vocab=tokenizer.vocab,
+        max_seq_len=src_model.hparams.max_seq_len,
+        learning_rate=src_model.hparams.learning_rate*0.1,
+        tokenizer_config=tokenizer_config,
+        one_hot_input=src_model.hparams.one_hot_input,
+        normalize_by_masking_ratio=src_model.hparams.normalize_by_masking_ratio,
+        learning_rate_gamma=0.9,
+        norm_first= src_model.hparams.norm_first,
+        x_bias = src_model.hparams.x_bias,
+        fix_x_bias = src_model.hparams.fix_x_bias,
+        embedding_bias = src_model.hparams.embedding_bias,
+        standard_mlm_forward=src_model.hparams.standard_mlm_forward,
+        standard_mlm_masking=src_model.hparams.standard_mlm_masking,
+        avg_positional_encoding = src_model.hparams.avg_positional_encoding,
+        use_positional_encoding = src_model.hparams.use_positional_encoding,
+        mlm_restricted_sampling = src_model.hparams.mlm_restricted_sampling,
+        enforce_constraint_in_forward = src_model.hparams.enforce_constraint_in_forward,
+        neighbour_superposition = src_model.hparams.neighbour_superposition
+    )
+
+    model.initialize_from_different_model(src_model)
+
+    mmd_4bar_filter_fn = lambda x: f"n_bars={N_BARS}" in x
 
     trn_ds = MidiDataset(
-        cache_path="./artefacts/trn_midi_records_unique_pr.pt",
-        path_filter_fn = lambda x: f"n_bars={N_BARS}" in x,
-        genre_list=genre_list,
+        cache_path=f"./data/{DATASET}/trn_midi_records_unique_pr.pt",
+        path_filter_fn=mmd_4bar_filter_fn if DATASET == "mmd_loops" else None,
+        genre_list=tag_list,
         tokenizer=tokenizer,
-        transposition_range=[-4, 4],
-        min_notes = 8*N_BARS,
-        max_notes = tokenizer_config["max_notes"],
+        transposition_range=[-4, 4] if DATASET == "mmd_loops" or DATASET == "harmonic" else None,
+        min_notes=8 * N_BARS,
+        max_notes=tokenizer_config["max_notes"],
     )
+    # print len of dataset
+    print(f"Loaded {len(trn_ds)} training records")
 
     val_ds = MidiDataset(
-        cache_path="./artefacts/val_midi_records_unique_pr.pt",
-        path_filter_fn=lambda x: f"n_bars={N_BARS}" in x,
-        genre_list=genre_list,
+        cache_path=f"./data/{DATASET}/val_midi_records_unique_pr.pt",
+        path_filter_fn=mmd_4bar_filter_fn if DATASET == "mmd_loops" else None,
+        genre_list=tag_list,
         tokenizer=tokenizer,
         min_notes=8 * N_BARS,
         max_notes=tokenizer_config["max_notes"],
     )
-    
-    # desert capy uses batch size 80
-    BATCH_SIZE = 80
+    print(f"Loaded {len(val_ds)} validation records")
 
+    # desert capy uses batch size 80
     trn_dl = torch.utils.data.DataLoader(
         trn_ds,
         batch_size=BATCH_SIZE,
@@ -951,33 +977,10 @@ if __name__ == "__main__":
         shuffle=False,
         num_workers=4,
         pin_memory=True,
-
     )
 
     USE_MLM_BASELINE = False
     
-    model = EncoderOnlyModel(
-        hidden_size=768,
-        n_heads=12,
-        feed_forward_size=4 * 768,
-        n_layers=12,
-        vocab=tokenizer.vocab,
-        max_seq_len=tokenizer.total_len,
-        learning_rate=1e-4 if not USE_MLM_BASELINE else 1e-4,
-        tokenizer_config=tokenizer_config,
-        normalize_by_masking_ratio=False,
-        learning_rate_gamma=0.99,
-        norm_first=True,
-        x_bias=-1e9,
-        fix_x_bias=True,
-        embedding_bias=False,
-        standard_mlm_forward= USE_MLM_BASELINE,
-        standard_mlm_masking= USE_MLM_BASELINE,
-        avg_positional_encoding=False,
-        use_positional_encoding=False,
-        enforce_constraint_in_forward=True,
-        neighbour_superposition = False
-    )
 
     wandb_logger = WandbLogger(log_model="all", project="slm")
     # get name
@@ -989,36 +992,38 @@ if __name__ == "__main__":
     progress_bar_callback = RichProgressBar(refresh_rate=1)
 
     trainer = pl.Trainer(
-    strategy="ddp_find_unused_parameters_true",
-    accelerator="gpu",
-    devices=[3,4],
-    # precision="16-mixed",
-    max_epochs=10_000,
-    log_every_n_steps=1,
-    # val_check_interval=10,
-    callbacks=[
-        # batch size finder
-        progress_bar_callback,
+        strategy="ddp_find_unused_parameters_true",
+        accelerator="gpu",
+        devices=[0],
+        # precision="16-mixed",
+        max_epochs=10_000,
+        log_every_n_steps=1,
+        # val_check_interval=10,
+        callbacks=[
+            # batch size finder
+            progress_bar_callback,
             # learning rate monitor
             pl.callbacks.LearningRateMonitor(logging_interval="step"),
             pl.callbacks.ModelCheckpoint(
-            dirpath=f"./checkpoints/{name}/",
-            monitor="val/loss_epoch",
-            mode="min",
-            save_top_k=3,
-            save_last=True,
-            filename="{epoch}-{step}-{val/loss_epoch:.5f}",
-            )],
-    logger=wandb_logger,
-    gradient_clip_val=1.0,
-    # accumulate_grad_batches=4,
+                dirpath=f"./checkpoints/{name}/",
+                monitor="val/loss_epoch",
+                mode="min",
+                save_top_k=3,
+                save_last=True,
+                filename="{epoch}-{step}-{val/loss_epoch:.5f}",
+                every_n_epochs=1 if DATASET == "mmd_loops" else 20,
+            ),
+        ],
+        logger=wandb_logger,
+        gradient_clip_val=1.0,
+        # accumulate_grad_batches=4,
     )
 
     trainer.fit(
         model,
         trn_dl,
         val_dl,
-        ckpt_path="checkpoints/easy-night-320/epoch=102-step=334029-val/loss_epoch=0.12267.ckpt"
+        # ckpt_path="checkpoints/easy-night-320/epoch=102-step=334029-val/loss_epoch=0.12267.ckpt"
         # ckpt_path="checkpoints/trim-water-280/epoch=132-step=191919-val/loss_epoch=0.14.ckpt",
         # ckpt_path="checkpoints/trim-water-280/epoch=132-step=191919-val/loss_epoch=0.14.ckpt",
         # ckpt_path="checkpoints/trim-water-280/epoch=132-step=191919-val/loss_epoch=0.14.ckpt"

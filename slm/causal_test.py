@@ -12,22 +12,25 @@ model = HierarchicalCausalDecoderModel.load_from_checkpoint(
     # "../checkpoints/eternal-sky-16/last.ckpt",
     # "../checkpoints/hardy-fire-40/last.ckpt",
     "../checkpoints/hopeful-sun-31/last.ckpt",
+    # "../checkpoints/floral-feather-24/last.ckpt",
+    # "../checkpoints/bright-totem-41/last.ckpt",
+    # "../checkpoints/breezy-sound-29/last.ckpt",
     map_location=device,
 )
 
 #%%
 mask = model.tokenizer.constraint_mask(
     tags = ["pop"],
-    tempos = ["128"],
+    tempos = ["138"],
     instruments =["Drums","Bass","Piano"],
     # scale = "G major",
     min_notes=10,
-    max_notes=290,
+    max_notes=100,
     min_notes_per_instrument=30
 )[None,:]
-
-# mask = model.tokenizer.get_format_mask()[None,...]
-x = model.sample(mask,temperature=0.9, top_p=1.0, force_mask=True, reorder_mask=True)
+import torch
+mask = torch.Tensor(model.tokenizer.get_format_mask()[None,...]).float() * mask
+x = model.sample(mask,temperature=1.0, top_p=0.9, force_mask=True, reorder_mask=False)
 
 #%%
 tokens=model.tokenizer.indices_to_tokens(x.flatten())

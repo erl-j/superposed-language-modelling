@@ -124,8 +124,13 @@ class BFNModel(pl.LightningModule):
         decoder_logits[format_mask.expand_as(decoder_logits) <0.5] = -1e12
         return decoder_logits
 
-    def discrete_output_distribution(self, theta, t, temperature=1.0):
+    def discrete_output_distribution(self, theta, t, temperature=1.0, top_p=1.0, top_k=0):
         output_dist = self.forward(theta, t)
+        if top_k > 0 or top_p < 1.0:
+            output_dist = einops.rearrange(output_dist, "b s v -> (b s) v")
+            output_dist = top_k_top_p_filtering(output_dist, top_k=top_k, top_p=top_p)
+            output_dist = einops.rearrange(output_dist, "(b s) v -> b s v", s=self.n_attributes * self.n_events)
+
         output_probs = torch.nn.functional.softmax(output_dist/temperature, dim=-1)
         return output_probs
 
@@ -233,6 +238,8 @@ class BFNModel(pl.LightningModule):
         eps_=1e-10,
         plot_interval=-1,
         argmax=False,
+        top_k=0,
+        top_p=0.0,
     ):
         self.eval()
 
@@ -269,7 +276,7 @@ class BFNModel(pl.LightningModule):
                 (theta.shape[0], 1, 1), device=theta.device, dtype=theta.dtype
             )
 
-            k_probs = self.discrete_output_distribution(theta, t, temperature=temperature)  # (B, D, K)
+            k_probs = self.discrete_output_distribution(theta, t, temperature=temperature, top_k=top_k, top_p=top_p)
             # if plot_interval > 0 and i % plot_interval == 0:
             #     # plt.imshow(k_probs[0].cpu().detach().numpy().T, aspect="auto", interpolation="none")
             #     # plt.show()

@@ -11,27 +11,72 @@ from paper_checkpoints import checkpoints
 from simplex_diffusion import SimplexDiffusionModel
 import torch
 
-device = "cuda:7"
+device = "cuda:0"
 ROOT_DIR = "../"
 
-# MODEL = "slm"
+MODEL = "slm_drum"
 
-# OUTPUT_DIR = ROOT_DIR + "artefacts/examples_4"
-# TMP_DIR = ROOT_DIR + "artefacts/tmp"
+OUTPUT_DIR = ROOT_DIR + "artefacts/examples_4"
+TMP_DIR = ROOT_DIR + "artefacts/tmp"
 
-# os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# model = (
-#     EncoderOnlyModel.load_from_checkpoint(
-#         ROOT_DIR + checkpoints[MODEL],
-#         map_location=device,
-#     )
-#     .to(device)
-#     .eval()
-# )
+if MODEL == "slm":
+    model = (
+        EncoderOnlyModel.load_from_checkpoint(
+            ROOT_DIR + checkpoints[MODEL],
+            map_location=device,
+        )
+        .to(device)
+        .eval()
+    )
+    generate = lambda mask: model.generate(mask, temperature=1.0, top_p=0.95)[0].argmax(
+        axis=1
+    )
+elif MODEL == "slm_drum":
+    model = (
+        EncoderOnlyModel.load_from_checkpoint(
+            ROOT_DIR + "checkpoints/ruby-surf-331/epoch=1119-step=17920-val/loss_epoch=0.03922.ckpt",
+            map_location=device,
+        )
+        .to(device)
+        .eval()
+    )
+    generate = lambda mask: model.generate(mask, temperature=1.0, top_p=0.95)[0].argmax(
+        axis=1
+    )
 
-model = SimplexDiffusionModel.load_from_checkpoint("../checkpoints/dark-sky-67/last.ckpt", map_location=device)
-#model = SimplexDiffusionModel.load_from_checkpoint("../checkpoints/flowing-paper-64/last.ckpt", map_location=device)
+else:
+    model = SimplexDiffusionModel.load_from_checkpoint(
+        "../checkpoints/dark-sky-67/last.ckpt", map_location=device
+    )
+    # model = SimplexDiffusionModel.load_from_checkpoint(
+    #     "../checkpoints/flowing-paper-64/last.ckpt", map_location=device
+    # )
+
+    generate = lambda x: model.sample2(
+        mask,
+        enforce_prior=True,
+        nb_steps=100,
+        top_p=0.99,
+        batch_size=1,
+        prior_strength=1,
+        attribute_temperature={
+            "pitch": 0.75,
+            "onset/tick": 1.0,
+            "onset/beat": 1.0,
+            "velocity": 1.5,
+        },
+    )[0]
+
+
+def preview(sm):
+    sm = sm.copy()
+    sm = sm_fix_overlap_notes(sm)
+    preview_sm(loop_sm(sm, 4, 4))
+    # add save button in ipython
+    # if pressed a text box will appear to enter the name of the file
+    # save the file in the output directory
 #%%
 # create 128 bpm rock loop with drums, bass, guitar with max 280 notes and minimum 2 drum notes and maximum 40 drum notes
 
@@ -87,8 +132,6 @@ DRUM_PITCHES = {
     for token in model.tokenizer.vocab
     if "pitch:" in token and "(Drums)" in token
 }
-
-
 
 # create 128 bpm rock loop with drums, bass, guitar with max 280 notes
 n_events = model.tokenizer.config["max_notes"]
@@ -192,8 +235,6 @@ def scale_constraint(scale,pitch_range):
 
 #%%
 
-
-
 # genre mix
 def basic_arrangement():
     e = []
@@ -203,42 +244,40 @@ def basic_arrangement():
     #     for _ in range(30)
     # ]
     # 10 forced bass
-    e += [
-        EventConstraint().intersect({"instrument": {"Drums"}, "pitch":DRUM_PITCHES
-                                     }).force_active()
-        for _ in range(30)
-    ]
+    # e += [
+    #     EventConstraint().intersect({"instrument": {"Drums"}, "pitch":DRUM_PITCHES
+    #                                  }).force_active()
+    #     for _ in range(30)
+    # ]
     # 10 forced piano
-    e += [
-        EventConstraint()
-        .intersect(
-            {
-                "instrument": {"Bass"},
-                "tag": {"jazz"},
-                "pitch": scale_constraint("C major", (30, 50))["pitch"],
-            }
-        )
-        .force_active()
-        for _ in range(10)
-    ]
+    # e += [
+    #     EventConstraint()
+    #     .intersect(
+    #         {
+    #             "instrument": {"Bass"},
+    #             "pitch": scale_constraint("C major", (30, 50))["pitch"],
+    #         }
+    #     )
+    #     .force_active()
+    #     for _ in range(10)
+    # ]
 
     e += [
         EventConstraint()
         .intersect(
             {
                 "instrument": {"Piano"},
-                "tag": {"jazz"},
-                "pitch": scale_constraint("C major", (30, 100))["pitch"],
+                # "pitch": scale_constraint("C major", (40, 100))["pitch"],
             }
         )
         .force_active()
-        for _ in range(30)
+        for _ in range(50)
     ]
 
-    # add bass pitch at 36
-    e += [
-        EventConstraint().intersect({"instrument": {"Bass"}, "pitch": {"36"}, "onset/beat":{"0"}, "offset/beat":{"1","2","3"}}).force_active()
-    ]
+    # # add bass pitch at 36
+    # e += [
+    #     EventConstraint().intersect({"instrument": {"Bass"}, "pitch": {"36"}, "onset/beat":{"0"}, "offset/beat":{"1","2","3"}}).force_active()
+    # ]
     
     # # 150 optional drums, bass, guitar
     # e += [
@@ -247,18 +286,17 @@ def basic_arrangement():
 
     e += [EventConstraint().force_inactive() for _ in range(n_events - len(e))]
     # set tempo and tag
-    e = [ev.intersect({"tempo": {"138", "-"}}) for ev in e]
+    e = [ev.intersect({"tempo": {"138", "-"},"tag":{"harp","-"}}) for ev in e]
     return e
 
 
 e = basic_arrangement()
 
+
 mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
-# x = model.generate(mask, temperature=0.99,top_p=1.0)[0].argmax(axis=1)
-x = model.sample2(mask, enforce_prior=True, nb_steps=100, top_p = 0.75, batch_size = 1, prior_strength = 1)[0]
+x = generate(mask)
 x_sm = model.tokenizer.decode(x)
-x_sm = sm_fix_overlap_notes(x_sm)
-preview_sm(loop_sm(x_sm,4,4))
+preview(x_sm)
 
 
 #%%
@@ -293,11 +331,12 @@ def basic_pop_arrangement():
 e = basic_pop_arrangement()
 
 mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
-x = model.generate(mask, temperature=1.0)[0].argmax(axis=1)
+x = model.generate(mask, temperature=1.0, attribute_temperature={"onset/tick": 1.2,"velocity":1.5})[0].argmax(axis=1)
+# x = model.generate(mask, temperature=1.0)[0].argmax(axis=1)
 x_sm = model.tokenizer.decode(x)
-x_sm = sm_fix_overlap_notes(x_sm)
-preview_sm(loop_sm(x_sm,4,4))
+preview(x_sm)
 
+#%%
 
 # write a jazz arrangement with drums, bass, piano, guitar
 
@@ -386,7 +425,8 @@ e += create_ghost_notes(e, min=5, max=20)
 e += [EventConstraint().force_inactive() for _ in range(n_events - len(e))]
 
 mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
-x = model.generate(mask, temperature=0.95)[0].argmax(axis=1)
+# x = model.generate(mask, temperature=0.95)[0].argmax(axis=1)
+x = generate(mask)
 x_sm = model.tokenizer.decode(x)
 x_sm = sm_fix_overlap_notes(x_sm)
 preview_sm(loop_sm(x_sm,4,4))
@@ -422,7 +462,8 @@ e = add_tom_fill(e)
 e += [EventConstraint().force_inactive() for _ in range(n_events - len(e))]
 
 mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
-x = model.generate(mask, temperature=1.0)[0].argmax(axis=1)
+# x = model.generate(mask, temperature=1.0)[0].argmax(axis=1)
+x = generate(mask)
 x_sm2 = model.tokenizer.decode(x)
 x_sm2 = sm_fix_overlap_notes(x_sm2)
 preview_sm(loop_sm(x_sm2,4,4))
@@ -449,8 +490,8 @@ def infill_beat_range_fn(event, infill_beat_range):
 # remove empty events
 e = [event for event in e if not event.is_inactive()]
 
-instrument_to_remove = "Organ"
-instrument_to_add = "Piano"
+instrument_to_remove = "Guitar"
+instrument_to_add = "Guitar"
 # remove drums
 e = [e for e in e if e.a["instrument"] != {instrument_to_remove}]
 # add new drums
@@ -465,7 +506,8 @@ e += [EventConstraint().intersect({"instrument": {instrument_to_add,"-"}}) for _
 
 e += [EventConstraint().force_inactive() for _ in range(n_events - len(e))]
 mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
-x = model.generate(mask, temperature=0.99)[0].argmax(axis=1)
+# x = model.generate(mask, temperature=0.99)[0].argmax(axis=1)
+x = generate(mask)
 x_sm = model.tokenizer.decode(x)
 x_sm = sm_fix_overlap_notes(x_sm)
 preview_sm(loop_sm(x_sm,4,4))
@@ -486,7 +528,8 @@ e += [EventConstraint().force_inactive() for _ in range(n_events - len(e))]
 
 mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
 
-x = model.generate(mask, temperature=1.5)[0].argmax(axis=1)
+# x = model.generate(mask, temperature=1.5)[0].argmax(axis=1)
+x = generate(mask)
 x_sm = model.tokenizer.decode(x)
 x_sm = sm_fix_overlap_notes(x_sm)
 preview_sm(loop_sm(x_sm, 4, 4))
@@ -527,7 +570,8 @@ e += [EventConstraint().force_inactive() for _ in range(n_events - len(e))]
 
 e += [EventConstraint().force_inactive() for _ in range(n_events - len(e))]
 mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
-x = model.generate(mask, temperature=1.0)[0].argmax(axis=1)
+# x = model.generate(mask, temperature=1.0)[0].argmax(axis=1)
+x = generate(mask)
 x_sm = model.tokenizer.decode(x)
 x_sm = sm_fix_overlap_notes(x_sm)
 preview_sm(loop_sm(x_sm,4,4))

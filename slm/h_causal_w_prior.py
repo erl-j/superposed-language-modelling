@@ -137,13 +137,13 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
     
     def sample(self, mask, temperature=1.0, top_k=0, top_p=1.0, force_mask=True, reorder_mask=False):
         format_mask = einops.rearrange(self.format_mask, "e a v -> 1 e a v").to(self.device)
-        x = torch.zeros(1, self.n_events, self.n_attributes, dtype=torch.long).to(self.device)
+        x = torch.ones(1, self.n_events, self.n_attributes, dtype=torch.long).to(self.device)
         mask = torch.Tensor(mask).to(self.device).float()
         mask = einops.rearrange(mask, "1 (e a) v -> 1 e a v", e=self.n_events)
         if reorder_mask:
             # sort mask by events sums
             event_mask_sums = mask.sum(-1).sum(-1)
-            mask = mask[torch.arange(mask.shape[0]), event_mask_sums.argsort()]
+            mask = mask[torch.arange(mask.shape[0]), event_mask_sums.argsort(descending=False)]
             print(mask.shape)
   
         for i in tqdm(range(self.n_events)):
@@ -151,19 +151,22 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
             for j in range(self.n_attributes):
                 logits = self.attribute_forward(x[:,:,:-1], event_z)
                 logits = logits[:,i,j]
-                logits = logits / temperature
-                logits = top_k_top_p_filtering(logits, top_k=top_k, top_p=top_p)
-                probs = F.softmax(logits, dim=-1)
                 if force_mask:
-                    probs += 1e-12
-                    # mutliply with format mask
-                    probs = probs * mask[:,i,j]
-                    # normalize
-                    probs = probs /probs.sum(-1, keepdim=True)
-                else:
-                    probs += 1e-12
-                    probs = probs * format_mask[:,i,j]
-                    probs = probs /probs.sum(-1, keepdim=True)
+                    logits[mask[:,i,j] == 0] = -torch.inf
+                logits = top_k_top_p_filtering(logits, top_k=top_k, top_p=top_p)
+                logits = logits / temperature
+                probs = F.softmax(logits, dim=-1)
+                # if force_mask:
+                #     probs += 1e-12
+                #     # mutliply with format mask
+                #     probs = probs * mask[:,i,j]
+                #     # normalize
+                #     probs = probs /probs.sum(-1, keepdim=True)
+                # else:
+                #     # probs += 1e-12
+                #     # probs = probs * format_mask[:,i,j]
+                #     # probs = probs /probs.sum(-1, keepdim=True)
+                #     pass
                 x[:,i,j] = torch.multinomial(probs, 1).squeeze(-1)
         return x
     
@@ -353,6 +356,24 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
     def on_load_checkpoint(self, checkpoint):
         self.configure_optimizers()
 
+    def initialize_from_different_model(self, src_model):
+        for token in self.vocab:
+            if token not in src_model.vocab:
+                print(f"Token {token} not found in source model")
+                continue
+            else:
+                print(f"Transplanting token {token}")
+                src_idx = src_model.vocab.index(token)
+                tgt_idx = self.vocab.index(token)
+                self.embedding_layer.weight.data[:, tgt_idx] = (
+                    src_model.embedding_layer.weight.data[:, src_idx]
+                )
+                self.decoder_output_layer.weight.data[tgt_idx, :] = (
+                    src_model.decoder_output_layer.weight.data[src_idx, :]
+                )
+        # now copy transformer
+        self.transformer.load_state_dict(src_model.transformer.state_dict())
+
 
 if __name__ == "__main__":
     DATASET = "mmd_loops"
@@ -387,37 +408,40 @@ if __name__ == "__main__":
     tokenizer = MergedTokenizer(tokenizer_config)
 
 
-    model = HierarchicalCausalDecoderModel(
-        hidden_size=512,
-        n_heads=8,
-        feed_forward_size=2*512,
-        n_layers=8,
-        vocab=tokenizer.vocab,
-        learning_rate=1e-3,
-        tokenizer_config=tokenizer_config,
-        learning_rate_gamma=0.99,
-        norm_first=True,
-        vocab_theta=False,
+    # model = HierarchicalCausalDecoderModel(
+    #     hidden_size=512,
+    #     n_heads=8,
+    #     feed_forward_size=2*512,
+    #     n_layers=8,
+    #     vocab=tokenizer.vocab,
+    #     learning_rate=1e-3,
+    #     tokenizer_config=tokenizer_config,
+    #     learning_rate_gamma=0.99,
+    #     norm_first=True,
+    #     vocab_theta=False,
+    #     warmup_steps=100,
+    #     annealing_steps=200_000,
+    #     attribute_decoder_layers=2,
+    #     min_lr_ratio=0.01,
+    #     tied_embeddings=False,
+    #     output_bias=False,
+    #     use_adamw=False,
+    #     same_encoder_decoder=True,
+    #     full_mask_rate = 0.5,
+    #     prior_embedding_bias=False,
+    #     tie_embedding_prior=True,
+    #     prior_logit_bias=False,
+    #     sum_event_embedding_in_note_decoder=False,
+    # )
+
+    model = HierarchicalCausalDecoderModel.load_from_checkpoint(
+        "./checkpoints/bright-totem-41/last.ckpt"
+        ,
         warmup_steps=100,
         annealing_steps=200_000,
-        attribute_decoder_layers=2,
-        min_lr_ratio=0.01,
-        tied_embeddings=False,
-        output_bias=False,
-        use_adamw=False,
-        same_encoder_decoder=True,
-        full_mask_rate = 0.5,
-        prior_embedding_bias=False,
-        tie_embedding_prior=True,
-        prior_logit_bias=False,
-        sum_event_embedding_in_note_decoder=False,
+        learning_rate = 1e-5,
+        map_location="cpu"
     )
-
-    # model = HierarchicalCausalDecoderModel.load_from_checkpoint(
-    #     "./checkpoints/celestial-microwave-7/last.ckpt"
-    #     ,
-    #     map_location="cpu"
-    # )
 
     format_mask = torch.Tensor(tokenizer.get_format_mask())
     
