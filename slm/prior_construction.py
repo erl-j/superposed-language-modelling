@@ -51,7 +51,9 @@ elif MODEL == "slm_clean_drums":
     
     model = (
         EncoderOnlyModel.load_from_checkpoint(
-            ROOT_DIR + "checkpoints/sparkling-violet-330/last.ckpt",
+            ROOT_DIR
+            + "checkpoints/sparkling-violet-330/epoch=159-step=7200-val/loss_epoch=0.04531.ckpt",
+            # ROOT_DIR + "checkpoints/generous-donkey-335/last.ckpt",
             map_location=device,
         )
         .to(device)
@@ -59,9 +61,9 @@ elif MODEL == "slm_clean_drums":
     )
     generate = lambda mask: model.generate(
         mask,
-        temperature=0.5,
-        top_p=1.0,
-        attribute_temperature={"velocity": 1.5,"onset/tick":0.5},
+        temperature=1.0,
+        top_p=0.95,
+        # attribute_temperature={"velocity": 1.5,"onset/tick":0.5},
     )[0].argmax(axis=1)
 
 else:
@@ -79,12 +81,12 @@ else:
         top_p=0.99,
         batch_size=1,
         prior_strength=1,
-        attribute_temperature={
-            "pitch": 0.75,
-            "onset/tick": 1.0,
-            "onset/beat": 1.0,
-            "velocity": 1.5,
-        },
+        # attribute_temperature={
+        #     "pitch": 0.75,
+        #     "onset/tick": 1.0,
+        #     "onset/beat": 1.0,
+        #     "velocity": 1.5,
+        # },
     )[0]
 
 
@@ -258,37 +260,39 @@ def basic_arrangement():
     e = []
     # 10 forced drums
     e += [
-        EventConstraint().intersect({"instrument": {"Drums"}}).force_active()
-        for _ in range(40)
+        EventConstraint().force_active()
+        for _ in range(20)
     ]
-    # # at least 10 kicks
-    # e += [
-    #     EventConstraint().intersect({"instrument": {"Drums"}, "pitch": {"36 (Drums)"}}).force_active()
-    #     for _ in range(15)
-    # ]
+    # at least 10 kicks
+    e += [
+        EventConstraint().intersect({"instrument": {"Drums"}, "pitch": {"36 (Drums)"}}).force_active()
+        for _ in range(5)
+    ]
     # at least 4 snares
-    e += [
-        EventConstraint().intersect({"instrument": {"Drums"}, "pitch": {"38 (Drums)"}}).force_active()
-        for _ in range(4)
-    ]
+    # e += [
+    #     EventConstraint().intersect({"instrument": {"Drums"}, "pitch": {"38 (Drums)"}}).force_active()
+    #     for _ in range(4)
+    # ]
     # at least 4 non snares
-    e += [
-        EventConstraint().intersect({"instrument": {"Drums"}, "pitch": DRUM_PITCHES - {"38 (Drums)"}}).force_active()
-        for _ in range(4)
-    ]
+    # e += [
+    #     EventConstraint().intersect({"instrument": {"Drums"}, "pitch": DRUM_PITCHES - {"38 (Drums)"}}).force_active()
+    #     for _ in range(4)
+    # ]
     # # at least ghost snare notes
     # e += [
     #     EventConstraint().intersect({"instrument": {"Drums"}, "pitch": {"38 (Drums)"}, "velocity": {"50"}}).force_active()
     #     for _ in range(4)
     # ]
-    # e += [
-    #     EventConstraint().intersect({"instrument": {"Drums"}, "pitch": {"38 (Drums)"}, "velocity": {"25"}}).force_active()
-    #     for _ in range(4)
-    # ]
+    e += [
+        EventConstraint().intersect({"instrument": {"Drums"}, "pitch": {"38 (Drums)"}, "velocity": {"25"}}).force_active()
+        for _ in range(4)
+    ]
 
     # at least 10 hihats
     e += [
-        EventConstraint().intersect({"instrument": {"Drums"}, "pitch": {"42 (Drums)"}}).force_active()
+        EventConstraint()
+        .intersect({"instrument": {"Drums"}, "pitch": {"42 (Drums)", "46 (Drums)"}})
+        .force_active()
         for _ in range(10)
     ]
 
@@ -334,11 +338,21 @@ def basic_arrangement():
     # ]
 
     # set all offset/beat and offset ticks to none (Drums)
-    e = [ev.intersect({"offset/beat": {"-","none (Drums)"}, "offset/tick": {"-","none (Drums)"}}) for ev in e]
+    e = [
+        ev.intersect(
+            {
+                "offset/beat": {"-", "none (Drums)"},
+                # "offset/tick": {"-", "none (Drums)"},
+                "instrument": {"Drums", "-"},
+                # "pitch": {"-"} | DRUM_PITCHES,
+            }
+        )
+        for ev in e
+    ]
 
     e += [EventConstraint().force_inactive() for _ in range(n_events - len(e))]
     # set tempo and tag
-    e = [ev.intersect({"tempo": {"126", "-"},"tag":{"jazz","-"}}) for ev in e]
+    e = [ev.intersect({"tag": {"funk", "-"}, "tempo": {"126","-"}}) for ev in e]
 
 
 
@@ -351,6 +365,7 @@ e = basic_arrangement()
 mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
 x = generate(mask)
 x_sm = model.tokenizer.decode(x)
+print(x_sm.note_num())
 preview(x_sm)
 
 
