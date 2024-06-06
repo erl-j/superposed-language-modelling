@@ -51,8 +51,10 @@ elif MODEL == "slm_clean_drums":
     
     model = (
         EncoderOnlyModel.load_from_checkpoint(
+            # ROOT_DIR
+            # + "checkpoints/sparkling-violet-330/epoch=159-step=7200-val/loss_epoch=0.04531.ckpt",
             ROOT_DIR
-            + "checkpoints/sparkling-violet-330/epoch=159-step=7200-val/loss_epoch=0.04531.ckpt",
+            + "checkpoints/kind-sun-341/last.ckpt",
             # ROOT_DIR + "checkpoints/generous-donkey-335/last.ckpt",
             map_location=device,
         )
@@ -342,7 +344,7 @@ def basic_arrangement():
         ev.intersect(
             {
                 "offset/beat": {"-", "none (Drums)"},
-                # "offset/tick": {"-", "none (Drums)"},
+                "offset/tick": {"-", "none (Drums)"},
                 "instrument": {"Drums", "-"},
                 # "pitch": {"-"} | DRUM_PITCHES,
             }
@@ -352,7 +354,7 @@ def basic_arrangement():
 
     e += [EventConstraint().force_inactive() for _ in range(n_events - len(e))]
     # set tempo and tag
-    e = [ev.intersect({"tag": {"funk", "-"}, "tempo": {"126","-"}}) for ev in e]
+    e = [ev.intersect({"tag": {"electronic", "-"}, "tempo": {"126","-"}}) for ev in e]
 
 
 
@@ -367,6 +369,7 @@ x = generate(mask)
 x_sm = model.tokenizer.decode(x)
 print(x_sm.note_num())
 preview(x_sm)
+
 
 
 #%%

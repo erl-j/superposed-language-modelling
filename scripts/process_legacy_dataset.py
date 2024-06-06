@@ -7,6 +7,10 @@ from rich.progress import track
 import symusic
 import torch
 from tqdm import tqdm
+# add slm to path
+import sys
+sys.path.append("../slm")
+import math
 #%%
 
 # example_records = torch.load("./data/mmd_loops/val_midi_records_unique_pr.pt")
@@ -16,8 +20,8 @@ from tqdm import tqdm
 
 #%%
 
-data_path = "../data/harmonic"
-NUM_BARS = 8
+data_path = "../data/clean_drums"
+NUM_BARS = 4
 
 # load pickle
 pickle_path = os.path.join(data_path, "clean.pkl")
@@ -63,20 +67,90 @@ for i in tqdm(range(len(data))):
     md5 = i
     midi = midi_sm
     tag = meta[path]["tags"]
-    records.append({"path": path, "md5": md5, "genre": tag, "midi": midi, "ticks": midi_sm.end()})
+    records.append({"path": path, "md5": md5, "genre": tag, "raw_midi": midi, "ticks": midi_sm.end()})
         
 # %%
 
-# plot histogram of ticks
 import matplotlib.pyplot as plt
 import numpy as np
 
-ticks = [record["ticks"] for record in records]
-plt.hist(ticks, bins=100, range=(0, TPQ * 16 * 4))
-
-records = [{"note_num":record["midi"].note_num(),**record} for record in records]
+ticks = [record["midi"].end() / record["midi"].ticks_per_quarter for record in records]
+plt.hist(ticks, bins=100, range=(0, 16 * 4))
 
 #%%
+
+def crop_sm(sm, num_beats=4):
+    sm = sm.copy()
+    end_4_bars_tick = num_beats * sm.ticks_per_quarter
+    for track in sm.tracks:
+        new_notes = []
+        for note in track.notes:
+            if note.start < end_4_bars_tick:
+                note.duration = min(end_4_bars_tick - note.start, note.duration)
+                new_notes.append(note)
+        track.notes = new_notes
+    return sm
+
+def loop_sm(sm, loop_beats):
+    sm = sm.copy()
+    loop_ticks = loop_beats * sm.ticks_per_quarter
+    for track in sm.tracks:
+        for note in track.notes:
+            new_note = symusic.Note(
+                time=note.start + loop_ticks,
+                pitch=note.pitch,
+                duration=note.duration,
+                velocity=note.velocity,
+            )
+            track.notes.append(new_note)
+    crop_sm(sm, loop_beats*2)
+    return sm
+
+def get_last_onset(sm):
+    last_onset = 0
+    for track in sm.tracks:
+        for note in track.notes:
+            last_onset = max(last_onset, note.start)
+    return last_onset
+
+
+def get_n_beats(sm):
+    last_onset = get_last_onset(sm)
+    last_beat = last_onset / sm.ticks_per_quarter
+    # find closest multiple of 4
+    n_beats = math.ceil(last_beat / 4)*4
+    return n_beats
+
+def loop_crop_to(sm, n_beats):
+    sm = sm.copy()
+    beats = get_n_beats(sm)
+    looped_sm = sm
+    while beats <= n_beats:
+        looped_sm = loop_sm(looped_sm, beats)
+        beats = get_n_beats(looped_sm)
+    looped_sm = crop_sm(looped_sm, n_beats)
+    return looped_sm
+
+def remove_invalid_notes(sm):
+    sm = sm.copy()
+    for track in sm.tracks:
+        new_notes = []
+        for note in track.notes:
+            if note.start >= 0 or note.duration >= 0:
+                new_notes.append(note)
+            else:
+                print(f"Invalid note: {note}")
+        track.notes = new_notes
+    return sm
+
+#%% 
+for i in tqdm(range(len(records))):
+    records[i]["midi"] = loop_crop_to(records[i]["raw_midi"],16)
+    records[i]["midi"] = remove_invalid_notes(records[i]["midi"])
+
+#%%
+records = [{"note_num": record["midi"].note_num(), **record} for record in records]
+
 # plot histogram of note_num
 note_nums = [record["note_num"] for record in records]
 plt.hist(note_nums, bins=100, range=(0, 300))

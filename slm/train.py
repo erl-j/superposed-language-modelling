@@ -853,10 +853,13 @@ class EncoderOnlyModel(pl.LightningModule):
         # )
         return [optimizer], [scheduler]
 
-    def initialize_from_different_model(self, src_model):
+    def initialize_from_different_model(self, src_model, skip_tokens=[]):
         for token in self.vocab:
             if token not in src_model.vocab:
                 print(f"Token {token} not found in source model")
+                continue
+            elif any([token.split(":")[0] in skip for skip in skip_tokens]):
+                print(f"Skipping token {token}")
                 continue
             else:
                 print(f"Transplanting token {token}")
@@ -877,21 +880,21 @@ if __name__ == "__main__":
 
     DATASET = "clean_drums"
 
-    BATCH_SIZE = 80
+    BATCH_SIZE = 400
 
     tag_list = open(f"./data/{DATASET}/tags.txt").read().splitlines()
 
     N_BARS = 4
 
     tokenizer_config = {
-        "ticks_per_beat": 24 if DATASET == "mmd_loops" else 96,
+        "ticks_per_beat": 24 if DATASET == "mmd_loops" else 48,
         "pitch_range": [0, 128],
         "max_beats": 4 * N_BARS,
-        "max_notes": 75 * N_BARS if DATASET == "mmd_loops" else 40 * N_BARS,
+        "max_notes": 75 * N_BARS if DATASET == "mmd_loops" else 32 * N_BARS,
         "min_tempo": 50,
         "max_tempo": 200,
         "n_tempo_bins": 16,
-        "n_velocity_bins": 64,
+        "n_velocity_bins": 32,
         "time_signatures": None,
         "tags": tag_list,
         "shuffle_notes": True,
@@ -912,17 +915,17 @@ if __name__ == "__main__":
     )
 
     model= EncoderOnlyModel(
-        hidden_size=src_model.hparams.hidden_size,
-        n_heads=src_model.hparams.n_heads,
-        feed_forward_size=src_model.hparams.feed_forward_size,
-        n_layers=src_model.hparams.n_layers,
+        hidden_size=256, #src_model.hparams.hidden_size,
+        n_heads=8, #src_model.hparams.n_heads,
+        feed_forward_size=512,#src_model.hparams.feed_forward_size,
+        n_layers=6, #src_model.hparams.n_layers,
         vocab=tokenizer.vocab,
         max_seq_len=src_model.hparams.max_seq_len,
-        learning_rate=src_model.hparams.learning_rate*0.1,
+        learning_rate=src_model.hparams.learning_rate*10.0,
         tokenizer_config=tokenizer_config,
         one_hot_input=src_model.hparams.one_hot_input,
         normalize_by_masking_ratio=src_model.hparams.normalize_by_masking_ratio,
-        learning_rate_gamma=0.99,
+        learning_rate_gamma=0.995,
         norm_first= src_model.hparams.norm_first,
         x_bias = src_model.hparams.x_bias,
         fix_x_bias = src_model.hparams.fix_x_bias,
@@ -936,7 +939,9 @@ if __name__ == "__main__":
         neighbour_superposition = src_model.hparams.neighbour_superposition
     )
 
-    model.initialize_from_different_model(src_model)
+    # model.initialize_from_different_model(src_model, 
+    #                                     #   skip_tokens=["onset/tick", "offset/tick"]
+    #                                       )
 
     mmd_4bar_filter_fn = lambda x: f"n_bars={N_BARS}" in x
 
@@ -946,7 +951,7 @@ if __name__ == "__main__":
         genre_list=tag_list,
         tokenizer=tokenizer,
         transposition_range=[-4, 4] if DATASET == "mmd_loops" or DATASET == "harmonic" else None,
-        min_notes=8 * N_BARS,
+        min_notes=8 * N_BARS if DATASET == "mmd_loops" else 2 * N_BARS,
         max_notes=tokenizer_config["max_notes"],
     )
     # print len of dataset
@@ -957,7 +962,7 @@ if __name__ == "__main__":
         path_filter_fn=mmd_4bar_filter_fn if DATASET == "mmd_loops" else None,
         genre_list=tag_list,
         tokenizer=tokenizer,
-        min_notes=8 * N_BARS,
+        min_notes=8 * N_BARS if DATASET == "mmd_loops" else 2 * N_BARS,
         max_notes=tokenizer_config["max_notes"],
     )
     print(f"Loaded {len(val_ds)} validation records")
@@ -982,7 +987,9 @@ if __name__ == "__main__":
     USE_MLM_BASELINE = False
     
 
-    wandb_logger = WandbLogger(log_model="all", project="slm")
+    wandb_logger = WandbLogger(
+        log_model=False, project="slm",
+    )
     # get name
     name = wandb_logger.experiment.name
 
@@ -994,7 +1001,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[1],
+        devices=[0],
         # precision="16-mixed",
         max_epochs=10_000,
         log_every_n_steps=1,
@@ -1017,6 +1024,7 @@ if __name__ == "__main__":
         logger=wandb_logger,
         gradient_clip_val=1.0,
         # accumulate_grad_batches=4,
+        check_val_every_n_epoch=10,
     )
 
     trainer.fit(
