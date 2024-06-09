@@ -377,19 +377,19 @@ class HierarchicalCausalDecoderModel(pl.LightningModule):
 
 
 if __name__ == "__main__":
-    DATASET = "mmd_loops"
+    DATASET = "clean_drums"
 
-    BATCH_SIZE = 40
+    BATCH_SIZE = 100
 
     tag_list = open(f"./data/{DATASET}/tags.txt").read().splitlines()
 
     N_BARS = 4
 
     tokenizer_config = {
-        "ticks_per_beat": 24,
+        "ticks_per_beat": 24 if DATASET == "mmd_loops" else 48,
         "pitch_range": [0, 128],
         "max_beats": 4 * N_BARS,
-        "max_notes": 75 * N_BARS,
+        "max_notes": 75 * N_BARS if DATASET == "mmd_loops" else 32 * N_BARS,
         "min_tempo": 50,
         "max_tempo": 200,
         "n_tempo_bins": 16,
@@ -409,40 +409,40 @@ if __name__ == "__main__":
     tokenizer = MergedTokenizer(tokenizer_config)
 
 
-    # model = HierarchicalCausalDecoderModel(
-    #     hidden_size=512,
-    #     n_heads=8,
-    #     feed_forward_size=2*512,
-    #     n_layers=8,
-    #     vocab=tokenizer.vocab,
-    #     learning_rate=1e-3,
-    #     tokenizer_config=tokenizer_config,
-    #     learning_rate_gamma=0.99,
-    #     norm_first=True,
-    #     vocab_theta=False,
+    model = HierarchicalCausalDecoderModel(
+        hidden_size=512,
+        n_heads=8,
+        feed_forward_size=2*512,
+        n_layers=8,
+        vocab=tokenizer.vocab,
+        learning_rate=1e-4,
+        tokenizer_config=tokenizer_config,
+        learning_rate_gamma=0.99,
+        norm_first=True,
+        vocab_theta=False,
+        warmup_steps=100,
+        annealing_steps=1_000_000,
+        attribute_decoder_layers=2,
+        min_lr_ratio=0.01,
+        tied_embeddings=False,
+        output_bias=False,
+        use_adamw=False,
+        same_encoder_decoder=True,
+        full_mask_rate = 0.5,
+        prior_embedding_bias=False,
+        tie_embedding_prior=True,
+        prior_logit_bias=False,
+        sum_event_embedding_in_note_decoder=False,
+    )
+
+    # model = HierarchicalCausalDecoderModel.load_from_checkpoint(
+    #     "./checkpoints/bright-totem-41/last.ckpt"
+    #     ,
     #     warmup_steps=100,
     #     annealing_steps=200_000,
-    #     attribute_decoder_layers=2,
-    #     min_lr_ratio=0.01,
-    #     tied_embeddings=False,
-    #     output_bias=False,
-    #     use_adamw=False,
-    #     same_encoder_decoder=True,
-    #     full_mask_rate = 0.5,
-    #     prior_embedding_bias=False,
-    #     tie_embedding_prior=True,
-    #     prior_logit_bias=False,
-    #     sum_event_embedding_in_note_decoder=False,
+    #     learning_rate = 1e-5,
+    #     map_location="cpu"
     # )
-
-    model = HierarchicalCausalDecoderModel.load_from_checkpoint(
-        "./checkpoints/bright-totem-41/last.ckpt"
-        ,
-        warmup_steps=100,
-        annealing_steps=200_000,
-        learning_rate = 1e-5,
-        map_location="cpu"
-    )
 
     format_mask = torch.Tensor(tokenizer.get_format_mask())
     
@@ -458,7 +458,7 @@ if __name__ == "__main__":
         genre_list=tag_list,
         tokenizer=tokenizer,
         transposition_range=[-4, 4] if DATASET == "mmd_loops" or DATASET == "harmonic" else None,
-        min_notes=8 * N_BARS,
+        min_notes=8 * N_BARS if DATASET == "mmd_loops" else 4 * N_BARS,
         max_notes=tokenizer_config["max_notes"],
     )
     # print len of dataset
@@ -469,7 +469,7 @@ if __name__ == "__main__":
         path_filter_fn=mmd_4bar_filter_fn if DATASET == "mmd_loops" else None,
         genre_list=tag_list,
         tokenizer=tokenizer,
-        min_notes=8 * N_BARS,
+        min_notes=8 * N_BARS if DATASET == "mmd_loops" else 4 * N_BARS,
         max_notes=tokenizer_config["max_notes"],
     )
     print(f"Loaded {len(val_ds)} validation records")
@@ -491,7 +491,7 @@ if __name__ == "__main__":
         pin_memory=True,
     )
 
-    wandb_logger = WandbLogger(log_model="all", project="causal-w-prior")
+    wandb_logger = WandbLogger(log_model=False, project="causal-w-prior-drums")
     # get name
     name = wandb_logger.experiment.name
 
@@ -502,7 +502,7 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[1],
+        devices=[0],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[
@@ -519,6 +519,7 @@ if __name__ == "__main__":
         ],
         logger=wandb_logger,
         gradient_clip_val=1.0,
+        check_val_every_n_epoch=10,
     )
 
     trainer.fit(

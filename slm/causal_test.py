@@ -2,7 +2,7 @@
 #from h_causal import HierarchicalCausalDecoderModel
 from h_causal_w_prior import HierarchicalCausalDecoderModel
 
-device = "cuda:5"
+device = "cuda:1"
 # Load the model
 model = HierarchicalCausalDecoderModel.load_from_checkpoint(
     # "../checkpoints/glowing-lion-18/last.ckpt",
@@ -11,22 +11,23 @@ model = HierarchicalCausalDecoderModel.load_from_checkpoint(
     # "../checkpoints/still-microwave-5/last.ckpt",
     # "../checkpoints/eternal-sky-16/last.ckpt",
     # "../checkpoints/hardy-fire-40/last.ckpt",
-    "../checkpoints/hopeful-sun-31/last.ckpt",
     # "../checkpoints/floral-feather-24/last.ckpt",
     # "../checkpoints/bright-totem-41/last.ckpt",
     # "../checkpoints/breezy-sound-29/last.ckpt",
+    # "../checkpoints/hopeful-sun-31/last.ckpt",
+    "../checkpoints/effortless-spaceship-4/last.ckpt",
     map_location=device,
 )
 
 #%%
 mask = model.tokenizer.constraint_mask(
-    tags = ["pop"],
+    tags = ["rock"],
     tempos = ["138"],
-    instruments =["Drums","Bass"],
+    instruments =["Drums"],
     # scale = "G major",
     min_notes=10,
     max_notes=100,
-    min_notes_per_instrument=30
+    min_notes_per_instrument=50
 )[None,:]
 import torch
 mask = torch.Tensor(model.tokenizer.get_format_mask()[None,...]).float() * mask

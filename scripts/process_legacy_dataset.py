@@ -20,8 +20,8 @@ import math
 
 #%%
 
-data_path = "../data/clean_drums"
-NUM_BARS = 4
+data_path = "../data/harmonic"
+NUM_BARS = 8
 
 # load pickle
 pickle_path = os.path.join(data_path, "clean.pkl")
@@ -46,7 +46,7 @@ for i in tqdm(range(len(data))):
     note_seq.midi_io.note_sequence_to_midi_file(data[i]["note_seq"], tmp_midi_fp)
     # load midi with symusic
     midi_sm = symusic.Score(tmp_midi_fp)
-    midi_sm = midi_sm.resample(tpq=TPQ,min_dur=0)
+    midi_sm = midi_sm.resample(tpq=TPQ,min_dur=1)
     original_midi_path = data[i]["path"]
     # path
     # get key signature
@@ -71,42 +71,50 @@ for i in tqdm(range(len(data))):
         
 # %%
 
-import matplotlib.pyplot as plt
-import numpy as np
 
-ticks = [record["midi"].end() / record["midi"].ticks_per_quarter for record in records]
-plt.hist(ticks, bins=100, range=(0, 16 * 4))
-
-#%%
-
-def crop_sm(sm, num_beats=4):
+def crop_sm(sm, n_bars, beats_per_bar):
     sm = sm.copy()
-    end_4_bars_tick = num_beats * sm.ticks_per_quarter
-    for track in sm.tracks:
+    end_tick = n_bars * sm.ticks_per_quarter * beats_per_bar
+    for track_idx in range(len(sm.tracks)):
+        track = sm.tracks[track_idx]
         new_notes = []
         for note in track.notes:
-            if note.start < end_4_bars_tick:
-                note.duration = min(end_4_bars_tick - note.start, note.duration)
+            if note.start < end_tick:
+                # crop duration
+                if note.start + note.duration > end_tick:
+                    note.duration = end_tick - note.start
                 new_notes.append(note)
-        track.notes = new_notes
+        sm.tracks[track_idx].notes = new_notes
     return sm
 
-def loop_sm(sm, loop_beats):
+
+def loop_sm(sm, loop_bars, beats_per_bar):
     sm = sm.copy()
-    loop_ticks = loop_beats * sm.ticks_per_quarter
-    for track in sm.tracks:
-        for note in track.notes:
+    loop_ticks = loop_bars * sm.ticks_per_quarter * beats_per_bar
+    sm = crop_sm(sm, loop_bars, beats_per_bar)
+    for track_idx in range(len(sm.tracks)):
+        new_notes = []
+        for note in sm.tracks[track_idx].notes:
+            old_note = symusic.Note(
+                time=note.start,
+                pitch=note.pitch,
+                duration=note.duration,
+                velocity=note.velocity,
+            )
             new_note = symusic.Note(
                 time=note.start + loop_ticks,
                 pitch=note.pitch,
                 duration=note.duration,
                 velocity=note.velocity,
             )
-            track.notes.append(new_note)
-    crop_sm(sm, loop_beats*2)
+            new_notes.append(old_note)
+            new_notes.append(new_note)
+        sm.tracks[track_idx].notes = new_notes
     return sm
 
+
 def get_last_onset(sm):
+    sm = sm.copy()
     last_onset = 0
     for track in sm.tracks:
         for note in track.notes:
@@ -114,47 +122,112 @@ def get_last_onset(sm):
     return last_onset
 
 
-def get_n_beats(sm):
+def get_n_bars(sm, beats_per_bar=4):
+    sm=sm.copy()
     last_onset = get_last_onset(sm)
-    last_beat = last_onset / sm.ticks_per_quarter
-    # find closest multiple of 4
-    n_beats = math.ceil(last_beat / 4)*4
-    return n_beats
+    n_beats = last_onset / sm.ticks_per_quarter
+    # find closest multiple of 2
+    n_bars = math.ceil(n_beats / beats_per_bar)
+    return n_bars
 
-def loop_crop_to(sm, n_beats):
+
+def loop_crop_to(sm, n_bars, beats_per_bar):
     sm = sm.copy()
-    beats = get_n_beats(sm)
+    old_bars = get_n_bars(sm, beats_per_bar)
     looped_sm = sm
-    while beats <= n_beats:
-        looped_sm = loop_sm(looped_sm, beats)
-        beats = get_n_beats(looped_sm)
-    looped_sm = crop_sm(looped_sm, n_beats)
+    while old_bars <= n_bars:
+        looped_sm = loop_sm(looped_sm, old_bars, beats_per_bar)
+        new_bars = get_n_bars(looped_sm, beats_per_bar)
+        if new_bars == old_bars:
+            break
+        else:
+            old_bars = new_bars
+    looped_sm = crop_sm(looped_sm, 4, beats_per_bar)
     return looped_sm
+
 
 def remove_invalid_notes(sm):
     sm = sm.copy()
-    for track in sm.tracks:
+    for track_idx in range(len(sm.tracks)):
         new_notes = []
-        for note in track.notes:
+        for note in sm.tracks[track_idx].notes:
             if note.start >= 0 or note.duration >= 0:
                 new_notes.append(note)
             else:
                 print(f"Invalid note: {note}")
-        track.notes = new_notes
+        sm.tracks[track_idx].notes=new_notes
     return sm
 
-#%% 
+
 for i in tqdm(range(len(records))):
-    records[i]["midi"] = loop_crop_to(records[i]["raw_midi"],16)
+    records[i]["midi"] = loop_crop_to(records[i]["raw_midi"], NUM_BARS, beats_per_bar=4)
     records[i]["midi"] = remove_invalid_notes(records[i]["midi"])
 
+# preview midi for 10 random records
+
+# from util import preview_sm
+# record = records[2]
+# raw_sm = record["raw_midi"]
+# # print n_beats
+# # get last onset
+# print(f"last_onset: {get_last_onset(raw_sm)}")
+# print(f"n_bars {get_n_bars(raw_sm)}")
+
+# # crop to 4 beats
+
+
+# looped_sm = loop_crop_to(raw_sm, 2, beats_per_bar=4)
+
+# print(f"last_onset: {get_last_onset(looped_sm)}")
+# print(f"n_bars {get_n_bars(looped_sm)}")
+
+# preview_sm(raw_sm)
+# preview_sm(looped_sm)
+# crop 2 beats
+# croped_sm = crop_sm(raw_sm, 2, beats_per_bar=4)
+# print(f"n_bars {get_n_bars(croped_sm)}")
+# print(f"last_onset: {get_last_onset(croped_sm)}")
+
+
+# # try loop crop to 16 beats
+# new_sm = loop_crop_to(raw_sm, 16)
+# print(get_n_beats(new_sm))
+# preview_sm(raw_sm)
+# preview_sm(new_sm)
+
 #%%
-records = [{"note_num": record["midi"].note_num(), **record} for record in records]
+
+#%%
+
+#%%
+
+
+
+#%%
+import matplotlib.pyplot as plt
+records = [{"note_num": record["raw_midi"].note_num(), **record} for record in records]
 
 # plot histogram of note_num
 note_nums = [record["note_num"] for record in records]
-plt.hist(note_nums, bins=100, range=(0, 300))
+plt.hist(note_nums, bins=100, range=(0, 30))
 plt.show()
+
+# plot note num vs ticks
+note_nums = [record["note_num"] for record in records]
+beats = [get_last_onset(record["raw_midi"])
+         /record["raw_midi"].ticks_per_quarter for record in records]
+
+plt.scatter(note_nums, beats)
+# set y lim from 0 to 20
+plt.ylim(0, 32)
+plt.show()
+
+# plot histogram of num ticks
+beats = [get_last_onset(record["raw_midi"])
+         /record["midi"].ticks_per_quarter for record in records]
+plt.hist(beats, bins=100)
+plt.show()
+
 
 #%%
 
