@@ -227,6 +227,11 @@ class EventConstraint:
             assert  len(self.a[key])>0, f"Empty set for key {key}, constraint {constraint}, attributes {self.a}"
         return self
     
+    def union(self,constraint):
+        for key in constraint:
+            self.a[key] = self.a[key] | constraint[key]
+        return self
+    
     def is_inactive(self):
         for key in self.a:
             if self.a[key] != {"-"}:
@@ -245,7 +250,7 @@ class EventConstraint:
     
     def force_inactive(self):
         self.intersect(self.not_active)
-        return self
+        return self        
     
     def to_dict(self):
         return self.a
@@ -273,7 +278,7 @@ def basic_piano_arrangement():
     e += [
         EventConstraint().intersect({"instrument": {"Piano"}, "onset/beat": {"0"}, "offset/beat": {"2"}}).force_active()
     ]
-    
+
 
     # tempo to 126
     e = [ev.intersect({"tempo": {"126","-"}}) for ev in e]
@@ -433,7 +438,83 @@ x_sm = model.tokenizer.decode(x)
 print(x_sm.note_num())
 preview(x_sm)
 
+#%%
+# add more notes
+e = sm_to_events(x_sm)
+def add_more_notes(e):
+    # remove empty events
+    e = [event for event in e if not event.is_inactive()]
+    # add 10 optional notes
+    e += [EventConstraint().intersect({"instrument": {"Piano"}, "pitch": {str(p) for p in range(40, 50)}}) for _ in range(10)]
+    # pad with empty events
+    e += [EventConstraint().force_inactive() for _ in range(n_events - len(e))]
+    return e
 
+e = add_more_notes(e)
+mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
+x = generate(mask)
+x_sm = model.tokenizer.decode(x)
+print(x_sm.note_num())
+preview(x_sm)
+
+#%%
+# resample offsets
+e = sm_to_events(x_sm)
+def resample_offsets(e):
+    # remove empty events
+    e = [event for event in e if not event.is_inactive()]
+    # resample offsets
+    e = [EventConstraint().intersect({"instrument":event.a["instrument"], 
+                                    "pitch":event.a["pitch"],
+                                    "onset/beat":event.a["onset/beat"],
+                                    "onset/tick":event.a["onset/tick"],
+                                    "tempo":event.a["tempo"],
+                                      }).force_active() for event in e]
+    # pad with empty events
+    e += [EventConstraint().force_inactive() for _ in range(n_events - len(e))]
+    return e
+e = resample_offsets(e)
+mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
+x = generate(mask)
+x_sm = model.tokenizer.decode(x)
+print(x_sm.note_num())
+preview(x_sm)
+
+
+#%% make sparse
+e = sm_to_events(x_sm)
+
+def make_sparse(e):
+    # remove empty events
+    e = [event for event in e if not event.is_inactive()]
+    # make every note optional
+    e = [event.union({
+    "instrument": {"-"},
+    "pitch": {"-"},
+    "onset/beat": {"-"},
+    "onset/tick": {"-"},
+    "tempo": {"-"},
+    "tag": {"-"},
+    "velocity": {"-"},
+    "offset/beat": {"-"},
+    "offset/tick": {"-"}}) for event in e]
+
+    # force random 5 notes to be active
+    for i in range(5):
+        e[i] = e[i].force_active()
+
+
+
+    # pad with empty events
+    e += [EventConstraint().force_inactive() for _ in range(n_events - len(e))]
+    return e
+
+e = make_sparse(e)
+mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
+x = generate(mask)
+x_sm = model.tokenizer.decode(x)
+print(x_sm.note_num())
+preview(x_sm)
 
 #%%
 
