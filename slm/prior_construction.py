@@ -14,7 +14,7 @@ import torch
 device = "cuda:0"
 ROOT_DIR = "../"
 
-MODEL = "slm_harmonic"
+MODEL = "slm_clean_drums"
 
 OUTPUT_DIR = ROOT_DIR + "artefacts/examples_4"
 TMP_DIR = ROOT_DIR + "artefacts/tmp"
@@ -43,7 +43,7 @@ elif MODEL == "slm_harmonic":
         .to(device)
         .eval()
     )
-    generate = lambda mask: model.generate(mask, temperature=1.0, top_p=0.98,
+    generate = lambda mask: model.generate(mask, temperature=1.0, top_p=0.95,
                                            )[0].argmax(
         axis=1
     )
@@ -68,7 +68,7 @@ elif MODEL == "slm_clean_drums":
     generate = lambda mask: model.generate(
         mask,
         temperature=1.0,
-        top_p=1.0,
+        top_p=0.98,
         # attribute_temperature={"velocity": 1.5,"onset/tick":0.5},
     )[0].argmax(axis=1)
 
@@ -84,7 +84,7 @@ else:
         mask,
         enforce_prior=True,
         nb_steps=100,
-        top_p=0.95,
+        top_p=0.98,
         batch_size=1,
         prior_strength=1,
         # attribute_temperature={
@@ -271,17 +271,17 @@ def basic_piano_arrangement():
     e = []
     # 10 forced piano notes
     e += [
-        EventConstraint().intersect({"instrument": {"Piano"}}).force_active()
-        for _ in range(30)
+        EventConstraint().intersect({"instrument":{"Piano"}}).force_active()
+        for _ in range(40)
     ]
-    # make first note 2 beats long
+    #make first note 2 beats long
     e += [
-        EventConstraint().intersect({"instrument": {"Piano"}, "onset/beat": {"0"}, "offset/beat": {"2"}}).force_active()
+        EventConstraint().intersect({ "instrument":{"Piano"}, "onset/beat": {"0"}, "offset/beat": {"2"}}).force_active()
     ]
 
 
     # tempo to 126
-    e = [ev.intersect({"tempo": {"126","-"}}) for ev in e]
+    e = [ev.intersect({"tempo":{"95","-"}}) for ev in e]
     # tag to classical
     e = [ev.intersect({"tag": {"emotional","-"}}) for ev in e]
     # pad
@@ -294,12 +294,12 @@ def basic_arrangement():
     # 10 forced drums
     e += [
         EventConstraint().force_active()
-        for _ in range(20)
+        for _ in range(30)
     ]
     # at least 10 kicks
     e += [
         EventConstraint().intersect({"instrument": {"Drums"}, "pitch": {"36 (Drums)"}}).force_active()
-        for _ in range(5)
+        for _ in range(8)
     ]
     #at least 4 snares
     e += [
@@ -421,7 +421,7 @@ def basic_arrangement():
 
     e += [EventConstraint().force_inactive() for _ in range(n_events - len(e))]
     # set tempo and tag
-    e = [ev.intersect({"tag": {"rock", "-"}, "tempo": {"105","-"}}) for ev in e]
+    e = [ev.intersect({"tag": {"drill", "-"}, "tempo": {"95","-"}}) for ev in e]
 
 
 
@@ -445,7 +445,7 @@ def add_more_notes(e):
     # remove empty events
     e = [event for event in e if not event.is_inactive()]
     # add 10 optional notes
-    e += [EventConstraint().intersect({"instrument": {"Piano"}, "pitch": {str(p) for p in range(40, 50)}}) for _ in range(10)]
+    e += [EventConstraint().intersect({"instrument": {"Piano"}, "pitch": {str(p) for p in range(70, 100)}}) for _ in range(10)]
     # pad with empty events
     e += [EventConstraint().force_inactive() for _ in range(n_events - len(e))]
     return e
@@ -478,6 +478,8 @@ mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
 x = generate(mask)
 x_sm = model.tokenizer.decode(x)
 print(x_sm.note_num())
+
+#%%
 preview(x_sm)
 
 
@@ -500,18 +502,66 @@ def make_sparse(e):
     "offset/tick": {"-"}}) for event in e]
 
     # force random 5 notes to be active
-    for i in range(5):
-        e[i] = e[i].force_active()
-
-
-
+    # for i in range(5):
+    #     e[i] = e[i].force_active()
     # pad with empty events
     e += [EventConstraint().force_inactive() for _ in range(n_events - len(e))]
     return e
 
 e = make_sparse(e)
+
+for ev in e:
+    print(ev.a)
+mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
+undef_probs = model.sparsify(mask, temperature=1.0, top_p=1.0)
+
+active_prob_sort = torch.argsort(undef_probs)
+# sort events
+e2 = [e[i] for i in active_prob_sort]
+# take only top 10
+e2 = e2[:20]
+for ev in e2:
+    print(ev.a)
+# force all to be active
+e2 = [ev.force_active() for ev in e2]
+# pad with empty events
+e2 += [EventConstraint().force_inactive() for _ in range(n_events - len(e2))]
+
+mask = model.tokenizer.create_mask([ev.to_dict() for ev in e2]).to(device)
+# 
+# argmax
+x = mask.argmax(axis=-1)
+x_sm2 = model.tokenizer.decode(x)
+print(x_sm2.note_num())
+preview(x_sm2)
+
+e = sm_to_events(x_sm2)
+
+
+def add_more_notes(e):
+    # remove empty events
+    e = [event for event in e if not event.is_inactive()]
+    # add 10 optional notes
+    e += [
+        EventConstraint().intersect(
+            {"instrument": {"Piano"}, "pitch": {str(p) for p in range(30, 100)}}
+        )
+        for _ in range(40)
+    ]
+    # pad with empty events
+    e += [EventConstraint().force_inactive() for _ in range(n_events - len(e))]
+    return e
+
+
+e = add_more_notes(e)
 mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
 x = generate(mask)
+x_sm3 = model.tokenizer.decode(x)
+print(x_sm3.note_num())
+preview(x_sm3)
+
+
+#%%
 x_sm = model.tokenizer.decode(x)
 print(x_sm.note_num())
 preview(x_sm)

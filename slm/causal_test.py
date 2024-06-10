@@ -21,7 +21,7 @@ model = HierarchicalCausalDecoderModel.load_from_checkpoint(
 
 #%%
 mask = model.tokenizer.constraint_mask(
-    tags = ["rock"],
+    tags = ["funk"],
     tempos = ["138"],
     instruments =["Drums"],
     # scale = "G major",
@@ -31,7 +31,7 @@ mask = model.tokenizer.constraint_mask(
 )[None,:]
 import torch
 mask = torch.Tensor(model.tokenizer.get_format_mask()[None,...]).float() * mask
-x = model.sample(mask,temperature=0.95, top_p=1.0, force_mask=True, reorder_mask=True)
+x = model.sample(mask,temperature=0.98, top_p=1.0, force_mask=True, reorder_mask=True)
 
 #%%
 tokens=model.tokenizer.indices_to_tokens(x.flatten())

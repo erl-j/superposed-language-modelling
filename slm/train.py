@@ -600,6 +600,62 @@ class EncoderOnlyModel(pl.LightningModule):
                         break
         return x
     
+    @torch.no_grad()
+    def sparsify(self, x, temperature=1, top_p=1, top_k=0, steps = 100, pmax=None, pmin=None, alpha=None):
+        self.eval()
+        x = x
+        # multiply by format mask
+        x = x * self.format_mask[None, ...].to(x.device)
+
+        x = self.tokenizer.collapse_undefined_attributes(x)
+
+
+        batch, time_attr, ft = x.shape
+
+        total_tokens = time_attr
+        # count number of known tokens
+        masked_tokens = (x.sum(-1) > 1).sum().int().item()
+        # find masking ratio
+        masking_ratio = masked_tokens / total_tokens
+
+
+        # with tqdm(total=masked_tokens) as pbar:
+        #     while True:
+
+        logits = self(x.float()).detach()
+
+        # invert probs
+        # flatten
+        flat_logits = einops.rearrange(logits, "b ta v -> (b ta) v")
+
+        flat_logits = top_k_top_p_filtering(flat_logits, top_k=top_k, top_p=top_p)
+
+        t = temperature
+        flat_probs = F.softmax(flat_logits / t, dim=-1)
+
+        flat_x = einops.rearrange(x, "b ta v -> (b ta) v")
+
+        if self.standard_mlm_forward:
+            flat_probs[flat_x < 0.5] = 0
+
+        # renormalize
+        flat_probs = flat_probs / flat_probs.sum(dim=-1, keepdim=True)
+
+        probs = einops.rearrange(flat_probs, "(b e a) v -> b e a v", b=batch, e=self.tokenizer.config["max_notes"], a=self.n_attributes)
+
+        logits = einops.rearrange(flat_logits, "(b e a) v -> b e a v", b=batch, e=self.tokenizer.config["max_notes"], a=self.n_attributes)
+        # get indices of instrument "-" token
+        probe_attribute = "instrument"
+        probe_attribute_idx = self.tokenizer.note_attribute_order.index(probe_attribute)
+        undef_token_idx = self.tokenizer.token2idx[f"{probe_attribute}:-"]
+        undef_probs =  probs[:, :, probe_attribute_idx, undef_token_idx]
+        # plot
+        plt.plot(undef_probs[0].detach().cpu())
+        plt.show()
+
+        return undef_probs[0]
+
+    
 
     def get_attention_pattern(self, x, sampling_steps=None, temperature=1, top_p=1, top_k=0, order="random", typical_sampling_t=-1, temperature_decay=False, min_temperature=0.8):
         if sampling_steps is None:
