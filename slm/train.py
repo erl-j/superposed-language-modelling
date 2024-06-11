@@ -934,7 +934,7 @@ class EncoderOnlyModel(pl.LightningModule):
 
 if __name__ == "__main__":
 
-    DATASET = "harmonic"
+    DATASET = "clean_drums"
 
     BATCH_SIZE = 100
 
@@ -981,7 +981,7 @@ if __name__ == "__main__":
         tokenizer_config=tokenizer_config,
         one_hot_input=src_model.hparams.one_hot_input,
         normalize_by_masking_ratio=src_model.hparams.normalize_by_masking_ratio,
-        learning_rate_gamma=0.995,
+        learning_rate_gamma=0.9999,
         norm_first= src_model.hparams.norm_first,
         x_bias = src_model.hparams.x_bias,
         fix_x_bias = src_model.hparams.fix_x_bias,

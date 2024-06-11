@@ -531,20 +531,26 @@ class SimplexDiffusionModel(pl.LightningModule):
     #         self.decoder_output_layer.bias.data = other_model.decoder_output_layer.bias.data
     #     self.transformer.load_state_dict(other_model.transformer.state_dict())
 
-    def initialize_from_different_model(self, src_model):
+    def initialize_from_different_model(self, src_model, skip_tokens=[]):
         for token in self.vocab:
             if token not in src_model.vocab:
                 print(f"Token {token} not found in source model")
+                continue
+            elif any([token.split(":")[0] in skip for skip in skip_tokens]):
+                print(f"Skipping token {token}")
                 continue
             else:
                 print(f"Transplanting token {token}")
                 src_idx = src_model.vocab.index(token)
                 tgt_idx = self.vocab.index(token)
-                self.embedding_layer.weight.data[:,tgt_idx] = src_model.embedding_layer.weight.data[:,src_idx]
-                self.decoder_output_layer.weight.data[tgt_idx,:] = src_model.decoder_output_layer.weight.data[src_idx,:]
+                self.embedding_layer.weight.data[:, tgt_idx] = (
+                    src_model.embedding_layer.weight.data[:, src_idx]
+                )
+                self.decoder_output_layer.weight.data[tgt_idx, :] = (
+                    src_model.decoder_output_layer.weight.data[src_idx, :]
+                )
         # now copy transformer
         self.transformer.load_state_dict(src_model.transformer.state_dict())
-
 
     def configure_optimizers(self):
         # learning rate decay
@@ -556,7 +562,7 @@ class SimplexDiffusionModel(pl.LightningModule):
 
 if __name__ == "__main__":
 
-    DATASET = "harmonic"
+    DATASET = "clean_drums"
 
     BATCH_SIZE = 200
 
@@ -587,32 +593,38 @@ if __name__ == "__main__":
 
     tokenizer = MergedTokenizer(tokenizer_config)
 
-    model = SimplexDiffusionModel(
-        hidden_size=512,
-        n_heads=4,
-        feed_forward_size=2 * 512,
-        n_layers=6,
-        vocab=tokenizer.vocab,
-        max_seq_len=tokenizer.total_len,
-        learning_rate=1e-3,
-        tokenizer_config=tokenizer_config,
-        learning_rate_gamma=0.99,
-        norm_first=True,
-        k=5.0,
-        beta_schedule="cosine",
-        activation="gelu",
-        output_bias=False,
-        format_mask_on_probs=True
+    src_model = SimplexDiffusionModel.load_from_checkpoint(
+                checkpoint_path = "./checkpoints/dark-sky-67/last.ckpt",
+                map_location="cpu"
     )
 
-    # src_model = SimplexDiffusionModel.load_from_checkpoint(
-    #             checkpoint_path = "./checkpoints/dark-sky-67/last.ckpt",
-    #             map_location="cpu"
-    # )
+    model = SimplexDiffusionModel(
+        hidden_size=src_model.hparams.hidden_size,
+        n_heads=src_model.hparams.n_heads,
+        feed_forward_size=src_model.hparams.feed_forward_size,
+        n_layers=src_model.hparams.n_layers,
+        vocab=tokenizer.vocab,
+        max_seq_len=tokenizer.total_len,
+        learning_rate=src_model.hparams.learning_rate*0.1,
+        tokenizer_config=tokenizer_config,
+        learning_rate_gamma=0.9999,
+        norm_first=src_model.hparams.norm_first,
+        k=src_model.hparams.k,
+        beta_schedule=src_model.hparams.beta_schedule,
+        activation=src_model.hparams.activation,
+        output_bias=src_model.hparams.output_bias,
+        format_mask_on_probs=src_model.hparams.format_mask_on_probs,
+    )
 
-    # model.initialize_from_different_model(
-    #     src_model
-    # )
+    src_model = SimplexDiffusionModel.load_from_checkpoint(
+                checkpoint_path = "./checkpoints/dark-sky-67/last.ckpt",
+                map_location="cpu"
+    )
+
+    model.initialize_from_different_model(
+        src_model,
+        # skip_tokens=["onset/tick", "offset/tick"]
+    )
 
     mmd_4bar_filter_fn = lambda x: f"n_bars={N_BARS}" in x
 
@@ -655,20 +667,20 @@ if __name__ == "__main__":
         pin_memory=True,
     )
 
-    wandb_logger = WandbLogger(log_model="all", project="simplex-diffusion")
+    wandb_logger = WandbLogger(log_model=False, project="simplex-diffusion-ft")
     # get name
     name = wandb_logger.experiment.name
 
     logger = logging.getLogger("wandb")
     logger.setLevel(logging.ERROR)
-    wandb_logger.watch(model,log="all", log_freq=500)
+    # wandb_logger.watch(model,log="gradients", log_freq=500)
 
     progress_bar_callback = RichProgressBar(refresh_rate=1)
 
 
     trainer = pl.Trainer(
         accelerator="gpu",
-        devices=[6],
+        devices=[2],
         max_epochs=10_000,
         log_every_n_steps=1,
         callbacks=[
@@ -681,11 +693,11 @@ if __name__ == "__main__":
                 save_top_k=3,
                 save_last=True,
                 filename="{epoch}-{step}-{val/loss_epoch:.5f}",
-                every_n_epochs=1 if DATASET == "mmd_loops" else 20,
             ),
         ],
         logger=wandb_logger,
         gradient_clip_val=1.0,
+        check_val_every_n_epoch=1 if DATASET == "mmd_loops" else 20,
         # accumulate_grad_batches=1,
     )
 

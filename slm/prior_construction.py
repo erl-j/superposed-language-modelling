@@ -14,7 +14,7 @@ import torch
 device = "cuda:0"
 ROOT_DIR = "../"
 
-MODEL = "slm_clean_drums"
+MODEL = "symplex"
 
 OUTPUT_DIR = ROOT_DIR + "artefacts/examples_4"
 TMP_DIR = ROOT_DIR + "artefacts/tmp"
@@ -37,7 +37,8 @@ elif MODEL == "slm_harmonic":
     model = (
         EncoderOnlyModel.load_from_checkpoint(
             # ROOT_DIR + "checkpoints/ruby-surf-331/epoch=1119-step=17920-val/loss_epoch=0.03922.ckpt",
-            ROOT_DIR + "checkpoints/fanciful-star-356/last.ckpt",
+            ROOT_DIR
+            + "checkpoints/fanciful-star-356/epoch=1199-step=81600-val/loss_epoch=0.10647.ckpt",
             map_location=device,
         )
         .to(device)
@@ -56,7 +57,9 @@ elif MODEL == "slm_clean_drums":
             # + "checkpoints/sparkling-violet-330/epoch=159-step=7200-val/loss_epoch=0.04531.ckpt",
             # ROOT_DIR
             # + "checkpoints/fresh-grass-346/last.ckpt",
-            ROOT_DIR + "checkpoints/comfy-morning-351/last.ckpt",
+            ROOT_DIR
+            + "checkpoints/comfy-morning-351/epoch=2199-step=288200-val/loss_epoch=0.11651.ckpt",
+            # ROOT_DIR + "checkpoints/vocal-energy-350/last.ckpt",
             # ROOT_DIR +"checkpoints/magic-star-347/last.ckpt",
             # ROOT_DIR + "checkpoints/bumbling-wave-348/last.ckpt",
             # ROOT_DIR + "checkpoints/generous-donkey-335/last.ckpt",
@@ -68,14 +71,15 @@ elif MODEL == "slm_clean_drums":
     generate = lambda mask: model.generate(
         mask,
         temperature=1.0,
-        top_p=0.98,
+        top_p=0.99,
         # attribute_temperature={"velocity": 1.5,"onset/tick":0.5},
     )[0].argmax(axis=1)
 
 else:
     model = SimplexDiffusionModel.load_from_checkpoint(
-        "../checkpoints/dark-sky-67/last.ckpt", map_location=device
-    )
+        # "../checkpoints/dark-sky-67/last.ckpt", map_location=device
+        f"../checkpoints/valiant-sea-3/last.ckpt",
+    ).to(device)
     # model = SimplexDiffusionModel.load_from_checkpoint(
     #     "../checkpoints/flowing-paper-64/last.ckpt", map_location=device
     # )
@@ -84,7 +88,7 @@ else:
         mask,
         enforce_prior=True,
         nb_steps=100,
-        top_p=0.98,
+        top_p=0.99,
         batch_size=1,
         prior_strength=1,
         # attribute_temperature={
@@ -266,24 +270,37 @@ def scale_constraint(scale,pitch_range):
 
 #%%
 
+def tempo_constraint(tempo):
+    # find tempo that is closest to the given tempo
+    tempos = list(str(t) for t in ALL_TEMPOS)
+    tempo = min(tempos, key=lambda x: abs(int(x) - tempo))
+    return {"tempo": {tempo, "-"}}
+
+
 def basic_piano_arrangement():
 
     e = []
     # 10 forced piano notes
     e += [
         EventConstraint().intersect({"instrument":{"Piano"}}).force_active()
-        for _ in range(40)
+        for _ in range(60)
     ]
     #make first note 2 beats long
     e += [
         EventConstraint().intersect({ "instrument":{"Piano"}, "onset/beat": {"0"}, "offset/beat": {"2"}}).force_active()
     ]
 
+    # add bass pitch at 36
+    e += [
+        EventConstraint().intersect({"instrument": {"Piano"}, "pitch": {"48"}, "onset/beat":{"0"}, "offset/beat":{"1","2","3"}}).force_active()
+    ]
 
     # tempo to 126
     e = [ev.intersect({"tempo":{"95","-"}}) for ev in e]
     # tag to classical
     e = [ev.intersect({"tag": {"emotional","-"}}) for ev in e]
+    # limit to c major scale
+    e = [ev.intersect(scale_constraint("C major", (30, 100))) for ev in e]
     # pad
     e += [EventConstraint().force_inactive() for _ in range(n_events - len(e))]
     return e
@@ -294,16 +311,16 @@ def basic_arrangement():
     # 10 forced drums
     e += [
         EventConstraint().force_active()
-        for _ in range(30)
+        for _ in range(50)
     ]
     # at least 10 kicks
-    e += [
-        EventConstraint().intersect({"instrument": {"Drums"}, "pitch": {"36 (Drums)"}}).force_active()
-        for _ in range(8)
-    ]
+    # e += [
+    #     EventConstraint().intersect({"instrument": {"Drums"}, "pitch": {"36 (Drums)"}}).force_active()
+    #     for _ in range(8)
+    # ]
     #at least 4 snares
     e += [
-        EventConstraint().intersect({"instrument": {"Drums"}, "pitch": {"37 (Drums)"}}).force_active()
+        EventConstraint().intersect({"instrument": {"Drums"}, "pitch": {"38 (Drums)"}}).force_active()
         for _ in range(4)
     ]
     # at least 4 non snares
@@ -312,10 +329,10 @@ def basic_arrangement():
     #     for _ in range(4)
     # ]
     # at least ghost snare notes
-    e += [
-        EventConstraint().intersect({"instrument": {"Drums"}, "pitch": {"38 (Drums)"}, "velocity": {"50"}}).force_active()
-        for _ in range(10)
-    ]
+    # e += [
+    #     EventConstraint().intersect({"instrument": {"Drums"}, "pitch": {"38 (Drums)"}, "velocity": {"50"}}).force_active()
+    #     for _ in range(10)
+    # ]
     e += [
         EventConstraint()
         .intersect(
@@ -330,10 +347,10 @@ def basic_arrangement():
     ]
 
     # add 2 toms
-    e += [
-        EventConstraint().intersect({"instrument": {"Drums"}, "pitch": {"45 (Drums)","47 (Drums)"}}).force_active()
-        for _ in range(2)
-    ]
+    # e += [
+    #     EventConstraint().intersect({"instrument": {"Drums"}, "pitch": {"45 (Drums)","47 (Drums)"}}).force_active()
+    #     for _ in range(2)
+    # ]
 
     #at least 20 toms
     # e += [
@@ -410,9 +427,9 @@ def basic_arrangement():
     e = [
         ev.intersect(
             {
-                # "offset/beat": {"-", "none (Drums)"},
-                # "offset/tick": {"-", "none (Drums)"},
-                # "instrument": {"Drums", "-"},
+                "offset/beat": {"-", "none (Drums)"},
+                "offset/tick": {"-", "none (Drums)"},
+                "instrument": {"Drums", "-"},
                 # "pitch": {"-"} | DRUM_PITCHES,
             }
         )
@@ -421,7 +438,7 @@ def basic_arrangement():
 
     e += [EventConstraint().force_inactive() for _ in range(n_events - len(e))]
     # set tempo and tag
-    e = [ev.intersect({"tag": {"drill", "-"}, "tempo": {"95","-"}}) for ev in e]
+    e = [ev.intersect({"tag": {"rock", "-"}} | tempo_constraint(126)) for ev in e]
 
 
 
@@ -544,7 +561,8 @@ def add_more_notes(e):
     # add 10 optional notes
     e += [
         EventConstraint().intersect(
-            {"instrument": {"Piano"}, "pitch": {str(p) for p in range(30, 100)}}
+            {"instrument":{"Drums"}}
+            # {"instrument": {"Piano"}, "pitch": {str(p) for p in range(30, 100)}}
         )
         for _ in range(40)
     ]
@@ -706,15 +724,23 @@ def add_tom_fill(e):
     # remove drums in last 4 beats
     e = [e for e in e if not (e.a["instrument"] == {"Drums"} and e.a["onset/beat"] & {"12","13","14","15"})]
     # add 3 toms
-    e += [EventConstraint().intersect({"instrument": {"Drums","-"},"pitch": {"43 (Drums)","-"}}).force_active() for _ in range(3)]
-
-    # add optional notes
     e += [
-        EventConstraint().intersect(
-            {"instrument": {"Drums", "-"}, "onset/beat": {"12", "13", "14", "15", "-"}}
+        EventConstraint()
+        .intersect(
+            {
+                "instrument": {"Drums", "-"},
+                # "pitch": {"43 (Drums)", "45 (Drums)", "47 (Drums)", "-"},
+                "onset/beat": {"12", "13", "14", "15", "-"},
+            }
         )
-        for _ in range(15)
+        .force_active()
+        for _ in range(10)
     ]
+    # add 10 optional notes
+    e += [EventConstraint().intersect({"instrument": {"Drums","-"},
+                                       "onset/beat": {"12", "13", "14", "15", "-"}})
+                                         for _ in range(10)]
+
     return e
 
 e = sm_to_events(x_sm)
