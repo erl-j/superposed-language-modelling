@@ -14,7 +14,7 @@ import torch
 device = "cuda:6"
 ROOT_DIR = "../"
 
-MODEL = "slm_clean_drums"
+MODEL = "slm"
 
 OUTPUT_DIR = ROOT_DIR + "artefacts/examples_4"
 TMP_DIR = ROOT_DIR + "artefacts/tmp"
@@ -30,9 +30,13 @@ if MODEL == "slm":
         .to(device)
         .eval()
     )
-    generate = lambda mask: model.generate(mask, temperature=1.0, top_p=0.95)[0].argmax(
-        axis=1
-    )
+    def generate(mask,temperature=1.0,top_p=1.0,attribute_temperature=None): 
+        return model.generate(
+        mask,
+        temperature=temperature,
+        top_p=top_p,
+        # attribute_temperature={"velocity": 1.5,"onset/tick":0.5},
+        )[0].argmax(axis=1)
 elif MODEL == "slm_harmonic":
     model = (
         EncoderOnlyModel.load_from_checkpoint(
@@ -44,11 +48,13 @@ elif MODEL == "slm_harmonic":
         .to(device)
         .eval()
     )
-    generate = lambda mask: model.generate(
-        mask,
-        temperature=1.0,
-        top_p=0.98,
-    )[0].argmax(axis=1)
+    def generate(mask, temperature=1.0, top_p=1.0, attribute_temperature=None):
+        return model.generate(
+            mask,
+            temperature=temperature,
+            top_p=top_p,
+            # attribute_temperature={"velocity": 1.5,"onset/tick":0.5},
+        )[0].argmax(axis=1)
 elif MODEL == "slm_clean_drums":
     model = (
         EncoderOnlyModel.load_from_checkpoint(
@@ -85,15 +91,13 @@ else:
     #     "../checkpoints/flowing-paper-64/last.ckpt", map_location=device
     # )
 
-    generate = lambda x: model.sample2(
+    def generate(mask,temperature=1.0,top_p=1.0,attribute_temperature=None): 
+        return model.generate(
         mask,
-        enforce_prior=True,
-        nb_steps=200,
-        top_p=1,
-        batch_size=1,
-        prior_strength=1,
-
-    )[0]
+        temperature=temperature,
+        top_p=top_p,
+        # attribute_temperature={"velocity": 1.5,"onset/tick":0.5},
+        )[0].argmax(axis=1)
 
 
 def preview(sm):
@@ -290,23 +294,135 @@ def velocity_constraint(velocity):
     velocity = min(velocities, key=lambda x: abs(int(x) - velocity))
     return {"velocity": {velocity, "-"}}
 
+def tag_constraint(tag):
+    return {"tag": {tag, "-"}}
+
 
 #%%
-# create simple drumbeat with 40 notes
-def simple_beat():
-    e = [EventConstraint().force_active() for _ in range(60)]
+# create simple drumbeat with piano bass and guitar
+def simple_arrangement():
+    e = []
+
+    # add 20 drums
+    e += [EventConstraint().intersect({"instrument": {"Drums"}}).force_active() for _ in range(40)]
+    # for instrument in ["Bass"]:
+    #     e += [EventConstraint().intersect({"instrument": {instrument}}).force_active() for _ in range(10)]
+        
+    # add 100 optional notes
+    e += [EventConstraint(
+    ).intersect({"instrument":{"Drums","-"}}) for _ in range(150)]
     # pad 
     e += [EventConstraint().force_inactive() for _ in range(N_EVENTS - len(e))]
     # tempo to 96 and tag is funk
-    e = [ev.intersect(tempo_constraint(96)|{"tag": {"funk", "-"}}) for ev in e]
+    e = [ev.intersect(tempo_constraint(140) | tag_constraint("pop")) for ev in e]
     return e
 
-e = simple_beat()
+e = simple_arrangement()
 mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
-x = generate(mask, top_p=0.96)
+x = generate(mask, top_p=1.0)
 x_sm = model.tokenizer.decode(x)
 print(x_sm.note_num())
 preview(x_sm)
+
+
+#%%
+
+e = sm_to_events(x_sm)
+
+
+# add some chords
+def add_chords(e):
+    tag = "classical"
+
+    # remove empty notes
+    e = [ev for ev in e if ev.is_active()]
+
+    # set all tags to jazz
+    for i in range(len(e)):
+        e[i].a["tag"] = {tag}
+
+    # remove piano
+    e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Piano"})]
+
+    # add a 3 Guitar notes on first beat
+    e += [
+        EventConstraint()
+        .intersect(
+            {
+                "instrument": {"Piano"},
+                "onset/beat": {"0"},
+                "offset/beat": {"2", "3", "4"},
+            } | scale_constraint("C pentatonic", (50,100))
+        )
+        .force_active()
+        for i in range(3)
+    ]
+
+    # add optional Piano notes
+    e += [EventConstraint().intersect({"instrument": {"Piano", ""}}) for _ in range(40)]
+
+    # pad with empty notes
+    e += [EventConstraint().force_inactive() for _ in range(N_EVENTS - len(e))]
+
+    # add tag constraint
+    e = [ev.intersect(tag_constraint(tag)) for ev in e]
+
+    return e
+
+
+e = add_chords(e)
+mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
+x = generate(mask, top_p=0.98)
+x_sm = model.tokenizer.decode(x)
+print(x_sm.note_num())
+preview(x_sm)
+
+#%% 
+e = sm_to_events(x_sm)
+
+# add bassline that matches kick
+def locked_in_bassline(e):
+
+    tag = "pop"
+
+    # remove empty notes
+    e = [ev for ev in e if ev.is_active()]
+
+    # set all tags to jazz
+    for i in range(len(e)):
+        e[i].a["tag"] = {tag}
+
+
+    # remove empty
+    e = [ev for ev in e if ev.is_active()]
+    # remove bass
+    e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Bass"})]
+
+    # add bass on every kick
+    kicks = [ev for ev in e if {"35 (Drums)","36 (Drums)","37 (Drums)"}.intersection(ev.a["pitch"])]
+
+    # add bass on every kick
+    for kick in kicks:
+        e += [EventConstraint().intersect({"instrument": {"Bass"}, "onset/beat": kick.a["onset/beat"], "onset/tick": kick.a["onset/tick"]}).force_active()]
+
+    #add up to 10 more
+    e += [EventConstraint().intersect({"instrument": {"Bass"}}) for _ in range(5)]
+
+    # pad
+    e += [EventConstraint().force_inactive() for _ in range(N_EVENTS - len(e))]
+
+    # add tag constraint
+    e = [ev.intersect(tag_constraint(tag)) for ev in e]
+
+    return e
+
+e = locked_in_bassline(e)
+mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
+x = generate(mask, top_p=0.98)
+x_sm = model.tokenizer.decode(x)
+print(x_sm.note_num())
+preview(x_sm)
+ 
 
 #%%
 # more dynamic hihats
@@ -332,7 +448,7 @@ def with_dynamic_hihats(e):
 
 e = with_dynamic_hihats(e)
 mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
-x = generate(mask, top_p=0.96)
+x = generate(mask)
 x_sm = model.tokenizer.decode(x)
 print(x_sm.note_num())
 preview(x_sm)
@@ -348,6 +464,11 @@ def add_snare_ghost_notes(e):
 
     e += [EventConstraint().intersect({"pitch": {"38 (Drums)","-"}}|velocity_constraint(50)).force_active() for _ in range(5)]
 
+    e += [
+        EventConstraint()
+        .intersect({"pitch": {"38 (Drums)", "-"}} | velocity_constraint(80))
+        for _ in range(20)
+    ]
     # pad
     e += [EventConstraint().force_inactive() for _ in range(N_EVENTS - len(e))]
 
@@ -355,7 +476,61 @@ def add_snare_ghost_notes(e):
 
 e = add_snare_ghost_notes(e)
 mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
-x = generate(mask, top_p=0.95)
+x = generate(mask)
+x_sm = model.tokenizer.decode(x)
+print(x_sm.note_num())
+preview(x_sm)
+
+
+#%% 
+
+#
+#%%
+e = sm_to_events(x_sm)
+
+# add some chords
+def add_lead(e):    
+
+    tag = "pop"
+
+    # remove empty notes
+    e = [ev for ev in e if ev.is_active()]
+
+    # set all tags to jazz
+    for i in range(len(e)):
+        e[i].a["tag"] = {tag}
+
+    # remove piano
+    e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Synth Lead"})]
+
+    e += [
+        EventConstraint()
+        .intersect({"instrument": {"Synth Lead"}, "pitch": {str(note) for note in range(50, 100)}})
+        .force_active()
+    ]
+
+    # add optional Synth Lead notes 
+    e += [
+        EventConstraint().intersect(
+            {
+                "instrument": {"Synth Lead", "-"},
+                "pitch": {str(note) for note in range(50, 100)} | {"-"},
+            }
+        )
+        for _ in range(20)
+    ]
+
+    # pad with empty notes
+    e += [EventConstraint().force_inactive() for _ in range(N_EVENTS - len(e))]   
+
+    # add tag constraint
+    e = [ev.intersect(tag_constraint(tag)) for ev in e]     
+
+    return e
+
+e = add_lead(e)
+mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
+x = generate(mask, top_p=0.97)
 x_sm = model.tokenizer.decode(x)
 print(x_sm.note_num())
 preview(x_sm)
@@ -383,12 +558,13 @@ def add_percussion(e):
     # pad
     e += [EventConstraint().force_inactive() for _ in range(N_EVENTS - len(e))]
 
+
     return e
 
 
 e = add_percussion(e)
 mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
-x = generate(mask, top_p=0.95)
+x = generate(mask)
 x_sm = model.tokenizer.decode(x)
 print(x_sm.note_num())
 preview(x_sm)
@@ -403,13 +579,20 @@ def with_tom_fill(e):
     # remove empty notes
     e = [ev for ev in e if ev.is_active()]
 
-    e = [ev for ev in e if ev.a["onset/beat"].isdisjoint({"12","13","14","15"})]
+    # e = [ev for ev in e if ev.a["onset/beat"].isdisjoint({"12","13","14","15"}) and ev.a["instrument"].isdisjoint({"Drums"})]
+    # remove drums in last 4 bars
+    e = [ev for ev in e if not ( not ev.a["onset/beat"].isdisjoint({"12","13","14","15"}) and not ev.a["instrument"].isdisjoint({"Drums"}))]
 
     # add at least one tom of each pitch
-    e += [EventConstraint().intersect({"pitch": TOM_PITCHES, "onset/beat": {"12","13","14","15","_"}} ).force_active() for e in range(3)]
+    e += [EventConstraint().intersect({"instrument": {"Drums"}, "pitch": TOM_PITCHES, "onset/beat": {"12","13","14","15","_"}} ).force_active() for e in range(3)]
 
     # add up to 10 more
-    e += [EventConstraint().intersect({"onset/beat": {"12","13","14","15","_"}}) for _ in range(20)]
+    e += [
+        EventConstraint().intersect(
+            {"instrument": {"Drums"},"onset/beat": {"12", "13", "14", "15", "_"}}
+        )
+        for _ in range(20)
+    ]
 
     # pad with empty notes
     e += [EventConstraint().force_inactive() for _ in range(N_EVENTS - len(e))]
@@ -418,7 +601,7 @@ def with_tom_fill(e):
 
 e = with_tom_fill(e)
 mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
-x = generate(mask, top_p=0.97)
+x = generate(mask, top_p=1.0)
 x_sm = model.tokenizer.decode(x)
 print(x_sm.note_num())
 preview(x_sm)
@@ -429,20 +612,21 @@ preview(x_sm)
 
 e = sm_to_events(x_sm)
 
-def reinstrument(e):
+def repitch(e):
     # remove empty notes
     e = [ev for ev in e if ev.is_active()]
 
-    e = [ev.union({"pitch":PERCUSSION_PITCHES}).intersect({"pitch":PERCUSSION_PITCHES}).force_active() for ev in e]
+    e = [ ev.union({"pitch":ALL_PITCH}).intersect({"pitch":ALL_PITCH}).force_active()  if ev.a["instrument"].isdisjoint({"Drums"}) else ev for ev in e]
 
+    # pentatonic scale
     # pad with empty notes
     e += [EventConstraint().force_inactive() for _ in range(N_EVENTS - len(e))]
 
     return e
 
-e = reinstrument(e)
+e = repitch(e)
 mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
-x = generate(mask, temperature=1.4)
+x = generate(mask, top_p=0.90)
 x_sm = model.tokenizer.decode(x)
 print(x_sm.note_num())
 preview(x_sm)
@@ -607,22 +791,9 @@ preview(x_sm)
 #%%
 # make sparser
 
-
-# make denser
-
-# create syncopated beat
+# melody to arrangement
 
 # reinstrumentation
-
-# create a drum solo
-
-# add chords on snares
-
-# create 4 on the floor beat
-
-
-
-# create reggae beat
 
 # create breakbeat
 
@@ -633,6 +804,10 @@ preview(x_sm)
 # create jazz loop
 
 # add pipe melody
+
+# infill pitch time
+
+# add top line
 
 # add harmony
 
@@ -650,7 +825,7 @@ preview(x_sm)
 
 # add call and response structure
 
-# infill pitch time
+
 
 
 

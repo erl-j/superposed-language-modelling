@@ -996,7 +996,7 @@ if __name__ == "__main__":
     )
 
     model.initialize_from_different_model(src_model, 
-                                        #   skip_tokens=["onset/tick", "offset/tick"]
+                                          skip_tokens=["onset/tick", "offset/tick"]
                                           )
 
     mmd_4bar_filter_fn = lambda x: f"n_bars={N_BARS}" in x
@@ -1057,7 +1057,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[7],
+        devices=[6],
         # precision="16-mixed",
         max_epochs=10_000,
         log_every_n_steps=1,
