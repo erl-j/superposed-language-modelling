@@ -85,13 +85,14 @@ else:
     #     "../checkpoints/flowing-paper-64/last.ckpt", map_location=device
     # )
 
-    generate = lambda x: model.sample2(
-        mask,
-        enforce_prior=True,
-        nb_steps=200,
-        top_p=1,
-        batch_size=1,
-        prior_strength=1,
+    def generate(mask, temperature=1.0, top_p=1.0, steps=100):
+        return model.sample2(
+            mask,
+            enforce_prior=True,
+            nb_steps=steps,
+            top_p=top_p,
+            batch_size=1,
+            prior_strength=1,
 
     )[0]
 
@@ -303,7 +304,7 @@ def simple_beat():
 
 e = simple_beat()
 mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
-x = generate(mask, top_p=0.96)
+x = generate(mask, top_p=0.99,temperature=1.0)
 x_sm = model.tokenizer.decode(x)
 print(x_sm.note_num())
 preview(x_sm)
