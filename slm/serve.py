@@ -15,6 +15,8 @@ import torch
 
 device = "cuda:6"
 
+USE_FP16 = True
+
 
 def get_external_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -64,6 +66,7 @@ if MODEL == "slm":
         EncoderOnlyModel.load_from_checkpoint(
             ROOT_DIR + checkpoints[MODEL],
             map_location=device,
+            
         )
         .to(device)
         .eval()
@@ -141,6 +144,9 @@ def preview(sm):
     sm = sm_fix_overlap_notes(sm)
     preview_sm(loop_sm(sm, 4, 4))
 
+
+if USE_FP16:
+    model = model.convert_to_half()
 
 # %%
 # create 128 bpm rock loop with drums, bass, guitar with max 280 notes and minimum 2 drum notes and maximum 40 drum notes
@@ -267,6 +273,12 @@ def breakbeat():
     e += [
         EventConstraint().intersect({"pitch": {"36 (Drums)", "-"}}) for _ in range(10)
     ]
+    # add 3 toms
+    e += [
+        EventConstraint().intersect({"pitch": TOM_PITCHES}).force_active()
+        for _ in range(10)
+    ]
+
     # add 20 rides
     e += [
         EventConstraint().intersect({"pitch": {"51 (Drums)"}}).force_active()
@@ -337,7 +349,7 @@ def four_on_the_floor_beat():
     return e
 
 class EventConstraint:
-    def __init__(self):
+    def __init__(self, dict=None):
         self.blank_event = {
             "instrument": ALL_INSTRUMENTS | {"-"},
             "pitch": ALL_PITCH | {"-"},
@@ -375,6 +387,9 @@ class EventConstraint:
             "tag": {"-"},
             "tempo": {"-"},
         }
+
+        if dict is not None:
+            self.a = dict
 
     def intersect(self, constraint):
         for key in constraint:
@@ -433,6 +448,15 @@ def velocity_constraint(velocity):
     velocity = min(velocities, key=lambda x: abs(int(x) - velocity))
     return {"velocity": {velocity, "-"}}
 
+def quantize_velocity(velocity):
+    velocities = list(str(v) for v in ALL_VELOCITIES)
+    velocity = min(velocities, key=lambda x: abs(int(x) - int(velocity)))
+    return velocity
+
+def quantize_tempo(tempo):
+    tempos = list(str(t) for t in ALL_TEMPOS)
+    tempo = min(tempos, key=lambda x: abs(int(x) - int(tempo)))
+    return tempo
 
 @app.route("/", methods=["GET"])
 def index():
@@ -510,13 +534,86 @@ def four_on_the_floor_beat():
     return e
 
 
+def infill(e, beat_range, pitch_range, drums):
+    # remove empty events
+    e = [ev for ev in e if not ev.is_inactive()]
+
+    beats = set(
+        [str(r) for r in range(beat_range[0], beat_range[1])]
+    )
+    pitches = set([f"{str(r)}{' (Drums)' if drums else ''}" for r in range(pitch_range[0], pitch_range[1])])
+    
+    # remove 
+    e = [ev for ev in e if  (ev.a["onset/beat"] & beats) and (ev.a["pitch"] & pitches)]
+
+    # add 10 empty notes
+    e += [EventConstraint().force_inactive() for _ in range(40)]
+
+    # add rest of notes, restrict to beat range
+    e += [
+        EventConstraint().intersect(
+            {
+                "onset/beat": {str(r) for r in range(beat_range[0], beat_range[1])} | {"-"},
+                "pitch": {f"{str(r)}{' (Drums)' if drums else ''}" for r in range(pitch_range[0], pitch_range[1])} | {"-"},
+                "offset/beat": {"none (Drums)", "-"},
+                "offset/tick": {"none (Drums)", "-"},
+                "instrument": {"Drums", "-"},
+            }
+        )
+    for _ in range(N_EVENTS - len(e))
+    ]
+    return e
+
+def camel_to_snake(name):
+    import re
+
+    name = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
+    return re.sub("([a-z0-9])([A-Z])", r"\1_\2", name).lower()
+
+def json_camel_to_snake(data):
+    if isinstance(data, dict):
+        return {camel_to_snake(k): json_camel_to_snake(v) for k, v in data.items()}
+    if isinstance(data, list):
+        return [json_camel_to_snake(v) for v in data]
+    return data
+
 @app.route("/regenerate", methods=["POST"])
 def regenerate():
+    data = request.json
+    # recursively convert keys from camelCase to snake_case
+    data = json_camel_to_snake(data)
+
+    pitch_range = data["tracks"][0]["constraint"]["pitch_range"]
+    onset_tick_range = data["tracks"][0]["constraint"]["onset_tick_range"]
+    sequence = data["tracks"][0]["sequence"]
+    tempo = data["bpm"]
+    
+    print(data)
+
+    # create event constraints
+    e = []
+    for note_event in sequence:
+        event = EventConstraint(
+            {"pitch": {note_event["pitch"]}, 
+             "onset/beat": {note_event["onset"] // model.tokenizer.config["ticks_per_beat"]},
+            "onset/tick": {note_event["onset"] % model.tokenizer.config["ticks_per_beat"]},
+            "velocity": {quantize_velocity(int(note_event["velocity"]))},
+            "instrument": {"Drums"},
+            "tempo": {quantize_tempo(int(tempo))},
+            "tag": {"funk"},
+            "offset/beat": {"none (Drums)"},
+            "offset/tick": {"none (Drums)"},
+            })
+        e += [event]
+    print(f"Len e: {len(e)}")
     try:
         # e = simple_beat()
+        beat_range = [ int(onset_tick_range[0]) // model.tokenizer.config["ticks_per_beat"], int(onset_tick_range[1]) // model.tokenizer.config["ticks_per_beat"]]
+        pitch_range = [int(pitch_range[0]), int(pitch_range[1])]
+        # e = infill(e, beat_range, pitch_range, drums=True)
         e = breakbeat()
         mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
-        x = generate(mask, top_p=0.96,temperature=1.0)
+        x = generate(mask, top_p=0.96,temperature=0.95)
         x_sm = model.tokenizer.decode(x)
         xt = model.tokenizer.indices_to_tokens(x)
 
@@ -540,7 +637,7 @@ def regenerate():
                                  "duration": 4
                                  })
                 tempo = event_dict["tempo"]
-
+        print(len(sequence))
 
         #  const new_song = {
         #   "name": "test",
@@ -575,6 +672,9 @@ def regenerate():
 
         return jsonify(loop_object)
     except Exception as e:
+        import traceback
+        etype, value, tb = sys.exc_info()
+        print(traceback.print_exception(etype, value, tb))
         print(e)
         return jsonify({"error": str(e)}), 500
 # %%

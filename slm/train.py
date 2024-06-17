@@ -95,8 +95,13 @@ class EncoderOnlyModel(pl.LightningModule):
 
         self.neighbour_superposition = neighbour_superposition
 
+    def convert_to_half(self):
+        # set x bias to min inf
+        self.x_bias = torch.finfo(torch.float16).min
+        return self.half()
+
     def mlm_forward(self, x):
-        format_mask = self.format_mask[None, ...].to(x.device)
+        format_mask = self.format_mask[None, ...].to(x.device).to(x.dtype)
         xin = x
 
         x = x * format_mask
@@ -149,7 +154,7 @@ class EncoderOnlyModel(pl.LightningModule):
         if self.standard_mlm_forward:
             return self.mlm_forward(x)
 
-        format_mask = self.format_mask[None, ...].to(x.device)
+        format_mask = self.format_mask[None, ...].to(x.device).to(x.dtype)
         x = x * format_mask
 
         x = einops.rearrange(x, "b (t a) v -> b t a v", a=self.n_attributes)
@@ -458,14 +463,31 @@ class EncoderOnlyModel(pl.LightningModule):
 
         return x
     
-    def generate(self, x, sampling_steps=None, temperature=1, top_p=1, top_k=0, order="random", typical_sampling_t=-1, temperature_decay=False, min_temperature=0.8, attribute_temperature=None):
+    @torch.inference_mode()
+    def generate(
+        self,
+        x,
+        sampling_steps=None,
+        temperature=1,
+        top_p=1,
+        top_k=0,
+        order="random",
+        typical_sampling_t=-1,
+        temperature_decay=False,
+        min_temperature=0.8,
+        attribute_temperature=None,
+    ):
         if sampling_steps is None:
             sampling_steps = self.tokenizer.config["max_notes"]*len(self.tokenizer.note_attribute_order)
         self.eval()
+        dtype = self.embedding_layer.weight.dtype
+        # convert to model dtype, (fp32, fp16)
+        x = x.to(dtype)
+
         with torch.no_grad():
             x = x
             # multiply by format mask
-            x = x * self.format_mask[None, ...].to(x.device)
+            x = x * self.format_mask[None, ...].to(x.device).to(dtype)
 
             x = self.tokenizer.collapse_undefined_attributes(x)
 
@@ -483,10 +505,8 @@ class EncoderOnlyModel(pl.LightningModule):
                 while True:
 
                     masked_tokens_before = (x.sum(-1) > 1).sum().int().item()
-
-
                     
-                    logits = self(x.float())
+                    logits = self(x)
 
                     # invert probs
                     # flatten
@@ -582,8 +602,7 @@ class EncoderOnlyModel(pl.LightningModule):
                     # replace with sampled values
                     flat_x[indices_to_unmask] = torch.nn.functional.one_hot(
                         sampled[indices_to_unmask], num_classes=flat_x.shape[-1]
-                    ).float()
-
+                    ).to(dtype)
                     # plot
 
                     x = einops.rearrange(

@@ -729,12 +729,14 @@ class MergedTokenizer():
     
     def collapse_undefined_attributes(self, x1h):
 
+        dtype = x1h.dtype
+
         x1h = x1h.clone()
         undefined_tokens = [attribute + ":-" for attribute in self.note_attribute_order]
 
         undefined_token_idx = [self.token2idx[token] for token in undefined_tokens]
 
-        undefined_token_1h = torch.nn.functional.one_hot(torch.tensor(undefined_token_idx,device=x1h.device), num_classes=len(self.vocab)).float()
+        undefined_token_1h = torch.nn.functional.one_hot(torch.tensor(undefined_token_idx,device=x1h.device), num_classes=len(self.vocab)).to(dtype)
 
         x1h = einops.rearrange(x1h, "b (n a) v -> b n a v", n=self.config["max_notes"], a=len(self.note_attribute_order))
 
