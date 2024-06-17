@@ -15,6 +15,7 @@ from augmentation import transpose_sm
 import einops
 from tqdm import tqdm
 from util import top_k_top_p_filtering
+import line_profiler
 
 class EncoderOnlyModel(pl.LightningModule):
     def __init__(
@@ -472,9 +473,6 @@ class EncoderOnlyModel(pl.LightningModule):
         top_p=1,
         top_k=0,
         order="random",
-        typical_sampling_t=-1,
-        temperature_decay=False,
-        min_temperature=0.8,
         attribute_temperature=None,
     ):
         if sampling_steps is None:
@@ -491,14 +489,10 @@ class EncoderOnlyModel(pl.LightningModule):
 
             x = self.tokenizer.collapse_undefined_attributes(x)
 
-
             batch, time_attr, ft = x.shape
 
-            total_tokens = time_attr
             # count number of known tokens
             masked_tokens = (x.sum(-1) > 1).sum().int().item()
-            # find masking ratio
-            masking_ratio = masked_tokens / total_tokens
 
 
             with tqdm(total=masked_tokens) as pbar:
@@ -506,6 +500,8 @@ class EncoderOnlyModel(pl.LightningModule):
 
                     masked_tokens_before = (x.sum(-1) > 1).sum().int().item()
                     
+                    # take time of forward pass
+
                     logits = self(x)
 
                     # invert probs
@@ -514,11 +510,8 @@ class EncoderOnlyModel(pl.LightningModule):
 
                     flat_logits = top_k_top_p_filtering(flat_logits, top_k=top_k, top_p=top_p)
 
-                    if temperature_decay:
-                        t = min_temperature + (temperature-min_temperature) * (schedule[i].item())
-                        print(t)
-                    else:
-                        t = temperature
+          
+                    t = temperature
                     
                     if attribute_temperature is not None:
                         # turn t into 1,1,a tensor
@@ -539,32 +532,6 @@ class EncoderOnlyModel(pl.LightningModule):
 
                     # renormalize
                     flat_probs = flat_probs / flat_probs.sum(dim=-1, keepdim=True)
-
-                    if typical_sampling_t != -1:
-                        eps = 1e-9
-                        entropy = -torch.sum(flat_probs * torch.log(flat_probs-eps), dim=-1)
-                        information_content = -torch.log(flat_probs-eps)
-                        deviation = torch.abs(entropy[...,None] - information_content)
-                        # sorted deviation
-                        sorted_deviation = torch.argsort(deviation, dim=-1)
-
-                        #t_n_tokens = torch.ceil(flat_x.sum(dim=-1) * typical_sampling_t).ceil().long()
-                        t_n_tokens = torch.ceil(self.format_mask.to(x.device).sum(dim=-1) * typical_sampling_t).ceil().long()
-                        # int64
-
-                        
-                        # find t portion of tokens
-                        t_index = sorted_deviation.gather(dim=-1, index=t_n_tokens[...,None]).squeeze(-1)
-                        # see deviation value
-                        threshold = torch.gather(deviation, dim=-1, index=t_index[...,None]).squeeze(-1)
-                    
-                        # set probs with deviation above threshold to 0
-                        flat_probs[deviation > threshold[...,None]] = 0
-
-                    
-                        # renormalize
-                        flat_probs = flat_probs / flat_probs.sum(dim=-1, keepdim=True)
-
 
                     sampled = torch.multinomial(flat_probs, 1).squeeze(-1)
 
@@ -622,11 +589,12 @@ class EncoderOnlyModel(pl.LightningModule):
     @torch.no_grad()
     def sparsify(self, x, temperature=1, top_p=1, top_k=0, steps = 100, pmax=None, pmin=None, alpha=None):
         self.eval()
-        x = x
+        dtype = self.embedding_layer.weight.dtype
+        x = x.to(dtype)
         # multiply by format mask
-        x = x * self.format_mask[None, ...].to(x.device)
+        x = x * self.format_mask[None, ...].to(x.device).to(dtype)
 
-        x = self.tokenizer.collapse_undefined_attributes(x)
+        x = self.tokenizer.collapse_undefined_attributes(x).to(dtype)
 
 
         batch, time_attr, ft = x.shape
@@ -641,7 +609,7 @@ class EncoderOnlyModel(pl.LightningModule):
         # with tqdm(total=masked_tokens) as pbar:
         #     while True:
 
-        logits = self(x.float()).detach()
+        logits = self(x.to(dtype)).detach()
 
         # invert probs
         # flatten

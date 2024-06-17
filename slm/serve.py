@@ -12,8 +12,9 @@ import IPython.display as ipd
 from paper_checkpoints import checkpoints
 from simplex_diffusion import SimplexDiffusionModel
 import torch
+import tempfile
 
-device = "cuda:6"
+remdevice = "cuda:6"
 
 USE_FP16 = True
 
@@ -109,11 +110,12 @@ elif MODEL == "slm_clean_drums":
         .eval()
     )
 
-    def generate(mask, temperature=1.0, top_p=1.0, attribute_temperature=None):
+    def generate(mask, temperature=1.0, top_p=1.0, attribute_temperature=None, order=None):
         return model.generate(
             mask,
             temperature=temperature,
             top_p=top_p,
+            order=order,
             # attribute_temperature={"velocity": 1.5,"onset/tick":0.5},
         )[0].argmax(axis=1)
 
@@ -538,27 +540,56 @@ def infill(e, beat_range, pitch_range, drums):
     # remove empty events
     e = [ev for ev in e if not ev.is_inactive()]
 
+    print([ev.to_dict() for ev in e])
+
+    print(f"Len e: {len(e)}")
+
     beats = set(
         [str(r) for r in range(beat_range[0], beat_range[1])]
     )
     pitches = set([f"{str(r)}{' (Drums)' if drums else ''}" for r in range(pitch_range[0], pitch_range[1])])
+
+    print(f"Beats: {beats}")
+    print(f"Pitches: {pitches}")
     
-    # remove 
-    e = [ev for ev in e if  (ev.a["onset/beat"] & beats) and (ev.a["pitch"] & pitches)]
+    # remove if in beat range and pitch range
+    e = [ev for ev in e if not (ev.a["onset/beat"].issubset(beats) and ev.a["pitch"].issubset(pitches))]
+
+    for ev in e:
+        print(ev.to_dict())
+        # check if subset
+        print(f"Beats subset: {ev.a['onset/beat'].issubset(beats)}")
+        print(f"Pitches subset: {ev.a['pitch'].issubset(pitches)}")
+
+    print(f"Len e: {len(e)}")
 
     # add 10 empty notes
-    e += [EventConstraint().force_inactive() for _ in range(40)]
+    e += [EventConstraint().force_inactive() for _ in range(20)]
 
+    infill_constraint = {
+        "onset/beat": {str(r) for r in range(beat_range[0], beat_range[1])} | {"-"},
+        "pitch": {
+            f"{str(r)}{' (Drums)' if drums else ''}"
+            for r in range(pitch_range[0], pitch_range[1])
+        }
+        | {"-"},
+        "offset/beat": {"none (Drums)", "-"},
+        "offset/tick": {"none (Drums)", "-"},
+        "instrument": {"Drums", "-"},
+    }
+    # add at least 3 notes
+    e += [
+        EventConstraint().intersect(
+            infill_constraint
+        )
+        .force_active()
+        for _ in range(1)
+    ]
+    
     # add rest of notes, restrict to beat range
     e += [
         EventConstraint().intersect(
-            {
-                "onset/beat": {str(r) for r in range(beat_range[0], beat_range[1])} | {"-"},
-                "pitch": {f"{str(r)}{' (Drums)' if drums else ''}" for r in range(pitch_range[0], pitch_range[1])} | {"-"},
-                "offset/beat": {"none (Drums)", "-"},
-                "offset/tick": {"none (Drums)", "-"},
-                "instrument": {"Drums", "-"},
-            }
+          infill_constraint
         )
     for _ in range(N_EVENTS - len(e))
     ]
@@ -577,6 +608,39 @@ def json_camel_to_snake(data):
         return [json_camel_to_snake(v) for v in data]
     return data
 
+def make_sparse(e):
+    n_events = model.tokenizer.config["max_notes"]
+    # remove empty events
+    e = [event for event in e if not event.is_inactive()]
+    # make every note optional
+    e = [
+        event.union(
+            {
+                "instrument": {"-"},
+                "pitch": {"-"},
+                "onset/beat": {"-"},
+                "onset/tick": {"-"},
+                "tempo": {"-"},
+                "tag": {"-"},
+                "velocity": {"-"},
+                "offset/beat": {"-"},
+                "offset/tick": {"-"},
+            }
+        )
+        for event in e
+    ]
+
+    # shuffle
+    # force half of the notes to be active
+    # for i in range(n_events):
+    #     e[i] = e[i].force_active()
+    # pad with empty events
+    e += [EventConstraint().force_inactive() for _ in range(n_events - len(e))]
+    random.shuffle(e)
+
+    return e
+
+
 @app.route("/regenerate", methods=["POST"])
 def regenerate():
     data = request.json
@@ -588,19 +652,18 @@ def regenerate():
     sequence = data["tracks"][0]["sequence"]
     tempo = data["bpm"]
     
-    print(data)
-
     # create event constraints
     e = []
     for note_event in sequence:
         event = EventConstraint(
-            {"pitch": {note_event["pitch"]}, 
-             "onset/beat": {note_event["onset"] // model.tokenizer.config["ticks_per_beat"]},
-            "onset/tick": {note_event["onset"] % model.tokenizer.config["ticks_per_beat"]},
+            {
+            "pitch": {str(note_event["pitch"])+" (Drums)"}, 
+             "onset/beat": {str(note_event["onset"] // model.tokenizer.config["ticks_per_beat"])},
+            "onset/tick": {str(note_event["onset"] % model.tokenizer.config["ticks_per_beat"])},
             "velocity": {quantize_velocity(int(note_event["velocity"]))},
             "instrument": {"Drums"},
             "tempo": {quantize_tempo(int(tempo))},
-            "tag": {"funk"},
+            "tag": {"other"},
             "offset/beat": {"none (Drums)"},
             "offset/tick": {"none (Drums)"},
             })
@@ -608,14 +671,36 @@ def regenerate():
     print(f"Len e: {len(e)}")
     try:
         # e = simple_beat()
-        beat_range = [ int(onset_tick_range[0]) // model.tokenizer.config["ticks_per_beat"], int(onset_tick_range[1]) // model.tokenizer.config["ticks_per_beat"]]
+        beat_range = [ int(onset_tick_range[0]) // model.tokenizer.config["ticks_per_beat"], 1+int(onset_tick_range[1]) // model.tokenizer.config["ticks_per_beat"]]
         pitch_range = [int(pitch_range[0]), int(pitch_range[1])]
         # e = infill(e, beat_range, pitch_range, drums=True)
-        e = breakbeat()
+        # e = breakbeat()
+        e = four_on_the_floor_beat()
         mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
-        x = generate(mask, top_p=0.96,temperature=0.95)
+ 
+        x = generate(mask, top_p=1.0,temperature=1.0, order="random")
         x_sm = model.tokenizer.decode(x)
+        import util
+        x_sm = util.sm_fix_overlap_notes(x_sm)
+        
+        # print note num
+        print(f"Note num: {x_sm.note_num()}")
+        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+            x_sm.dump_midi(tmp_file.name)
+            tmp_file.flush()
+            with open(tmp_file.name, "rb") as f:
+                midi_bytes = f.read()
+        try:
+            os.remove(tmp_file.name)
+        except OSError:
+            pass
+
+        # convert to tokens
+        x = model.tokenizer.encode(x_sm, tag="other")
         xt = model.tokenizer.indices_to_tokens(x)
+
+        # x_sm
+        # xt = model.tokenizer.indices_to_tokens(x)
 
         # split into events
         n_events = model.tokenizer.config["max_notes"]
@@ -637,7 +722,6 @@ def regenerate():
                                  "duration": 4
                                  })
                 tempo = event_dict["tempo"]
-        print(len(sequence))
 
         #  const new_song = {
         #   "name": "test",
@@ -665,7 +749,7 @@ def regenerate():
             "time_signature": "4/4",
             "tempo": tempo,
             "n_bars":4,
-            "sequence": sequence
+            "sequence": sequence,
         }
 
         # 

@@ -300,7 +300,7 @@ def tag_constraint(tag):
 
 #%%
 
-TAG="jazz"
+TAG="dance-eletric"
 # create simple drumbeat with piano bass and guitar
 def simple_arrangement():
     e = []
@@ -324,10 +324,14 @@ def simple_arrangement():
 e = simple_arrangement()
 mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
 x = generate(mask, top_p=1.0, temperature=0.97)
+
 x_sm = model.tokenizer.decode(x)
 print(x_sm.note_num())
 preview(x_sm)
 
+asd
+
+#%%
 
 #%%
 
@@ -338,7 +342,7 @@ e = sm_to_events(x_sm)
 def add_chords(e):
     tag = TAG
 
-    instrument = "Piano"
+    instrument = "Chromatic Percussion"
 
     # remove empty notes
     e = [ev for ev in e if ev.is_active()]
@@ -378,7 +382,7 @@ def add_chords(e):
 
 e = add_chords(e)
 mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
-x = generate(mask, top_p=0.95)
+x = generate(mask, top_p=0.99)
 x_sm = model.tokenizer.decode(x)
 print(x_sm.note_num())
 preview(x_sm)
@@ -498,7 +502,7 @@ e = sm_to_events(x_sm)
 def add_lead(e):    
 
     tag = TAG
-    instrument = "Synth Pad"
+    instrument = "Synth Lead"
 
     # remove empty notes
     e = [ev for ev in e if ev.is_active()]
