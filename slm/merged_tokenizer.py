@@ -857,7 +857,10 @@ class MergedTokenizer():
             if program == -1:
                 track = symusic.Track(program=0, name="Drums", is_drum=True)
             else:
-                track = symusic.Track(program=program, name=pretty_midi.program_to_instrument_name(program), is_drum=False)
+                track = symusic.Track(program=program, 
+                                      # name is from isntrument class
+                                      name= pretty_midi.program_to_instrument_class(program),
+                                      is_drum=False)
             for note in notes:
                 track.notes.append(symusic.Note(pitch=note["pitch"], time=note["onset"], duration=note["offset"]-note["onset"], velocity=note["velocity"]))
             sm.tracks.append(track)

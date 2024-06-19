@@ -55,7 +55,7 @@ device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 device = "cuda:6"
 ROOT_DIR = "./"
 
-MODEL = "slm_clean_drums"
+MODEL = "slm"
 
 OUTPUT_DIR = ROOT_DIR + "artefacts/examples_4"
 TMP_DIR = ROOT_DIR + "artefacts/tmp"
@@ -72,9 +72,17 @@ if MODEL == "slm":
         .to(device)
         .eval()
     )
-    generate = lambda mask: model.generate(mask, temperature=1.0, top_p=0.95)[0].argmax(
-        axis=1
-    )
+
+    def generate(
+        mask, temperature=1.0, top_p=1.0, attribute_temperature=None, order=None
+    ):
+        return model.generate(
+            mask,
+            temperature=temperature,
+            top_p=top_p,
+            order=order,
+            # attribute_temperature={"velocity": 1.5,"onset/tick":0.5},
+        )[0].argmax(axis=1)
 elif MODEL == "slm_harmonic":
     model = (
         EncoderOnlyModel.load_from_checkpoint(
@@ -86,11 +94,17 @@ elif MODEL == "slm_harmonic":
         .to(device)
         .eval()
     )
-    generate = lambda mask: model.generate(
-        mask,
-        temperature=1.0,
-        top_p=0.98,
-    )[0].argmax(axis=1)
+
+    def generate(
+        mask, temperature=1.0, top_p=1.0, attribute_temperature=None, order=None
+    ):
+        return model.generate(
+            mask,
+            temperature=temperature,
+            top_p=top_p,
+            order=order,
+            # attribute_temperature={"velocity": 1.5,"onset/tick":0.5},
+        )[0].argmax(axis=1)
 elif MODEL == "slm_clean_drums":
     model = (
         EncoderOnlyModel.load_from_checkpoint(
@@ -263,92 +277,7 @@ def sm_to_events(x_sm):
     return events
 
 
-# create breakbeat
-def breakbeat():
-    e = []
-    # add 10 kicks
-    e += [
-        EventConstraint().intersect({"pitch": {"36 (Drums)"}}).force_active()
-        for _ in range(10)
-    ]
-    # add 10 optional kicks
-    e += [
-        EventConstraint().intersect({"pitch": {"36 (Drums)", "-"}}) for _ in range(10)
-    ]
-    # add 3 toms
-    e += [
-        EventConstraint().intersect({"pitch": TOM_PITCHES}).force_active()
-        for _ in range(10)
-    ]
 
-    # add 20 rides
-    e += [
-        EventConstraint().intersect({"pitch": {"51 (Drums)"}}).force_active()
-        for _ in range(20)
-    ]
-    # 20 optional rides
-    e += [
-        EventConstraint().intersect({"pitch": {"51 (Drums)", "-"}}) for _ in range(20)
-    ]
-    # add 10 snare
-    e += [
-        EventConstraint().intersect({"pitch": {"38 (Drums)"}}).force_active()
-        for _ in range(10)
-    ]
-    # add 10 optional snares
-    e += [
-        EventConstraint().intersect({"pitch": {"38 (Drums)", "-"}}) for _ in range(10)
-    ]
-
-    # pad with empty notes
-    e += [EventConstraint().force_inactive() for _ in range(N_EVENTS - len(e))]
-    # set to 160
-    e = [
-        ev.intersect(tempo_constraint(160)).intersect({"instrument": {"Drums", "-"}})
-        for ev in e
-    ]
-    return e
-
-
-
-def four_on_the_floor_beat():
-    e = []
-    # add kick on every beat
-    for onset_beat in ["0","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15"]:
-        e += [
-            EventConstraint()
-            .intersect(
-                {"pitch": {"36 (Drums)"}, "onset/beat": {onset_beat}, "onset/tick": {"0"}}
-            )
-            .force_active()
-        ]
-    # snares on 2 and 4
-    for onset_beat in ["1","3","5","7","9","11","13","15"]:
-        e += [
-            EventConstraint()
-            .intersect(
-                {"pitch": {"38 (Drums)"}, "onset/beat": {onset_beat}, "onset/tick": {"0"}}
-            )
-            .force_active()
-        ]
-    # add 40 hihats
-    e += [
-        EventConstraint().intersect(
-            {"pitch": HIHAT_PITCHES | {"-"}}
-        ) for _ in range(20)
-    ]
-    # add percussion
-    e += [
-        EventConstraint().intersect(
-            {"pitch": PERCUSSION_PITCHES | {"-"}}
-        ) for _ in range(20)
-    ]
-    e += [EventConstraint() for _ in range(N_EVENTS - len(e))]
-    # set tempo to 110
-    e = [ev.intersect(tempo_constraint(130)).
-         intersect({"instrument":{"Drums","-"}})
-         for ev in e]
-    return e
 
 class EventConstraint:
     def __init__(self, dict=None):
@@ -520,6 +449,193 @@ def four_on_the_floor_beat():
         ]
     # add 40 hihats
     e += [
+        EventConstraint().intersect({"pitch": HIHAT_PITCHES | {"-"}}) for _ in range(80)
+    ]
+    # add percussion
+    e += [
+        EventConstraint().intersect({"pitch": PERCUSSION_PITCHES | {"-"}})
+        for _ in range(20)
+    ]
+    e += [EventConstraint() for _ in range(N_EVENTS - len(e))]
+    # set tempo to 110
+    e = [
+        ev.intersect(tempo_constraint(130)).intersect({"instrument": {"Drums", "-"}})
+        for ev in e
+    ]
+    return e
+
+# create breakbeat
+def breakbeat():
+    e = []
+    # add 10 kicks
+    e += [
+        EventConstraint().intersect({"pitch": {"36 (Drums)"}}).force_active()
+        for _ in range(10)
+    ]
+    # add 10 optional kicks
+    e += [
+        EventConstraint().intersect({"pitch": {"36 (Drums)", "-"}}) for _ in range(10)
+    ]
+    # add 3 toms
+    e += [
+        EventConstraint().intersect({"pitch": TOM_PITCHES}).force_active()
+        for _ in range(10)
+    ]
+
+    # add 20 rides
+    e += [
+        EventConstraint().intersect({"pitch": {"51 (Drums)"}}).force_active()
+        for _ in range(20)
+    ]
+    # 20 optional rides
+    e += [
+        EventConstraint().intersect({"pitch": {"51 (Drums)", "-"}}) for _ in range(20)
+    ]
+    # add 10 snare
+    e += [
+        EventConstraint().intersect({"pitch": {"38 (Drums)"}}).force_active()
+        for _ in range(10)
+    ]
+    # add 10 optional snares
+    e += [
+        EventConstraint().intersect({"pitch": {"38 (Drums)", "-"}}) for _ in range(10)
+    ]
+
+    # pad with empty notes
+    e += [EventConstraint().force_inactive() for _ in range(N_EVENTS - len(e))]
+    # set to 160
+    e = [
+        ev.intersect(tempo_constraint(160)).intersect({"instrument": {"Drums", "-"}})
+        for ev in e
+    ]
+    return e
+
+
+# create breakbeat
+def prog_beat():
+    e = []
+    # add 10 kicks
+    e += [
+        EventConstraint().intersect({"pitch": {"36 (Drums)"}}).force_active()
+        for _ in range(10)
+    ]
+    # add 10 optional kicks
+    e += [
+        EventConstraint().intersect({"pitch": {"36 (Drums)", "-"}}) for _ in range(10)
+    ]
+    # add 3 toms
+    # e += [
+    #     EventConstraint().intersect({"pitch": TOM_PITCHES}).force_active()
+    #     for _ in range(10)
+    # ]
+
+    # add 20 rides
+    e += [
+        EventConstraint().intersect({"pitch": {"42 (Drums)"}}).force_active()
+        for _ in range(20)
+    ]
+    # 20 optional rides
+    e += [
+        EventConstraint().intersect({"pitch": {"42 (Drums)", "-"}}) for _ in range(20)
+    ]
+    # add 10 snare
+    e += [
+        EventConstraint().intersect({"pitch": {"38 (Drums)"}}).force_active()
+        for _ in range(10)
+    ]
+    # add 10 optional snares
+    e += [
+        EventConstraint().intersect({"pitch": {"38 (Drums)", "-"}}) for _ in range(10)
+    ]
+
+    # add 20 bass notes
+    e += [
+        EventConstraint().intersect({"instrument": {"Bass"},
+                                     "pitch": {str(p) for p in range(36, 48)}}).force_active()
+        for _ in range(20)
+    ]
+    # add 20 piano notes
+    e += [
+        EventConstraint().intersect({"instrument": {"Piano"}}).force_active()
+        for _ in range(20)
+    ]
+
+    # add 20 guitar notes
+    e += [
+        EventConstraint().intersect({"instrument": {"Guitar"}}).force_active()
+        for _ in range(20)
+    ]
+
+    e += [
+        EventConstraint()
+        .intersect(tempo_constraint(160))
+        .intersect({"instrument": {"Bass", "Drums", "Piano", "Guitar", "-"}})
+        for _ in range(N_EVENTS - len(e))
+    ]
+    # pad with empty notes
+    e += [EventConstraint().force_inactive() for _ in range(N_EVENTS - len(e))]
+    # set to 160
+    # add 50 optional notes
+    
+    e = [
+        ev.intersect(tempo_constraint(160)).intersect({"instrument": {"Drums","Bass","Piano","Guitar", "-"}})
+        for ev in e
+    ]
+
+    # constrain to pentatonic scale
+    # e = [ev.intersect(
+    #     {"pitch":scale_constraint("C pentatonic", (20, 100))["pitch"] | {"-"} | DRUM_PITCHES}
+    #     ) for ev in e]
+    return e
+
+
+def four_on_the_floor_beat():
+    e = []
+    # add kick on every beat
+    for onset_beat in [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+        "11",
+        "12",
+        "13",
+        "14",
+        "15",
+    ]:
+        e += [
+            EventConstraint()
+            .intersect(
+                {
+                    "pitch": {"36 (Drums)"},
+                    "onset/beat": {onset_beat},
+                    "onset/tick": {"0"},
+                }
+            )
+            .force_active()
+        ]
+    # snares on 2 and 4
+    for onset_beat in ["1", "3", "5", "7", "9", "11", "13", "15"]:
+        e += [
+            EventConstraint()
+            .intersect(
+                {
+                    "pitch": {"38 (Drums)"},
+                    "onset/beat": {onset_beat},
+                    "onset/tick": {"0"},
+                }
+            )
+            .force_active()
+        ]
+    # add 40 hihats
+    e += [
         EventConstraint().intersect({"pitch": HIHAT_PITCHES | {"-"}}) for _ in range(20)
     ]
     # add percussion
@@ -535,6 +651,138 @@ def four_on_the_floor_beat():
     ]
     return e
 
+
+def disco_beat():
+    e = []
+    # add kick on every beat
+    for onset_beat in [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+        "11",
+        "12",
+        "13",
+        "14",
+        "15",
+    ]:
+        e += [
+            EventConstraint()
+            .intersect(
+                {
+                    "pitch": {"36 (Drums)"},
+                    "onset/beat": {onset_beat},
+                    "onset/tick": {"0"},
+                }
+            )
+            .force_active()
+        ]
+    # snares on 2 and 4
+    for onset_beat in ["1", "3", "5", "7", "9", "11", "13", "15"]:
+        e += [
+            EventConstraint()
+            .intersect(
+                {
+                    "pitch": {"38 (Drums)"},
+                    "onset/beat": {onset_beat},
+                    "onset/tick": {"0"},
+                }
+            )
+            .force_active()
+        ]
+    # add 40 hihats
+    e += [
+        EventConstraint().intersect({"pitch": HIHAT_PITCHES | {"-"}}).force_active()
+        for _ in range(20)
+    ]
+    # add percussion
+    e += [
+        EventConstraint().intersect({"pitch": PERCUSSION_PITCHES | {"-"}})
+        for _ in range(20)
+    ]
+
+    e += [
+        EventConstraint().intersect({"instrument": {"Bass"}}).force_active()
+        for _ in range(10)
+    ]
+    # add 10 piano notes
+    e += [
+        EventConstraint().intersect({"instrument": {"Piano"}}).force_active()
+        for _ in range(10)
+    ]
+    # add 10 guitar notes
+    e += [
+        EventConstraint().intersect({"instrument": {"Guitar"}}).force_active()
+        for _ in range(10)
+    ]
+    # add 50 blank notes
+    e += [EventConstraint().force_inactive() for _ in range(50)]
+    e += [
+        EventConstraint().intersect(
+            {"instrument": {"Bass", "Drums", "Piano", "Guitar", "-"}}
+        )
+        for _ in range(N_EVENTS - len(e))
+    ]
+    # set tempo to 110
+    # add 30 bass notes
+
+    e = [
+        ev.intersect(tempo_constraint(130)).intersect(
+            {"instrument": {"Bass", "Drums", "Piano", "Guitar", "-"}}
+        )
+        for ev in e
+    ]
+    return e
+
+def simple_beat():
+
+    e = []
+    # add 30 piano
+    e += [
+        EventConstraint().intersect({"instrument": {"Piano"}}).force_active()
+        for _ in range(10)
+    ]
+
+    # add 30 guitar
+    # e += [
+    #     EventConstraint().intersect({"instrument": {"Guitar"}}).force_active()
+    #     for _ in range(30)
+    # ]
+
+    # add 5 bass
+    # e += [
+    #     EventConstraint().intersect({"instrument": {"Bass"}}).force_active()
+    #     for _ in range(5)
+    # ]
+
+    # add 10 synth lead
+    e += [
+        EventConstraint().intersect({"instrument": {"Synth Lead"}}).force_active()
+        for _ in range(10)
+    ]
+
+    # add 50 optional
+    e += [
+        EventConstraint().intersect({"instrument": {"Piano", "Synth Lead", "-"}})
+        for _ in range(50)
+    ]
+
+    # constrain to major pitch set
+    e = [ev.intersect(scale_constraint("C major", (20, 100))) for ev in e]
+    # pad with empty notes
+    e += [EventConstraint().force_inactive() for _ in range(N_EVENTS - len(e))]
+
+    # set tag to pop
+    e = [ev.intersect({"tag": {"pop", "-"}}).intersect(tempo_constraint(120)) for ev in e]
+
+    return e
 
 def infill(e, beat_range, pitch_range, drums):
     # remove empty events
@@ -647,38 +895,40 @@ def regenerate():
     # recursively convert keys from camelCase to snake_case
     data = json_camel_to_snake(data)
 
-    pitch_range = data["tracks"][0]["constraint"]["pitch_range"]
-    onset_tick_range = data["tracks"][0]["constraint"]["onset_tick_range"]
-    sequence = data["tracks"][0]["sequence"]
-    tempo = data["bpm"]
-    
-    # create event constraints
-    e = []
-    for note_event in sequence:
-        event = EventConstraint(
-            {
-            "pitch": {str(note_event["pitch"])+" (Drums)"}, 
-             "onset/beat": {str(note_event["onset"] // model.tokenizer.config["ticks_per_beat"])},
-            "onset/tick": {str(note_event["onset"] % model.tokenizer.config["ticks_per_beat"])},
-            "velocity": {quantize_velocity(int(note_event["velocity"]))},
-            "instrument": {"Drums"},
-            "tempo": {quantize_tempo(int(tempo))},
-            "tag": {"other"},
-            "offset/beat": {"none (Drums)"},
-            "offset/tick": {"none (Drums)"},
-            })
-        e += [event]
-    print(f"Len e: {len(e)}")
     try:
-        # e = simple_beat()
-        beat_range = [ int(onset_tick_range[0]) // model.tokenizer.config["ticks_per_beat"], 1+int(onset_tick_range[1]) // model.tokenizer.config["ticks_per_beat"]]
-        pitch_range = [int(pitch_range[0]), int(pitch_range[1])]
+        # pitch_range = data["tracks"][0]["constraint"]["pitch_range"]
+        # onset_tick_range = data["tracks"][0]["constraint"]["onset_tick_range"]
+        # sequence = data["tracks"][0]["sequence"]
+        # tempo = data["bpm"]
+        
+        # # create event constraints
+        # e = []
+        # for note_event in sequence:
+        #     event = EventConstraint(
+        #         {
+        #         "pitch": {str(note_event["pitch"])+" (Drums)" if note_event["instrument"] == "Drums" else str(note_event["pitch"])}, 
+        #         "onset/beat": {str(note_event["onset"] // model.tokenizer.config["ticks_per_beat"])},
+        #         "onset/tick": {str(note_event["onset"] % model.tokenizer.config["ticks_per_beat"])},
+        #         "velocity": {quantize_velocity(int(note_event["velocity"]))},
+        #         "instrument": {note_event["instrument"]},
+        #         "tempo": {quantize_tempo(int(tempo))},
+        #         "tag": {"other"},
+        #         "offset/beat": {"none (Drums)"},
+        #         "offset/tick": {"none (Drums)"},
+        #         })
+        #     e += [event]
+        # print(f"Len e: {len(e)}")
+        # # e = simple_beat()
+        # beat_range = [ int(onset_tick_range[0]) // model.tokenizer.config["ticks_per_beat"], 1+int(onset_tick_range[1]) // model.tokenizer.config["ticks_per_beat"]]
+        # pitch_range = [int(pitch_range[0]), int(pitch_range[1])]
         # e = infill(e, beat_range, pitch_range, drums=True)
         # e = breakbeat()
-        e = four_on_the_floor_beat()
+        # e = four_on_the_floor_beat()
+        # e = disco_beat()
+        e = simple_beat()
         mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
  
-        x = generate(mask, top_p=1.0,temperature=1.0, order="random")
+        x = generate(mask, top_p=0.96,temperature=1.0, order="random")
         x_sm = model.tokenizer.decode(x)
         import util
         x_sm = util.sm_fix_overlap_notes(x_sm)
@@ -695,64 +945,40 @@ def regenerate():
         except OSError:
             pass
 
-        # convert to tokens
-        x = model.tokenizer.encode(x_sm, tag="other")
-        xt = model.tokenizer.indices_to_tokens(x)
-
-        # x_sm
-        # xt = model.tokenizer.indices_to_tokens(x)
-
-        # split into events
-        n_events = model.tokenizer.config["max_notes"]
-
-        event_tokens = [xt[i : i + len(model.tokenizer.note_attribute_order)] for i in range(0, len(xt), len(model.tokenizer.note_attribute_order))]
-
-        # now turn into event dictionaries
-        event_dicts = [
-            {key: value for key, value in [token.split(":") for token in event_token]}
-            for event_token in event_tokens
-        ]
-
-        sequence = []
-        for event_dict in event_dicts:
-            if event_dict["instrument"] != "-":
-                sequence.append({"pitch": event_dict["pitch"].replace(" (Drums)",""), 
-                                 "onset": (int(event_dict["onset/beat"]) * int(model.tokenizer.config["ticks_per_beat"]) + int(event_dict["onset/tick"])),
-                                 "velocity": event_dict["velocity"],
-                                 "duration": 4
-                                 })
-                tempo = event_dict["tempo"]
-
-        #  const new_song = {
-        #   "name": "test",
-        #   "version": 0,
-        #   "bpm": data.tempo,
-        #   "timeSignature": data.time_signature,
-        #   "numBars": data.n_bars,
-        #   "pitchRange": pitchRange,
-        #   "tracks": [
-        #     {
-        #       "instrument": "drums",
-        #       "sequence": data.sequence.map(note =>
-        #       ({
-        #         "pitch": note.pitch,
-        #         "onset": note.onset,
-        #         "duration": PPQ / 8,
-        #         "velocity": note.velocity
-        #       })
-        #       )
-        #     }
-        #   ]
-        # }
-        # time signature
-        loop_object = {
-            "time_signature": "4/4",
-            "tempo": tempo,
-            "n_bars":4,
-            "sequence": sequence,
-        }
-
-        # 
+        def sm_to_looprep(sm):
+            # make two sequences. one for drums and one for other instruments
+            drum_sequence = []
+            harm_sequence = []
+            for track in sm.tracks:
+                for note in track.notes:
+                    if track.name == "Drums":
+                        drum_sequence.append({
+                            "pitch": note.pitch,
+                            "onset": note.start,
+                            "velocity": note.velocity,
+                            "duration": sm.tpq//4,
+                            "instrument": track.name
+                        })
+                    else:
+                        harm_sequence.append(
+                            {
+                                "pitch": note.pitch,
+                                "onset": note.start,
+                                "velocity": note.velocity,
+                                "duration": note.duration,
+                                "instrument": track.name,
+                            }
+                        )
+            return {
+                "time_signature": "4/4",
+                "tempo": sm.tempos[0].qpm,
+                "n_bars":4,
+                "drum_seq": drum_sequence,
+                "harm_seq": harm_sequence,
+                "ppq": sm.tpq
+            }
+      
+        loop_object = sm_to_looprep(x_sm)
 
         return jsonify(loop_object)
     except Exception as e:
