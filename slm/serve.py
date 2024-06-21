@@ -546,13 +546,13 @@ def synth_beat():
     # add 20 drums
     e += [
         EventConstraint().intersect({"instrument": {"Drums"}}).force_active()
-        for _ in range(30)
+        for _ in range(50)
     ]
 
     # add 50 optional bass or synth lead
     e += [
         EventConstraint().intersect({"instrument": {"Bass", "Drums", "Piano", "-"}})
-        for _ in range(50)
+        for _ in range(100)
     ]
 
     # pad with empty notes
@@ -563,7 +563,7 @@ def synth_beat():
         for ev in e
     ]
     # set tag to pop
-    e = [ev.intersect({"tag": {"pop", "-"}}) for ev in e]
+    e = [ev.intersect({"tag": {"other", "-"}}) for ev in e]
 
     return e
 
@@ -935,7 +935,7 @@ def fun_beat():
     e += [EventConstraint().force_inactive() for _ in range(N_EVENTS - len(e))]
 
     # set tag to pop
-    e = [ev.intersect({"tag": {"jazz", "-"}}).intersect(tempo_constraint(120)) for ev in e]
+    e = [ev.intersect({"tag": {"other", "-"}}).intersect(tempo_constraint(120)) for ev in e]
 
 
     return e
@@ -1164,7 +1164,7 @@ def regenerate():
         # e = simple_beat()
         mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
  
-        x = generate(mask, temperature=1.3, order="lowest_entropy")
+        x = generate(mask, temperature=0.95, order="random")
         x_sm = model.tokenizer.decode(x)
         import util
         x_sm = util.sm_fix_overlap_notes(x_sm)

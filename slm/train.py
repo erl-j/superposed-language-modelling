@@ -260,7 +260,6 @@ class EncoderOnlyModel(pl.LightningModule):
 
             x = self.tokenizer.collapse_undefined_attributes(x)
 
-        print(x.shape)
         return x
 
     def generate_mask_predict(self, x, temperature=1, top_p=1, top_k=0, steps = 100, temperature_decay=False):
