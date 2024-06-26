@@ -473,6 +473,7 @@ class EncoderOnlyModel(pl.LightningModule):
         top_k=0,
         order="random",
         attribute_temperature=None,
+        tokens_per_step=1,
     ):
         if sampling_steps is None:
             sampling_steps = self.tokenizer.config["max_notes"]*len(self.tokenizer.note_attribute_order)
@@ -544,7 +545,7 @@ class EncoderOnlyModel(pl.LightningModule):
 
                     # tokens to unmask
 
-                    n_tokens_to_unmask = 1
+                    n_tokens_to_unmask = tokens_per_step
 
                     # get indices of tokens to unmask
                     # get indices of masked tokens
@@ -586,7 +587,7 @@ class EncoderOnlyModel(pl.LightningModule):
         return x
     
     @torch.no_grad()
-    def sparsify(self, x, temperature=1, top_p=1, top_k=0, steps = 100, pmax=None, pmin=None, alpha=None):
+    def sparsify(self, x, temperature=1, top_p=1, top_k=0):
         self.eval()
         dtype = self.embedding_layer.weight.dtype
         x = x.to(dtype)
@@ -631,15 +632,23 @@ class EncoderOnlyModel(pl.LightningModule):
 
         logits = einops.rearrange(flat_logits, "(b e a) v -> b e a v", b=batch, e=self.tokenizer.config["max_notes"], a=self.n_attributes)
         # get indices of instrument "-" token
-        probe_attribute = "instrument"
-        probe_attribute_idx = self.tokenizer.note_attribute_order.index(probe_attribute)
-        undef_token_idx = self.tokenizer.token2idx[f"{probe_attribute}:-"]
-        undef_probs =  probs[:, :, probe_attribute_idx, undef_token_idx]
-        # plot
-        plt.plot(undef_probs[0].detach().cpu())
-        plt.show()
+        
+        undef_tokens = [self.tokenizer.token2idx[f"{attr}:-"] for attr in self.tokenizer.note_attribute_order]
+        
+        # get probabilities of undef tokens for each attribute
+        undef_probs = probs[torch.arange(batch)[:, None, None], torch.arange(self.tokenizer.config["max_notes"])[None, :, None], torch.arange(self.n_attributes)[None, None, :], undef_tokens]
 
-        return undef_probs[0]
+        # print(undef_probs[0,200])
+        # take mean prob per note
+        mean_undef_probs = undef_probs.mean(dim=-1) * 100
+        # probe_attribute_idx = self.tokenizer.note_attribute_order.index(probe_attribute)
+        # undef_token_idx = self.tokenizer.token2idx[f"{probe_attribute}:-"]
+        # undef_probs =  probs[:, :, probe_attribute_idx, undef_token_idx]
+        # # plot
+        # plt.plot(undef_probs[0].detach().cpu())
+        # plt.show()
+
+        return mean_undef_probs[0]
 
     
 
