@@ -9,9 +9,9 @@ import wandb
 from data import MidiDataset
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, RichProgressBar, StochasticWeightAveraging
 from pytorch_lightning.loggers import WandbLogger
-from merged_tokenizer import MergedTokenizer
+from slm.data.merged_tokenizer import MergedTokenizer
 from torch import nn
-from augmentation import transpose_sm
+from slm.data.augmentation import transpose_sm
 import einops
 from tqdm import tqdm
 from util import top_k_top_p_filtering, top_p_probs
@@ -19,7 +19,7 @@ import numpy as np
 from lightning.pytorch.utilities import grad_norm
 import warnings
 from train import EncoderOnlyModel
-from flow_utils import DirichletConditionalFlow, sample_cond_prob_path, expand_simplex, simplex_proj, GaussianFourierProjection
+from slm.dirichlet_flow.flow_utils import DirichletConditionalFlow, sample_cond_prob_path, expand_simplex, simplex_proj, GaussianFourierProjection
 import time
 from types import SimpleNamespace
 import os

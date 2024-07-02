@@ -1,4 +1,4 @@
-from slm import data
+from slm.data import data
 
 def test_MidiDataset():
 

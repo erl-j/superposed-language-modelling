@@ -1,6 +1,6 @@
 import sys
 import pytest
-from slm import merged_tokenizer
+from slm.data import merged_tokenizer
 import symusic
 
 def test_midi_load():

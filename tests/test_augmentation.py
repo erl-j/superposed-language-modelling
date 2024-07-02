@@ -1,4 +1,4 @@
-from slm import augmentation
+from slm.data.data import augmentation
 import symusic
 
 def test_transpose():

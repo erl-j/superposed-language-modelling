@@ -11,7 +11,7 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, RichProg
 from pytorch_lightning.loggers import WandbLogger
 from merged_tokenizer_2 import MergedTokenizer2 as MergedTokenizer
 from torch import nn
-from augmentation import transpose_sm
+from slm.data.augmentation import transpose_sm
 import einops
 from tqdm import tqdm
 from util import top_k_top_p_filtering

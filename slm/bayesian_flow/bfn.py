@@ -9,13 +9,13 @@ import wandb
 from data import MidiDataset
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, RichProgressBar
 from pytorch_lightning.loggers import WandbLogger
-from merged_tokenizer import MergedTokenizer
+from slm.data.merged_tokenizer import MergedTokenizer
 from torch import nn
-from augmentation import transpose_sm
+from slm.data.augmentation import transpose_sm
 import einops
 from tqdm import tqdm
 from util import top_k_top_p_filtering
-from flow_utils import GaussianFourierProjection
+from slm.dirichlet_flow.flow_utils import GaussianFourierProjection
 import math
 from simplex_diffusion import SimplexDiffusionModel
 

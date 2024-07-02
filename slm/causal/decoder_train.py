@@ -5,7 +5,7 @@ import pandas as pd
 import itertools
 from tqdm import tqdm
 import random
-from augmentation import transpose_sm
+from slm.data.augmentation import transpose_sm
 
 
 def get_num_notes(sm):
