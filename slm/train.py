@@ -9,9 +9,9 @@ import wandb
 from data import MidiDataset
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, RichProgressBar
 from pytorch_lightning.loggers import WandbLogger
-from slm.data.merged_tokenizer import MergedTokenizer
+from slm.merged_tokenizer import MergedTokenizer
 from torch import nn
-from slm.data.augmentation import transpose_sm
+from slm.augmentation import transpose_sm
 import einops
 from tqdm import tqdm
 from util import top_k_top_p_filtering

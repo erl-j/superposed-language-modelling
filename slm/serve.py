@@ -10,7 +10,7 @@ from util import preview_sm, sm_fix_overlap_notes, get_scale, loop_sm
 import os
 import IPython.display as ipd
 from paper_checkpoints import checkpoints
-from simplex_diffusion import SimplexDiffusionModel
+# from simplex_diffusion import SimplexDiffusionModel
 import torch
 import tempfile
 import util
