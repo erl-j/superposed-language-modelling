@@ -1241,8 +1241,8 @@ def infill(e, beat_range, pitch_range, drums, tag="other", tempo=120):
     return e
 
 
+
 def repitch(e, beat_range, pitch_range, drums, tag="other", tempo=120):
-    print(drums)
     # remove empty events
     e = [ev for ev in e if not ev.is_inactive()]
 
