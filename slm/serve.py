@@ -489,7 +489,7 @@ def breakbeat():
     # add 20 rides
     e += [
         EventConstraint().intersect({"pitch": {"51 (Drums)"}}).force_active()
-        for _ in range(20)
+        for _ in range(40)
     ]
     # 20 optional rides
     e += [
@@ -498,7 +498,7 @@ def breakbeat():
     # add 10 snare
     e += [
         EventConstraint().intersect({"pitch": {"38 (Drums)"}}).force_active()
-        for _ in range(10)
+        for _ in range(20)
     ]
     # add 10 optional snares
     e += [
@@ -509,9 +509,11 @@ def breakbeat():
     e += [EventConstraint().force_inactive() for _ in range(N_EVENTS - len(e))]
     # set to 160
     e = [
-        ev.intersect(tempo_constraint(150)).intersect({"instrument": {"Drums", "-"}})
+        ev.intersect(tempo_constraint(95)).intersect({"instrument": {"Drums", "-"}})
         for ev in e
     ]
+    e = [ev.intersect({"tag": {"jazz", "-"}}) for ev in e]
+
     return e
 
 def funk_beat():
