@@ -12,7 +12,6 @@ from util import preview_sm, sm_fix_overlap_notes, get_scale, loop_sm
 import util
 from paper_checkpoints import checkpoints
 
-
 USE_FP16 = True
 
 def get_external_ip():
@@ -22,9 +21,7 @@ def get_external_ip():
     s.close()
     return external_ip
 
-print("External IP Address:", get_external_ip())
-app = Flask(__name__)
-CORS(app)
+
 
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 device = "cuda:6"
@@ -37,91 +34,38 @@ TMP_DIR = ROOT_DIR + "artefacts/tmp"
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-if MODEL == "slm":
-    model = (
-        EncoderOnlyModel.load_from_checkpoint(
-            ROOT_DIR + checkpoints[MODEL],
-            map_location=device,
-            
-        )
-        .to(device)
-        .eval()
+model = (
+    EncoderOnlyModel.load_from_checkpoint(
+        ROOT_DIR + checkpoints[MODEL],
+        map_location=device,
+        
     )
+    .to(device)
+    .eval()
+)
 
-    def generate(
-        mask, temperature=1.0, top_p=1.0,top_k=0, tokens_per_step=1, attribute_temperature=None, order=None
-    ):
-        return model.generate(
-            mask,
-            temperature=temperature,
-            tokens_per_step=tokens_per_step,
-            top_p=top_p,
-            top_k=top_k,
-            order=order,
-            # attribute_temperature={"velocity": 1.5,"onset/tick":0.5},
-        )[0].argmax(axis=1)
-elif MODEL == "slm_harmonic":
-    # TODO: Figure out which checkpoint sounds best
-    model = (
-        EncoderOnlyModel.load_from_checkpoint(
-            # ROOT_DIR + "checkpoints/ruby-surf-331/epoch=1119-step=17920-val/loss_epoch=0.03922.ckpt",
-            ROOT_DIR
-            + "checkpoints/fanciful-star-356/epoch=1199-step=81600-val/loss_epoch=0.10647.ckpt",
-            map_location=device,
-        )
-        .to(device)
-        .eval()
-    )
-
-    def generate(
-        mask, temperature=1.0, top_p=1.0, attribute_temperature=None, order=None
-    ):
-        return model.generate(
-            mask,
-            temperature=temperature,
-            top_p=top_p,
-            order=order,
-            # attribute_temperature={"velocity": 1.5,"onset/tick":0.5},
-        )[0].argmax(axis=1)
-elif MODEL == "slm_clean_drums":
-    model = (
-        EncoderOnlyModel.load_from_checkpoint(
-            # ROOT_DIR
-            # + "checkpoints/sparkling-violet-330/epoch=159-step=7200-val/loss_epoch=0.04531.ckpt",
-            # ROOT_DIR
-            # + "checkpoints/fresh-grass-346/last.ckpt",
-            # ROOT_DIR
-            # + "checkpoints/comfy-morning-351/epoch=2199-step=288200-val/loss_epoch=0.11651.ckpt",
-            ROOT_DIR + "checkpoints/vocal-energy-350/epoch=899-step=117900-val/loss_epoch=0.10755.ckpt",
-            # ROOT_DIR +"checkpoints/magic-star-347/last.ckpt",
-            # ROOT_DIR + "checkpoints/bumbling-wave-348/last.ckpt",
-            # ROOT_DIR + "checkpoints/generous-donkey-335/last.ckpt",
-            map_location="cpu",
-        )
-        .to(device)
-        .eval()
-    )
-
-    def generate(mask, temperature=1.0, top_p=1.0, top_k=1.0,attribute_temperature=None, order=None):
-        return model.generate(
-            mask,
-            temperature=temperature,
-            top_p=top_p,
-            order=order,
-            # attribute_temperature={"velocity": 1.5,"onset/tick":0.5},
-        )[0].argmax(axis=1)
+def generate(
+    mask, temperature=1.0, top_p=1.0,top_k=0, tokens_per_step=1, attribute_temperature=None, order=None
+):
+    return model.generate(
+        mask,
+        temperature=temperature,
+        tokens_per_step=tokens_per_step,
+        top_p=top_p,
+        top_k=top_k,
+        order=order,
+        # attribute_temperature={"velocity": 1.5,"onset/tick":0.5},
+)[0].argmax(axis=1)
 
 def preview(sm):
     sm = sm.copy()
     sm = sm_fix_overlap_notes(sm)
     preview_sm(loop_sm(sm, 4, 4))
 
-
 if USE_FP16:
     model = model.convert_to_half()
 
 # %%
-# create 128 bpm rock loop with drums, bass, guitar with max 280 notes and minimum 2 drum notes and maximum 40 drum notes
 
 ALL_INSTRUMENTS = {
     token.split(":")[-1]
@@ -209,7 +153,6 @@ PERCUSSION_PITCHES = {
         "81",
     ]
 }
-
 # create 128 bpm rock loop with drums, bass, guitar with max 280 notes
 N_EVENTS = model.tokenizer.config["max_notes"]
 
@@ -337,10 +280,6 @@ def quantize_tempo(tempo):
     tempos = list(str(t) for t in ALL_TEMPOS)
     tempo = min(tempos, key=lambda x: abs(int(x) - int(tempo)))
     return tempo
-
-@app.route("/", methods=["GET"])
-def index():
-    return "Hello, World!"
 
 def simple_beat():
     e = [EventConstraint().force_active() for _ in range(80)]
@@ -999,18 +938,7 @@ def simple_beat():
     return e
 
 
-def camel_to_snake(name):
-    import re
 
-    name = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
-    return re.sub("([a-z0-9])([A-Z])", r"\1_\2", name).lower()
-
-def json_camel_to_snake(data):
-    if isinstance(data, dict):
-        return {camel_to_snake(k): json_camel_to_snake(v) for k, v in data.items()}
-    if isinstance(data, list):
-        return [json_camel_to_snake(v) for v in data]
-    return data
 
 def make_sparse(e):
     n_events = model.tokenizer.config["max_notes"]
@@ -1043,59 +971,6 @@ def make_sparse(e):
     random.shuffle(e)
 
     return e
-
-def sm_to_looprep(sm):
-    # make two sequences. one for drums and one for other instruments
-    drum_sequence = []
-    harm_sequence = []
-    for track in sm.tracks:
-        for note in track.notes:
-            if track.name == "Drums":
-                drum_sequence.append({
-                    "pitch": note.pitch,
-                    "onset": note.start,
-                    "velocity": note.velocity,
-                    "duration": sm.tpq//4,
-                    "instrument": track.name
-                })
-            else:
-                harm_sequence.append(
-                    {
-                        "pitch": note.pitch,
-                        "onset": note.start,
-                        "velocity": note.velocity,
-                        "duration": note.duration,
-                        "instrument": track.name,
-                    }
-                )
-    return {
-        "time_signature": "4/4",
-        "tempo": sm.tempos[0].qpm,
-        "n_bars":4,
-        "drum_seq": drum_sequence,
-        "harm_seq": harm_sequence,
-        "ppq": sm.tpq
-    }
-
-def seq2events(sequence, tempo):
-    events = []
-    for note_event in sequence:
-
-        event = EventConstraint(
-            {
-                "pitch": {str(note_event["pitch"])+" (Drums)" if note_event["instrument"] == "Drums" else str(note_event["pitch"])},
-                "onset/beat": {str(note_event["onset"] // model.tokenizer.config["ticks_per_beat"])},
-                "onset/tick": {str(note_event["onset"] % model.tokenizer.config["ticks_per_beat"])},
-                "velocity": {str(quantize_velocity(int(note_event["velocity"])))},
-                "instrument": {note_event["instrument"]},
-                "tempo": {str(quantize_tempo(tempo))},
-                "tag": {"other"},
-                "offset/beat": {str((note_event["onset"] + note_event["duration"]) // model.tokenizer.config["ticks_per_beat"]) if note_event["instrument"] != "Drums" else "none (Drums)"},
-                "offset/tick": {str((note_event["onset"] + note_event["duration"]) % model.tokenizer.config["ticks_per_beat"]) if note_event["instrument"] != "Drums" else "none (Drums)"}
-            }
-        )
-        events += [event]
-    return events
 
 # with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
 #         x_sm.dump_midi(tmp_file.name)
@@ -1280,63 +1155,6 @@ def reinstrument(e, beat_range, pitch_range, drums, tag="other", tempo=120):
     e += [EventConstraint().force_inactive() for e in range(N_EVENTS - len(e))]
     return e
 
-
-@app.route("/replace", methods=["POST"])
-def replace():
-    data = request.json
-    # recursively convert keys from camelCase to snake_case
-    data = json_camel_to_snake(data)
-    action = data["action"]
-    sampling_settings = data["sampling_settings"] 
-    try:
-        pitch_range = data["replace_info"]["pitch_range"]
-        tick_range = data["replace_info"]["tick_range"]
-        sequence = data["harm_seq"] + data["drum_seq"]
-        tempo = data["tempo"]
-        edit_drums = data["replace_info"]["replace_part"] == "drum_seq"
-        e = seq2events(sequence, tempo)
-
-        beat_range = [ int(tick_range[0]) // model.tokenizer.config["ticks_per_beat"], 1+int(tick_range[1]) // model.tokenizer.config["ticks_per_beat"]]
-        pitch_range = [int(pitch_range[0]), int(pitch_range[1])]
-        if action == "replace":
-            e = infill(
-                e, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo
-            )
-        elif action == "repitch":
-            e = repitch(e, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo)
-        elif action == "retime":
-            e = retime(e, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo)
-        elif action == "reinstrument":
-            e = reinstrument(e, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo)
-        elif action == "revelocity":
-            e = revelocity(e, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo)
-            print(e)
-        mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
-
-        x = generate(
-            mask,
-            top_p=float(sampling_settings["topp"]),
-            temperature=float(sampling_settings["temperature"]),
-            top_k=int(sampling_settings["topk"]),
-            tokens_per_step=int(sampling_settings["greed"]),
-            order="random",
-        )
-        x_sm = model.tokenizer.decode(x)
-        x_sm = util.sm_fix_overlap_notes(x_sm)
-
-        # print note num
-        print(f"Note num: {x_sm.note_num()}")
-
-        loop_object = sm_to_looprep(x_sm)
-
-        return jsonify(loop_object)
-    except Exception as e:
-        import traceback
-
-        etype, value, tb = sys.exc_info()
-        print(traceback.print_exception(etype, value, tb))
-        print(e)
-        return jsonify({"error": str(e)}), 500
 
 
 
@@ -1601,8 +1419,110 @@ def add_locked_in_bassline(e):
     return e
 
 
-@app.route("/custom", methods=["POST"])
-def custom():
+print("External IP Address:", get_external_ip())
+app = Flask(__name__)
+CORS(app)
+
+
+@app.route("/", methods=["GET"])
+def index():
+    return "Hello, World!"
+
+
+def camel_to_snake(name):
+    import re
+
+    name = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
+    return re.sub("([a-z0-9])([A-Z])", r"\1_\2", name).lower()
+
+
+def json_camel_to_snake(data):
+    if isinstance(data, dict):
+        return {camel_to_snake(k): json_camel_to_snake(v) for k, v in data.items()}
+    if isinstance(data, list):
+        return [json_camel_to_snake(v) for v in data]
+    return data
+
+
+def sm_to_looprep(sm):
+    # make two sequences. one for drums and one for other instruments
+    drum_sequence = []
+    harm_sequence = []
+    for track in sm.tracks:
+        for note in track.notes:
+            if track.name == "Drums":
+                drum_sequence.append(
+                    {
+                        "pitch": note.pitch,
+                        "onset": note.start,
+                        "velocity": note.velocity,
+                        "duration": sm.tpq // 4,
+                        "instrument": track.name,
+                    }
+                )
+            else:
+                harm_sequence.append(
+                    {
+                        "pitch": note.pitch,
+                        "onset": note.start,
+                        "velocity": note.velocity,
+                        "duration": note.duration,
+                        "instrument": track.name,
+                    }
+                )
+    return {
+        "time_signature": "4/4",
+        "tempo": sm.tempos[0].qpm,
+        "n_bars": 4,
+        "drum_seq": drum_sequence,
+        "harm_seq": harm_sequence,
+        "ppq": sm.tpq,
+    }
+
+
+def seq2events(sequence, tempo):
+    events = []
+    for note_event in sequence:
+        event = EventConstraint(
+            {
+                "pitch": {
+                    str(note_event["pitch"]) + " (Drums)"
+                    if note_event["instrument"] == "Drums"
+                    else str(note_event["pitch"])
+                },
+                "onset/beat": {
+                    str(note_event["onset"] // model.tokenizer.config["ticks_per_beat"])
+                },
+                "onset/tick": {
+                    str(note_event["onset"] % model.tokenizer.config["ticks_per_beat"])
+                },
+                "velocity": {str(quantize_velocity(int(note_event["velocity"])))},
+                "instrument": {note_event["instrument"]},
+                "tempo": {str(quantize_tempo(tempo))},
+                "tag": {"other"},
+                "offset/beat": {
+                    str(
+                        (note_event["onset"] + note_event["duration"])
+                        // model.tokenizer.config["ticks_per_beat"]
+                    )
+                    if note_event["instrument"] != "Drums"
+                    else "none (Drums)"
+                },
+                "offset/tick": {
+                    str(
+                        (note_event["onset"] + note_event["duration"])
+                        % model.tokenizer.config["ticks_per_beat"]
+                    )
+                    if note_event["instrument"] != "Drums"
+                    else "none (Drums)"
+                },
+            }
+        )
+        events += [event]
+    return events
+
+@app.route("/edit", methods=["POST"])
+def edit():
     data = request.json
     # recursively convert keys from camelCase to snake_case
     data = json_camel_to_snake(data)
@@ -1621,7 +1541,40 @@ def custom():
             1 + int(tick_range[1]) // model.tokenizer.config["ticks_per_beat"],
         ]
         pitch_range = [int(pitch_range[0]), int(pitch_range[1])]
-        if action == "tom_fill":
+        if action == "replace":
+            e = infill(
+                e, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo
+            )
+        elif action == "repitch":
+            e = repitch(
+                e, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo
+            )
+        elif action == "retime":
+            e = retime(
+                e, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo
+            )
+        elif action == "reinstrument":
+            e = reinstrument(
+                e, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo
+            )
+        elif action == "revelocity":
+            e = revelocity(
+                e, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo
+            )
+            print(e)
+        elif action == "disco":
+            e = disco_beat()
+        elif action == "metal":
+            e = metal_beat()
+        elif action == "goofy":
+            e = fun_beat()
+        elif action == "synth":
+            e = synth_beat()
+        elif action == "breakbeat":
+            e = breakbeat()
+        elif action == "funk":
+            e = funk_beat()
+        elif action == "tom_fill":
             e = add_tom_fill(e)
         elif action == "snare_ghost_notes":
             e = add_snare_ghost_notes(e)
@@ -1638,8 +1591,8 @@ def custom():
         elif action == "arpeggio":
             e = add_arpeggio(e)
         else:
-            raise ValueError(f"Unknown action: {action}")
-         
+            raise ValueError(f"Unknown action: {action}")    
+
         mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
 
         x = generate(
@@ -1666,62 +1619,4 @@ def custom():
         print(traceback.print_exception(etype, value, tb))
         print(e)
         return jsonify({"error": str(e)}), 500
-
-
-
-@app.route("/create", methods=["POST"])
-def create():
-    data = request.json
-    # recursively convert keys from camelCase to snake_case
-    data = json_camel_to_snake(data)
-    sampling_settings = data["sampling_settings"]
-    action = data["action"]
-    try:
-        if action == "disco":
-            e = disco_beat()
-        elif action == "metal":
-            e = metal_beat()
-        elif action == "goofy":
-            e = fun_beat()
-        elif action == "synth":
-            e = synth_beat()
-        elif action == "breakbeat":
-            e = breakbeat()
-        elif action == "funk":
-            e = funk_beat()
-        else:
-            raise ValueError(f"Unknown action: {action}")
-
-            
-        # e = breakbeat()
-        # e = four_on_the_floor_beat()
-        # e = disco_beat()
-        # e = metal_beat()
-        # e = fun_beat()
-        # e = synth_beat()
-        # e = simple_beat()
-        mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
- 
-        x = generate(
-            mask,
-            top_p= float(sampling_settings["topp"]),
-            temperature=float(sampling_settings["temperature"]),
-            top_k = int(sampling_settings["topk"]),
-            tokens_per_step = int(sampling_settings["greed"]) ,
-            order="random")
-        x_sm = model.tokenizer.decode(x)
-        x_sm = util.sm_fix_overlap_notes(x_sm)
-        
-        # print note num
-        print(f"Note num: {x_sm.note_num()}")
-    
-        loop_object = sm_to_looprep(x_sm)
-
-        return jsonify(loop_object)
-    except Exception as ex:
-        import traceback
-        etype, value, tb = sys.exc_info()
-        print(traceback.print_exception(etype, value, tb))
-        print(ex)
-        return jsonify({"error": str(ex)}), 500
 # %%
