@@ -292,16 +292,6 @@ class MergedTokenizer():
         x_1h = x_1h * self.get_format_mask()
 
         return torch.tensor(x_1h)
-
-
-
-
-        
-
-            
-
-
-
     
     def replace_mask(self,x, attributes_to_replace):
         x = x.clone()

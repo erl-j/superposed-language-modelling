@@ -14,14 +14,6 @@ from paper_checkpoints import checkpoints
 
 USE_FP16 = True
 
-def get_external_ip():
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.connect(("8.8.8.8", 80))
-    external_ip = s.getsockname()[0]
-    s.close()
-    return external_ip
-
-
 
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 device = "cuda:6"
@@ -67,52 +59,6 @@ if USE_FP16:
 
 # %%
 
-ALL_INSTRUMENTS = {
-    token.split(":")[-1]
-    for token in model.tokenizer.vocab
-    if "instrument:" in token and token != "instrument:-"
-}
-
-ALL_TEMPOS = {
-    token.split(":")[-1]
-    for token in model.tokenizer.vocab
-    if "tempo:" in token and token != "tempo:-"
-}
-ALL_ONSET_BEATS = {
-    token.split(":")[-1]
-    for token in model.tokenizer.vocab
-    if "onset/beat:" in token and token != "onset/beat:-"
-}
-ALL_ONSET_TICKS = {
-    token.split(":")[-1]
-    for token in model.tokenizer.vocab
-    if "onset/tick:" in token and token != "onset/tick:-"
-}
-ALL_OFFSET_BEATS = {
-    token.split(":")[-1]
-    for token in model.tokenizer.vocab
-    if "offset/beat:" in token and token != "offset/beat:-"
-}
-ALL_OFFSET_TICKS = {
-    token.split(":")[-1]
-    for token in model.tokenizer.vocab
-    if "offset/tick:" in token and token != "offset/tick:-"
-}
-ALL_VELOCITIES = {
-    token.split(":")[-1]
-    for token in model.tokenizer.vocab
-    if "velocity:" in token and token != "velocity:-"
-}
-ALL_TAGS = {
-    token.split(":")[-1]
-    for token in model.tokenizer.vocab
-    if "tag:" in token and token != "tag:-"
-}
-ALL_PITCH = {
-    token.split(":")[-1]
-    for token in model.tokenizer.vocab
-    if "pitch:" in token and token != "pitch:-"
-}
 # all pitches that contain "(Drums)"
 DRUM_PITCHES = {
     token.split(":")[-1]
@@ -174,48 +120,21 @@ def sm_to_events(x_sm):
     events = [EventConstraint().intersect(event) for event in events]
     return events
 
+# get all possible values for each attribute
+blank_event_dict = { attr : {token.split(":")[-1] for token in model.tokenizer.vocab if token.startswith(f"{attr}:")} for attr in model.tokenizer.note_attribute_order }
+
 class EventConstraint:
-    def __init__(self, dict=None):
-        self.blank_event = {
-            "instrument": ALL_INSTRUMENTS | {"-"},
-            "pitch": ALL_PITCH | {"-"},
-            "onset/beat": ALL_ONSET_BEATS | {"-"},
-            "onset/tick": ALL_ONSET_TICKS | {"-"},
-            "offset/beat": ALL_OFFSET_BEATS | {"-"},
-            "offset/tick": ALL_OFFSET_TICKS | {"-"},
-            "velocity": ALL_VELOCITIES | {"-"},
-            "tag": ALL_TAGS | {"-"},
-            "tempo": ALL_TEMPOS | {"-"},
-        }
+    def __init__(self, blank_event_dict=blank_event_dict):
+        self.blank_event = blank_event_dict
 
         self.a = self.blank_event.copy()
 
-        self.all_active = {
-            "instrument": ALL_INSTRUMENTS,
-            "pitch": ALL_PITCH,
-            "onset/beat": ALL_ONSET_BEATS,
-            "onset/tick": ALL_ONSET_TICKS,
-            "offset/beat": ALL_OFFSET_BEATS,
-            "offset/tick": ALL_OFFSET_TICKS,
-            "velocity": ALL_VELOCITIES,
-            "tag": ALL_TAGS,
-            "tempo": ALL_TEMPOS,
-        }
+        print(blank_event_dict)
 
-        self.not_active = {
-            "instrument": {"-"},
-            "pitch": {"-"},
-            "onset/beat": {"-"},
-            "onset/tick": {"-"},
-            "offset/beat": {"-"},
-            "offset/tick": {"-"},
-            "velocity": {"-"},
-            "tag": {"-"},
-            "tempo": {"-"},
-        }
+        # everything except "-"
+        self.all_active = { key : set(values) - {"-"} for key, values in self.blank_event.items() }
 
-        if dict is not None:
-            self.a = dict
+        self.not_active = { key : {"-"} for key in self.blank_event }
 
     def intersect(self, constraint):
         for key in constraint:
@@ -262,22 +181,22 @@ def scale_constraint(scale, pitch_range):
 
 def tempo_constraint(tempo):
     # find tempo that is closest to the given tempo
-    tempos = list(str(t) for t in ALL_TEMPOS)
+    tempos = list(str(t) for t in blank_event_dict["tempo"] if t != "-")
     tempo = min(tempos, key=lambda x: abs(int(x) - tempo))
     return {"tempo": {tempo, "-"}}
 
 def velocity_constraint(velocity):
-    velocities = list(str(v) for v in ALL_VELOCITIES)
+    velocities = list(str(v) for v in blank_event_dict["velocity"] if v != "-")
     velocity = min(velocities, key=lambda x: abs(int(x) - velocity))
     return {"velocity": {velocity, "-"}}
 
 def quantize_velocity(velocity):
-    velocities = list(str(v) for v in ALL_VELOCITIES)
+    velocities = list(str(v) for v in blank_event_dict["velocity"] if v != "-")
     velocity = min(velocities, key=lambda x: abs(int(x) - int(velocity)))
     return velocity
 
 def quantize_tempo(tempo):
-    tempos = list(str(t) for t in ALL_TEMPOS)
+    tempos = list(str(t) for t in blank_event_dict["tempo"] if t != "-")
     tempo = min(tempos, key=lambda x: abs(int(x) - int(tempo)))
     return tempo
 
@@ -448,9 +367,6 @@ def funk_beat():
 
     return e
 
-
-
-
 def synth_beat():
     e = []
     # add 10 bass
@@ -581,7 +497,6 @@ def prog_beat():
     #     {"pitch":scale_constraint("C pentatonic", (20, 100))["pitch"] | {"-"} | DRUM_PITCHES}
     #     ) for ev in e]
     return e
-
 
 def four_on_the_floor_beat():
     e = []
@@ -936,9 +851,6 @@ def simple_beat():
     e = [ev.intersect({"tag": {"pop", "-"}}).intersect(tempo_constraint(90)) for ev in e]
 
     return e
-
-
-
 
 def make_sparse(e):
     n_events = model.tokenizer.config["max_notes"]
@@ -1419,15 +1331,20 @@ def add_locked_in_bassline(e):
     return e
 
 
+def get_external_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("8.8.8.8", 80))
+    external_ip = s.getsockname()[0]
+    s.close()
+    return external_ip
+
 print("External IP Address:", get_external_ip())
 app = Flask(__name__)
 CORS(app)
 
-
 @app.route("/", methods=["GET"])
 def index():
     return "Hello, World!"
-
 
 def camel_to_snake(name):
     import re
@@ -1435,14 +1352,12 @@ def camel_to_snake(name):
     name = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
     return re.sub("([a-z0-9])([A-Z])", r"\1_\2", name).lower()
 
-
 def json_camel_to_snake(data):
     if isinstance(data, dict):
         return {camel_to_snake(k): json_camel_to_snake(v) for k, v in data.items()}
     if isinstance(data, list):
         return [json_camel_to_snake(v) for v in data]
     return data
-
 
 def sm_to_looprep(sm):
     # make two sequences. one for drums and one for other instruments
