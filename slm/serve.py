@@ -132,7 +132,6 @@ def sm_to_events(x_sm):
     return events
 
 # get all possible values for each attribute
-
 def simple_beat():
     e = [ec().force_active() for _ in range(80)]
     # pad
@@ -189,9 +188,12 @@ def breakbeat():
 
     return e
 
-def funk_beat():
+def funk_beat(e):
 
     e = []
+
+    # remove all drums
+    e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Drums"})]
 
     # add 10 kicks
     e += [
@@ -235,6 +237,41 @@ def funk_beat():
     # set tag to funk
     e = [ev.intersect({"tag": {"funk", "-"}}) for ev in e]
 
+    return e
+
+
+def funky_bassline(e):
+
+    # remove all bass
+    e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Bass"})]
+
+    # add 10 bass notes under 36 
+    e += [
+        ec()
+        .intersect({"instrument": {"Bass"}})
+        .intersect(ec().pitch_in_scale_constraint("C major", (20, 36)))
+        .force_active()
+        for _ in range(10)
+    ]
+
+    # add 10 bass notes over 50
+    e += [
+        ec()
+        .intersect({"instrument": {"Bass"}})
+        .intersect(ec().pitch_in_scale_constraint("C major", (50, 100)))
+        .force_active()
+        for _ in range(10)
+    ]
+
+    # add 10 optional bass notes
+    e += [
+        ec().intersect({"instrument": {"Bass"}}).intersect(ec().pitch_in_scale_constraint("C major", (20, 100)))
+        for _ in range(10)
+    ]
+
+    # pad with empty notes
+    e += [ec().force_inactive() for _ in range(N_EVENTS - len(e))]
+    
     return e
 
 def synth_beat():
@@ -698,17 +735,6 @@ def make_sparse(e):
     random.shuffle(e)
 
     return e
-
-# with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
-#         x_sm.dump_midi(tmp_file.name)
-#         tmp_file.flush()
-#         with open(tmp_file.name, "rb") as f:
-#             midi_bytes = f.read()
-#     try:
-#         os.remove(tmp_file.name)
-#     except OSError:
-#         pass
-
 
 def infill(e, beat_range, pitch_range, drums, tag="other", tempo=120):
     # remove empty events
@@ -1300,7 +1326,7 @@ def edit():
         elif action == "breakbeat":
             e = breakbeat()
         elif action == "funk":
-            e = funk_beat()
+            e = funk_beat(e)
         elif action == "tom_fill":
             e = add_tom_fill(e)
         elif action == "snare_ghost_notes":
@@ -1317,6 +1343,8 @@ def edit():
             e = add_lead(e)
         elif action == "arpeggio":
             e = add_arpeggio(e)
+        elif action == "funky_bassline":
+            e = funky_bassline(e)
         else:
             raise ValueError(f"Unknown action: {action}")    
 
