@@ -60,8 +60,9 @@ class MusicalEventConstraint(EventConstraint):
     This class extends the EventConstraint class to provide some utilities for musical events.
     '''
 
-    def __init__(self, blank_event):
+    def __init__(self, blank_event, tokenizer):
         super().__init__(blank_event)
+        self.tokenizer = tokenizer
 
     def pitch_in_scale_constraint(self,scale, pitch_range):
         scale_constraint = {
