@@ -62,7 +62,6 @@ class MusicalEventConstraint(EventConstraint):
 
     def __init__(self, blank_event):
         super().__init__(blank_event)
-    
 
     def pitch_in_scale_constraint(self,scale, pitch_range):
         scale_constraint = {
@@ -70,27 +69,39 @@ class MusicalEventConstraint(EventConstraint):
         }
         return scale_constraint
 
-
     def tempo_constraint(self,tempo):
         # find tempo that is closest to the given tempo
         tempos = list(str(t) for t in self.blank_event["tempo"] if t != "-")
         tempo = min(tempos, key=lambda x: abs(int(x) - tempo))
         return {"tempo": {tempo, "-"}}
 
-
     def velocity_constraint(self,velocity):
         velocities = list(str(v) for v in self.blank_event["velocity"] if v != "-")
         velocity = min(velocities, key=lambda x: abs(int(x) - velocity))
         return {"velocity": {velocity, "-"}}
-
 
     def quantize_velocity(self,velocity):
         velocities = list(str(v) for v in self.blank_event["velocity"] if v != "-")
         velocity = min(velocities, key=lambda x: abs(int(x) - int(velocity)))
         return velocity
 
-
     def quantize_tempo(self,tempo):
         tempos = list(str(t) for t in self.blank_event["tempo"] if t != "-")
         tempo = min(tempos, key=lambda x: abs(int(x) - int(tempo)))
         return tempo
+
+DRUM_PITCHES = {
+    f"{pitch} (Drums)"
+    for pitch in range(35, 82)
+}
+
+HIHAT_PITCHES = {f"{pitch} (Drums)" for pitch in ["42", "44", "46"]}
+
+TOM_PITCHES = {f"{pitch} (Drums)" for pitch in ["48", "50", "45", "47"]}
+
+CRASH_PITCHES = {f"{pitch} (Drums)" for pitch in ["49", "57"]}
+
+PERCUSSION_PITCHES = {
+    f"{pitch} (Drums)"
+    for pitch in range(54, 82)
+}

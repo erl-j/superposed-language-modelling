@@ -60,45 +60,7 @@ if USE_FP16:
 # %%
 
 # all pitches that contain "(Drums)"
-DRUM_PITCHES = {
-    token.split(":")[-1]
-    for token in model.tokenizer.vocab
-    if "pitch:" in token and "(Drums)" in token
-}
 
-HIHAT_PITCHES = {f"{pitch} (Drums)" for pitch in ["42", "44", "46"]}
-
-TOM_PITCHES = {f"{pitch} (Drums)" for pitch in ["48", "50", "45", "47"]}
-
-CRASH_PITCHES = {f"{pitch} (Drums)" for pitch in ["49", "57"]}
-
-PERCUSSION_PITCHES = {
-    f"{pitch} (Drums)"
-    for pitch in [
-        "60",
-        "61",
-        "62",
-        "63",
-        "64",
-        "65",
-        "66",
-        "67",
-        "68",
-        "69",
-        "70",
-        "71",
-        "72",
-        "73",
-        "74",
-        "75",
-        "76",
-        "77",
-        "78",
-        "79",
-        "80",
-        "81",
-    ]
-}
 # create 128 bpm rock loop with drums, bass, guitar with max 280 notes
 N_EVENTS = model.tokenizer.config["max_notes"]
 
