@@ -227,7 +227,7 @@ def edit():
         n_events = N_EVENTS
         if action == "replace":
             e = infill(
-                e, ec, n_events, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo
+                e, ec,  n_events, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo
             )
         elif action == "repitch":
             e = repitch(
@@ -420,7 +420,7 @@ def edit():
             top_p=float(sampling_settings["topp"]),
             temperature=float(sampling_settings["temperature"]),
             top_k=int(sampling_settings["topk"]),
-            tokens_per_step=int(sampling_settings["greed"]),
+            tokens_per_step=int(sampling_settings["tokens_per_step"]),
             order="random",
         )
         x_sm = model.tokenizer.decode(x)
