@@ -1,0 +1,1 @@
+python -m flask --app slm/serve.py run --debug

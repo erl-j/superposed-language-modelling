@@ -1,4 +1,13 @@
-def repitch(e, beat_range, pitch_range, drums, tag="other", tempo=120):
+def repitch(
+    e,
+    ec,
+    n_events,
+    beat_range,
+    pitch_range,
+    drums,
+    tag,
+    tempo,
+):
     # remove empty events
     e = [ev for ev in e if not ev.is_inactive()]
 
@@ -19,11 +28,20 @@ def repitch(e, beat_range, pitch_range, drums, tag="other", tempo=120):
         if e[i].a["onset/beat"].issubset(beats) and e[i].a["pitch"].issubset(pitches):
             e[i].a["pitch"] = pitches
     # pad with empty notes
-    e += [ec().force_inactive() for e in range(N_EVENTS - len(e))]
+    e += [ec().force_inactive() for e in range(n_events- len(e))]
     return e
 
 
-def revelocity(e, beat_range, pitch_range, drums, tag="other", tempo=120):
+def revelocity(
+    e,
+    ec,
+    n_events,
+    beat_range,
+    pitch_range,
+    drums,
+    tag,
+    tempo,
+):
     # remove empty events
     e = [ev for ev in e if not ev.is_inactive()]
 
@@ -44,11 +62,20 @@ def revelocity(e, beat_range, pitch_range, drums, tag="other", tempo=120):
         if e[i].a["onset/beat"].issubset(beats) and e[i].a["pitch"].issubset(pitches):
             e[i].a["velocity"] = ec().a["velocity"]
     # pad with empty notes
-    e += [ec().force_inactive() for e in range(N_EVENTS - len(e))]
+    e += [ec().force_inactive() for e in range(n_events - len(e))]
     return e
 
 
-def retime(e, beat_range, pitch_range, drums, tag="other", tempo=120):
+def retime(
+        e,
+        ec,
+        n_events,
+        beat_range,
+        pitch_range,
+        drums,
+        tag,
+        tempo,
+    ):
     # remove empty events
     e = [ev for ev in e if not ev.is_inactive()]
 
@@ -73,11 +100,20 @@ def retime(e, beat_range, pitch_range, drums, tag="other", tempo=120):
             e[i].a["offset/tick"] = ec().a["offset/tick"]
 
     # pad with empty notes
-    e += [ec().force_inactive() for e in range(N_EVENTS - len(e))]
+    e += [ec().force_inactive() for e in range(n_events - len(e))]
     return e
 
 
-def reinstrument(e, beat_range, pitch_range, drums, tag="other", tempo=120):
+def reinstrument(
+    e,
+    ec,
+    n_events,
+    beat_range,
+    pitch_range,
+    drums,
+    tag,
+    tempo,
+):
     # remove empty events
     e = [ev for ev in e if not ev.is_inactive()]
 
@@ -101,18 +137,27 @@ def reinstrument(e, beat_range, pitch_range, drums, tag="other", tempo=120):
             )
 
     # pad with empty notes
-    e += [ec().force_inactive() for e in range(N_EVENTS - len(e))]
+    e += [ec().force_inactive() for e in range(n_events - len(e))]
     return e
 
 
-def infill(e, beat_range, pitch_range, drums, tag="other", tempo=120):
+def infill(
+    e,
+    ec,
+    n_events,
+    beat_range,
+    pitch_range,
+    drums,
+    tag,
+    tempo,
+):
     # remove empty events
     e = [ev for ev in e if not ev.is_inactive()]
 
     # set all tags to tag and all tempos to tempo
     for i in range(len(e)):
         e[i].a["tag"] = {tag}
-        e[i].a["tempo"] = {str(ec().ec().quantize_tempo(tempo))}
+        e[i].a["tempo"] = {str(ec().quantize_tempo(tempo))}
 
     beats = set([str(r) for r in range(beat_range[0], beat_range[1])])
     pitches = set(
@@ -146,10 +191,10 @@ def infill(e, beat_range, pitch_range, drums, tag="other", tempo=120):
         | {"-"},
         "onset/beat": {str(r) for r in range(beat_range[0], beat_range[1])} | {"-"},
         "offset/beat": {str(r) for r in range(beat_range[0], beat_range[1])} | {"-"},
-        "instrument": ({"Drums"} if drums else ec().a["instruments"] - {"Drums"})
+        "instrument": ({"Drums"} if drums else ec().a["instrument"] - {"Drums"})
         | {"-"},
         "tag": {tag, "-"},
-        "tempo": {str(ec().ec().quantize_tempo(tempo)), "-"},
+        "tempo": {str(ec().quantize_tempo(tempo)), "-"},
     }
 
     # count notes per beat
@@ -171,7 +216,7 @@ def infill(e, beat_range, pitch_range, drums, tag="other", tempo=120):
     print(f"Notes removed: {notes_removed}")
 
     # # pad with empty notes
-    e += [ec().force_inactive() for _ in range(N_EVENTS - len(e))]
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
     # add 10 empty notes
     # e += [ec().force_inactive() for _ in range(40)]
 

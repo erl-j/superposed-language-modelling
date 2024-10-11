@@ -231,21 +231,20 @@ def edit():
             )
         elif action == "repitch":
             e = repitch(
-                e, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo
+                e, ec, n_events,  beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo
             )
         elif action == "retime":
             e = retime(
-                e, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo
+                e, ec, n_events, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo
             )
         elif action == "reinstrument":
             e = reinstrument(
-                e, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo
+                e, ec, n_events, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo
             )
         elif action == "revelocity":
             e = revelocity(
-                e, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo
+                e, ec, n_events, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo
             )
-            print(e)
         elif action == "disco":
             e = disco_beat(
                 e,
