@@ -68,7 +68,6 @@ if USE_FP16:
 # create 128 bpm rock loop with drums, bass, guitar with max 280 notes
 N_EVENTS = model.tokenizer.config["max_notes"]
 
-
 blank_event_dict = {
     attr: {
         token.split(":")[-1]
@@ -225,7 +224,20 @@ def edit():
         pitch_range = [int(pitch_range[0]), int(pitch_range[1])]
 
         n_events = N_EVENTS
-        if action == "replace":
+
+        if action == "prompt":
+            print(data["prompt"])
+            e = disco_beat(
+                e,
+                ec,
+                n_events,
+                beat_range,
+                pitch_range,
+                drums=edit_drums,
+                tag="pop",
+                tempo=tempo,
+            )
+        elif action == "replace":
             e = infill(
                 e, ec,  n_events, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo
             )
@@ -440,3 +452,6 @@ def edit():
         print(e)
         return jsonify({"error": str(e)}), 500
 # %%
+
+
+ 
