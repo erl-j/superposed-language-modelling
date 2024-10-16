@@ -273,13 +273,29 @@ def generate_function(prompt):
                 "content": [
                     {
                         "type": "text",
-                        "text": "def build_constraint(\n    e,\n    ec,\n    n_events,\n    beat_range,\n    pitch_range,\n    drums,\n    tag,\n    tempo,\n):\n\t'''\nTo generate a",
-                    }
+                        "text": 
+                        """
+                        def build_constraint(
+                            e,
+                            ec,
+                            n_events,
+                            beat_range,
+                            pitch_range,
+                            drums,
+                            tag,
+                            tempo,
+                            ):
+                            '''
+                            To generate a""".strip(),
+                    },
                 ],
             },
         ]
     
-    system_prompt = "Your task is to write a function that creates a constraint for creating a MIDI loop according to a user provided prompt."
+    system_prompt = f'''
+    Your task is to write a function that creates a constraint for creating a MIDI loop according to a user provided prompt.
+    The tag attribute can take on the values : {model.tokenizer.config['tags']}
+    '''.strip()
     
     response = client.messages.create(
         model="claude-3-5-sonnet-20240620",
