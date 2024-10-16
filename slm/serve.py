@@ -14,7 +14,14 @@ from paper_checkpoints import checkpoints
 from constraints.addx import *
 from constraints.re import *
 from constraints.templates import *
-from constraints.core import MusicalEventConstraint, DRUM_PITCHES, PERCUSSION_PITCHES, TOM_PITCHES, CRASH_PITCHES, HIHAT_PITCHES
+from constraints.core import (
+    MusicalEventConstraint,
+    DRUM_PITCHES,
+    PERCUSSION_PITCHES,
+    TOM_PITCHES,
+    CRASH_PITCHES,
+    HIHAT_PITCHES,
+)
 
 USE_FP16 = True
 
@@ -23,7 +30,7 @@ device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 device = "cuda:5"
 ROOT_DIR = "./"
 
-MODEL = "slm"
+MODEL = "drums"
 
 OUTPUT_DIR = ROOT_DIR + "artefacts/examples_4"
 TMP_DIR = ROOT_DIR + "artefacts/tmp"
@@ -34,14 +41,20 @@ model = (
     EncoderOnlyModel.load_from_checkpoint(
         ROOT_DIR + checkpoints[MODEL],
         map_location=device,
-        
     )
     .to(device)
     .eval()
 )
 
+
 def generate(
-    mask, temperature=1.0, top_p=1.0,top_k=0, tokens_per_step=1, attribute_temperature=None, order=None
+    mask,
+    temperature=1.0,
+    top_p=1.0,
+    top_k=0,
+    tokens_per_step=1,
+    attribute_temperature=None,
+    order=None,
 ):
     return model.generate(
         mask,
@@ -51,19 +64,17 @@ def generate(
         top_k=top_k,
         order=order,
         attribute_temperature=attribute_temperature,
-)[0].argmax(axis=1)
+    )[0].argmax(axis=1)
+
 
 def preview(sm):
     sm = sm.copy()
     sm = sm_fix_overlap_notes(sm)
     preview_sm(loop_sm(sm, 4, 4))
 
+
 if USE_FP16:
     model = model.convert_to_half()
-
-# %%
-
-# all pitches that contain "(Drums)"
 
 # create 128 bpm rock loop with drums, bass, guitar with max 280 notes
 N_EVENTS = model.tokenizer.config["max_notes"]
@@ -76,7 +87,8 @@ blank_event_dict = {
     }
     for attr in model.tokenizer.note_attribute_order
 }
-ec = lambda : MusicalEventConstraint(blank_event_dict, model.tokenizer)
+ec = lambda: MusicalEventConstraint(blank_event_dict, model.tokenizer)
+
 
 def sm_to_events(x_sm):
     x = model.tokenizer.encode(x_sm, tag="other")
@@ -104,13 +116,16 @@ def get_external_ip():
     s.close()
     return external_ip
 
+
 print("External IP Address:", get_external_ip())
 app = Flask(__name__)
 CORS(app)
 
+
 @app.route("/", methods=["GET"])
 def index():
     return "Hello, World!"
+
 
 def camel_to_snake(name):
     import re
@@ -118,12 +133,14 @@ def camel_to_snake(name):
     name = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
     return re.sub("([a-z0-9])([A-Z])", r"\1_\2", name).lower()
 
+
 def json_camel_to_snake(data):
     if isinstance(data, dict):
         return {camel_to_snake(k): json_camel_to_snake(v) for k, v in data.items()}
     if isinstance(data, list):
         return [json_camel_to_snake(v) for v in data]
     return data
+
 
 def sm_to_looprep(sm):
     # make two sequences. one for drums and one for other instruments
@@ -197,10 +214,85 @@ def seq2events(sequence, tempo):
                     if note_event["instrument"] != "Drums"
                     else "none (Drums)"
                 },
-            }, model.tokenizer
+            },
+            model.tokenizer,
         )
         events += [event]
     return events
+
+
+# def generate_function(prompt):
+#     function_str = '''def myfun(
+#         e,
+#         ec,
+#         n_events,
+#         beat_range,
+#         pitch_range,
+#         drums,
+#         tag,
+#         tempo,
+#     ):
+#         e = [ev for ev in e if not ev.is_inactive()]
+#         # add 10 drum notes
+#         e += [
+#             ec().intersect({"instrument": {"Drums"}}).force_active() for _ in range(10)
+#         ]
+#         # pad with empty notes
+#         e += [ec().force_inactive() for e in range(n_events - len(e))]
+#         return e
+#     '''
+#     return function_str
+
+def generate_function(prompt):
+    import anthropic
+    client = anthropic.Anthropic(
+        # defaults to os.environ.get("ANTHROPIC_API_KEY")
+        # api_key="my_api_key",
+    )   
+
+    messages = [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "Generate a funk beat!"}],
+            },
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": 'def build_constraint(\n    e,\n    ec,\n    n_events,\n    beat_range,\n    pitch_range,\n    drums,\n    tag,\n    tempo,\n):\n    e = []\n\n    # remove all drums\n    e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Drums"})]\n\n    # add 10 kicks\n    e += [ec().intersect({"pitch": {"36 (Drums)"}}).force_active() for _ in range(20)]\n\n    # add 4 snares\n    e += [ec().intersect({"pitch": {"38 (Drums)"}}).force_active() for _ in range(4)]\n\n    # add 10 hihats\n    e += [ec().intersect({"pitch": {"42 (Drums)"}}).force_active() for _ in range(40)]\n\n    # add 4 open\n    e += [ec().intersect({"pitch": {"46 (Drums)"}}).force_active() for _ in range(4)]\n\n    # add 10 ghost snare\n    e += [\n        ec()\n        .intersect({"pitch": {"38 (Drums)"}})\n        .intersect(ec().velocity_constraint(40))\n        .force_active()\n        for _ in range(10)\n    ]\n\n    # add up to 20 optional drum notes\n    e += [ec().intersect({"instrument": {"Drums"}}) for _ in range(20)]\n\n    # pad with empty notes\n    e += [ec().force_inactive() for _ in range(n_events - len(e))]\n\n    # set to 96\n    e = [ev.intersect(ec().tempo_constraint(96)) for ev in e]\n\n    # set tag to funk\n    e = [ev.intersect({"tag": {"funk", "-"}}) for ev in e]\n\n    return e',
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": prompt}],
+            },
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "def build_constraint(\n    e,\n    ec,\n    n_events,\n    beat_range,\n    pitch_range,\n    drums,\n    tag,\n    tempo,\n):\n\t'''\nTo generate a",
+                    }
+                ],
+            },
+        ]
+    
+    system_prompt = "Your task is to write a function that creates a constraint for creating a MIDI loop according to a user provided prompt."
+    
+    response = client.messages.create(
+        model="claude-3-5-sonnet-20240620",
+        max_tokens=1000,
+        temperature=0,
+        system=system_prompt,
+        messages=messages
+    )
+    # combine last two assistant messages
+    fn = messages[-1]["content"][0]["text"] + response.content[0].text
+
+    print(fn)
+    return fn
 
 @app.route("/edit", methods=["POST"])
 def edit():
@@ -226,36 +318,67 @@ def edit():
         n_events = N_EVENTS
 
         if action == "prompt":
-            print(data["prompt"])
-            e = disco_beat(
+            print(data.keys())
+            func_str = generate_function(data["prompt"])
+            exec(func_str)
+            # Extract the function name (assuming it's the first def statement)
+            func_name = func_str.split("def ")[1].split("(")[0]
+            # Call the function (this assumes no arguments for simplicity)
+            e = locals()[func_name](e, ec, n_events, beat_range, pitch_range, edit_drums, "other", tempo)
+        elif action == "replace":
+            e = infill(
                 e,
                 ec,
                 n_events,
                 beat_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="pop",
+                tag="other",
                 tempo=tempo,
-            )
-        elif action == "replace":
-            e = infill(
-                e, ec,  n_events, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo
             )
         elif action == "repitch":
             e = repitch(
-                e, ec, n_events,  beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo
+                e,
+                ec,
+                n_events,
+                beat_range,
+                pitch_range,
+                drums=edit_drums,
+                tag="other",
+                tempo=tempo,
             )
         elif action == "retime":
             e = retime(
-                e, ec, n_events, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo
+                e,
+                ec,
+                n_events,
+                beat_range,
+                pitch_range,
+                drums=edit_drums,
+                tag="other",
+                tempo=tempo,
             )
         elif action == "reinstrument":
             e = reinstrument(
-                e, ec, n_events, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo
+                e,
+                ec,
+                n_events,
+                beat_range,
+                pitch_range,
+                drums=edit_drums,
+                tag="other",
+                tempo=tempo,
             )
         elif action == "revelocity":
             e = revelocity(
-                e, ec, n_events, beat_range, pitch_range, drums=edit_drums, tag="pop", tempo=tempo
+                e,
+                ec,
+                n_events,
+                beat_range,
+                pitch_range,
+                drums=edit_drums,
+                tag="other",
+                tempo=tempo,
             )
         elif action == "disco":
             e = disco_beat(
@@ -265,7 +388,7 @@ def edit():
                 beat_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="pop",
+                tag="other",
                 tempo=tempo,
             )
         elif action == "metal":
@@ -276,7 +399,7 @@ def edit():
                 beat_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="pop",
+                tag="other",
                 tempo=tempo,
             )
         elif action == "goofy":
@@ -287,7 +410,7 @@ def edit():
                 beat_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="pop",
+                tag="other",
                 tempo=tempo,
             )
         elif action == "synth":
@@ -298,7 +421,7 @@ def edit():
                 beat_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="pop",
+                tag="other",
                 tempo=tempo,
             )
         elif action == "breakbeat":
@@ -309,7 +432,7 @@ def edit():
                 beat_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="pop",
+                tag="other",
                 tempo=tempo,
             )
         elif action == "funk":
@@ -320,7 +443,7 @@ def edit():
                 beat_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="pop",
+                tag="other",
                 tempo=tempo,
             )
         elif action == "tom_fill":
@@ -331,7 +454,7 @@ def edit():
                 beat_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="pop",
+                tag="other",
                 tempo=tempo,
             )
         elif action == "snare_ghost_notes":
@@ -342,7 +465,7 @@ def edit():
                 beat_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="pop",
+                tag="other",
                 tempo=tempo,
             )
         elif action == "percussion":
@@ -353,7 +476,7 @@ def edit():
                 beat_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="pop",
+                tag="other",
                 tempo=tempo,
             )
         elif action == "dynamic_hihats":
@@ -364,7 +487,7 @@ def edit():
                 beat_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="pop",
+                tag="other",
                 tempo=tempo,
             )
         elif action == "locked_in_bassline":
@@ -375,7 +498,7 @@ def edit():
                 beat_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="pop",
+                tag="other",
                 tempo=tempo,
             )
         elif action == "chords":
@@ -386,7 +509,7 @@ def edit():
                 beat_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="pop",
+                tag="other",
                 tempo=tempo,
             )
         elif action == "lead":
@@ -397,7 +520,7 @@ def edit():
                 beat_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="pop",
+                tag="other",
                 tempo=tempo,
             )
         elif action == "arpeggio":
@@ -408,7 +531,7 @@ def edit():
                 beat_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="pop",
+                tag="other",
                 tempo=tempo,
             )
         elif action == "funky_bassline":
@@ -419,11 +542,11 @@ def edit():
                 beat_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="pop",
+                tag="other",
                 tempo=tempo,
             )
         else:
-            raise ValueError(f"Unknown action: {action}")    
+            raise ValueError(f"Unknown action: {action}")
 
         mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
 
@@ -451,7 +574,3 @@ def edit():
         print(traceback.print_exception(etype, value, tb))
         print(e)
         return jsonify({"error": str(e)}), 500
-# %%
-
-
- 

@@ -1,0 +1,56 @@
+Your task is to write a function that creates a constraint for creating a MIDI loop according to a user provided prompt.
+
+For example:
+Input: 
+Generate a funk beat!
+
+Output:
+def funk_beat(
+    e,
+    ec,
+    n_events,
+    beat_range,
+    pitch_range,
+    drums,
+    tag,
+    tempo,
+):
+    e = []
+
+    # remove all drums
+    e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Drums"})]
+
+    # add 10 kicks
+    e += [ec().intersect({"pitch": {"36 (Drums)"}}).force_active() for _ in range(20)]
+
+    # add 4 snares
+    e += [ec().intersect({"pitch": {"38 (Drums)"}}).force_active() for _ in range(4)]
+
+    # add 10 hihats
+    e += [ec().intersect({"pitch": {"42 (Drums)"}}).force_active() for _ in range(40)]
+
+    # add 4 open
+    e += [ec().intersect({"pitch": {"46 (Drums)"}}).force_active() for _ in range(4)]
+
+    # add 10 ghost snare
+    e += [
+        ec()
+        .intersect({"pitch": {"38 (Drums)"}})
+        .intersect(ec().velocity_constraint(40))
+        .force_active()
+        for _ in range(10)
+    ]
+
+    # add up to 20 optional drum notes
+    e += [ec().intersect({"instrument": {"Drums"}}) for _ in range(20)]
+
+    # pad with empty notes
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
+
+    # set to 96
+    e = [ev.intersect(ec().tempo_constraint(96)) for ev in e]
+
+    # set tag to funk
+    e = [ev.intersect({"tag": {"funk", "-"}}) for ev in e]
+
+    return e
