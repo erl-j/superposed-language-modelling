@@ -30,7 +30,7 @@ USE_FP16 = True
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 device = "cuda:5"
 LLM_DEVICE = "cuda:4"
-
+    
 USE_LOCAL_LLM = False
 
 ROOT_DIR = "./"
@@ -266,7 +266,7 @@ def generate_function(prompt):
     messages = [
         {
             "role": "user",
-            "content": [{"type": "text", "text": "Generate a funk beat!"}],
+            "content": [{"type": "text", "text": "Generate a funk beat with snares on the 2 and 4 and triplets in the last bar!"}],
         },
         {
             "role": "assistant",
@@ -283,8 +283,15 @@ def generate_function(prompt):
                                 e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Drums"})]
                                 # add 10 kicks
                                 e += [ec().intersect({"pitch": {"36 (Drums)"}}).force_active() for _ in range(10)]
-                                # add 4 snares
-                                e += [ec().intersect({"pitch": {"38 (Drums)"}}).force_active() for _ in range(4)]
+                                # snares on the 2 and 4 of each bar
+                                for bar in range(4):
+                                    for beat in [1, 3]:
+                                        e += [
+                                            ec()
+                                            .intersect({"pitch": {"38 (Drums)"}})
+                                            .intersect({"onset/beat": {str(beat + bar * 4)}})
+                                            .force_active()
+                                        ]
                                 # add 10 hihats
                                 e += [ec().intersect({"pitch": {"42 (Drums)"}}).force_active() for _ in range(10)]
                                 # add 4 open
@@ -299,6 +306,8 @@ def generate_function(prompt):
                                 ]
                                 # add up to 20 optional drum notes
                                 e += [ec().intersect({"instrument": {"Drums"}}) for _ in range(20)]
+                                # add some triplets in the last bar
+                                e += [ec().intersect({"onset/beat": {"12","13","14","15"}, "onset/tick": {"8", "16"}}).force_active() for _ in range(5)]
                                 # set tempo to 96
                                 e = [ev.intersect(ec().tempo_constraint(96)) for ev in e]
                                 # set tag to funk
@@ -391,6 +400,9 @@ def edit():
         if action == "prompt":
             print(data.keys())
             func_str = generate_function(data["prompt"])
+
+            print(func_str)
+
             exec(func_str)
             # Extract the function name (assuming it's the first def statement)
             func_name = func_str.split("def ")[1].split("(")[0]
