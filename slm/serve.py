@@ -22,12 +22,17 @@ from constraints.core import (
     CRASH_PITCHES,
     HIHAT_PITCHES,
 )
+from transformers import pipeline
 
 USE_FP16 = True
 
 
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 device = "cuda:5"
+LLM_DEVICE = "cuda:4"
+
+USE_LOCAL_LLM = False
+
 ROOT_DIR = "./"
 
 MODEL = "drums"
@@ -243,72 +248,122 @@ def seq2events(sequence, tempo):
 #     '''
 #     return function_str
 
-def generate_function(prompt):
-    import anthropic
-    client = anthropic.Anthropic(
-        # defaults to os.environ.get("ANTHROPIC_API_KEY")
-        # api_key="my_api_key",
-    )   
+pipe = pipeline(
+    "text-generation",
+    model="meta-llama/Llama-3.2-3B-Instruct",
+    device=LLM_DEVICE,
+    torch_dtype=torch.bfloat16,
+    temperature=0.01,
+)
 
-    messages = [
-            {
-                "role": "user",
-                "content": [{"type": "text", "text": "Generate a funk beat!"}],
-            },
-            {
-                "role": "assistant",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": 'def build_constraint(\n    e,\n    ec,\n    n_events,\n    beat_range,\n    pitch_range,\n    drums,\n    tag,\n    tempo,\n):\n    e = []\n\n    # remove all drums\n    e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Drums"})]\n\n    # add 10 kicks\n    e += [ec().intersect({"pitch": {"36 (Drums)"}}).force_active() for _ in range(20)]\n\n    # add 4 snares\n    e += [ec().intersect({"pitch": {"38 (Drums)"}}).force_active() for _ in range(4)]\n\n    # add 10 hihats\n    e += [ec().intersect({"pitch": {"42 (Drums)"}}).force_active() for _ in range(40)]\n\n    # add 4 open\n    e += [ec().intersect({"pitch": {"46 (Drums)"}}).force_active() for _ in range(4)]\n\n    # add 10 ghost snare\n    e += [\n        ec()\n        .intersect({"pitch": {"38 (Drums)"}})\n        .intersect(ec().velocity_constraint(40))\n        .force_active()\n        for _ in range(10)\n    ]\n\n    # add up to 20 optional drum notes\n    e += [ec().intersect({"instrument": {"Drums"}}) for _ in range(20)]\n\n    # pad with empty notes\n    e += [ec().force_inactive() for _ in range(n_events - len(e))]\n\n    # set to 96\n    e = [ev.intersect(ec().tempo_constraint(96)) for ev in e]\n\n    # set tag to funk\n    e = [ev.intersect({"tag": {"funk", "-"}}) for ev in e]\n\n    return e',
-                    }
-                ],
-            },
-            {
-                "role": "user",
-                "content": [{"type": "text", "text": prompt}],
-            },
-            {
-                "role": "assistant",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": 
-                        """
-                        def build_constraint(
-                            e,
-                            ec,
-                            n_events,
-                            beat_range,
-                            pitch_range,
-                            drums,
-                            tag,
-                            tempo,
-                            ):
-                            '''
-                            To generate a""".strip(),
-                    },
-                ],
-            },
-        ]
-    
-    system_prompt = f'''
+def generate_function(prompt):
+
+    system_prompt = f"""
     Your task is to write a function that creates a constraint for creating a MIDI loop according to a user provided prompt.
     The tag attribute can take on the values : {model.tokenizer.config['tags']}
-    '''.strip()
-    
-    response = client.messages.create(
-        model="claude-3-5-sonnet-20240620",
-        max_tokens=1000,
-        temperature=0,
-        system=system_prompt,
-        messages=messages
-    )
-    # combine last two assistant messages
-    fn = messages[-1]["content"][0]["text"] + response.content[0].text
+    """.strip()
 
-    print(fn)
+    messages = [
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": "Generate a funk beat!"}],
+        },
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "text",
+                    "text": """
+                            def build_constraint(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo):
+                                '''
+                                This funkbeat will contain kicks, snares, hihats (closed and open), ghost snares, and up to 20 optional drum notes.
+                                '''
+                                e = []
+                                # remove all drums
+                                e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Drums"})]
+                                # add 10 kicks
+                                e += [ec().intersect({"pitch": {"36 (Drums)"}}).force_active() for _ in range(10)]
+                                # add 4 snares
+                                e += [ec().intersect({"pitch": {"38 (Drums)"}}).force_active() for _ in range(4)]
+                                # add 10 hihats
+                                e += [ec().intersect({"pitch": {"42 (Drums)"}}).force_active() for _ in range(10)]
+                                # add 4 open
+                                e += [ec().intersect({"pitch": {"46 (Drums)"}}).force_active() for _ in range(4)]
+                                # add 10 ghost snare
+                                e += [
+                                    ec()
+                                    .intersect({"pitch": {"38 (Drums)"}})
+                                    .intersect(ec().velocity_constraint(40))
+                                    .force_active()
+                                    for _ in range(10)
+                                ]
+                                # add up to 20 optional drum notes
+                                e += [ec().intersect({"instrument": {"Drums"}}) for _ in range(20)]
+                                # set tempo to 96
+                                e = [ev.intersect(ec().tempo_constraint(96)) for ev in e]
+                                # set tag to funk
+                                e = [ev.intersect({"tag": {"funk", "-"}}) for ev in e]
+                                # important: always pad with empty notes!
+                                e += [ec().force_inactive() for _ in range(n_events - len(e))]
+                                return e  # return the events""".strip(),
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": prompt}],
+        },
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "text",
+                    "text": """
+                        def build_constraint(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo):
+                            '''
+                            To generate a""".strip(),
+                },
+            ],
+        },
+    ]
+
+    if USE_LOCAL_LLM:
+
+        messages = [{"role": "system", "content": [{"type": "text", "text": system_prompt}]}] + messages
+
+        # process for huggingface pipeline format
+        messages = [
+            {"role": m["role"], "content": m["content"][0]["text"]} for m in messages
+        ]
+
+        response = pipe(
+            messages,
+            max_new_tokens=1000,
+        )
+
+        print(response)
+
+        fn = response[0]["generated_text"][-1]["content"]
+
+    else:
+        import anthropic
+
+        client = anthropic.Anthropic(
+            # defaults to os.environ.get("ANTHROPIC_API_KEY")
+            # api_key="my_api_key",
+        )
+
+        response = client.messages.create(
+            model="claude-3-5-sonnet-20240620",
+            max_tokens=1000,
+            temperature=0,
+            system=system_prompt,
+            messages=messages,
+        )
+        # combine last two assistant messages
+        fn = messages[-1]["content"][0]["text"] + response.content[0].text
     return fn
+
 
 @app.route("/edit", methods=["POST"])
 def edit():
@@ -340,7 +395,9 @@ def edit():
             # Extract the function name (assuming it's the first def statement)
             func_name = func_str.split("def ")[1].split("(")[0]
             # Call the function (this assumes no arguments for simplicity)
-            e = locals()[func_name](e, ec, n_events, beat_range, pitch_range, edit_drums, "other", tempo)
+            e = locals()[func_name](
+                e, ec, n_events, beat_range, pitch_range, edit_drums, "other", tempo
+            )
         elif action == "replace":
             e = infill(
                 e,
