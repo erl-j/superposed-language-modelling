@@ -1,5 +1,66 @@
 from .core import HIHAT_PITCHES, DRUM_PITCHES, TOM_PITCHES, PERCUSSION_PITCHES, CRASH_PITCHES
 
+
+def reggaeton_beat(
+    e,
+    ec,
+    n_events,
+    beat_range,
+    pitch_range,
+    drums,
+    tag,
+    tempo,
+):
+    e = []
+
+    # remove all drums
+    e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Drums"})]
+
+    # Dembow rhythm pattern (repeated for each bar)
+    # first, kick on every beat of every bar
+    for bar in range(4):
+        for beat in range(4):
+            e += [
+                ec()
+                .intersect({"pitch": {"36 (Drums)"}, "onset/beat": {str(beat + (bar * 4))},
+                           "onset/tick": {"0"}})
+                .force_active()
+            ]
+
+        e += [
+            ec()
+            .intersect({"pitch": {"38 (Drums)"}, "onset/beat": {str( (bar * 4))}, "onset/tick": {"18"}})
+        ]
+        e += [
+            ec()
+            .intersect({"pitch": {"38 (Drums)"}, "onset/beat": {str(1 +  (bar * 4))}, "onset/tick": {"12"}})
+        ]
+        e += [
+            ec()
+            .intersect({"pitch": {"38 (Drums)"}, "onset/beat": {str(2 +  (bar * 4))}, "onset/tick": {"18"}})
+        ]
+        e += [
+            ec()
+            .intersect({"pitch": {"38 (Drums)"}, "onset/beat": {str(3 +  (bar * 4))}, "onset/tick": {"12"}})
+        ]
+
+    # add 10 active hihats
+    e += [ec().intersect({"pitch": {"42 (Drums)"}}).force_active() for _ in range(10)]
+
+    # # add 60 optional drums that are not kicks or snare
+    e += [ec().intersect({"instrument": {"Drums"}}).intersect({"pitch": DRUM_PITCHES - {"36 (Drums)", "38 (Drums)"}}) for _ in range(30)]
+
+    # set tempo to 110
+    e = [ev.intersect(ec().tempo_constraint(90)) for ev in e]
+
+    # set tag to latin
+    e = [ev.intersect({"tag": {"latin", "-"}}) for ev in e]
+
+    # pad with empty notes
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
+
+    return e
+
 def funk_beat(
     e,
     ec,

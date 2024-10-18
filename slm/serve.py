@@ -250,13 +250,6 @@ def seq2events(sequence, tempo):
 #     '''
 #     return function_str
 
-pipe = pipeline(
-    "text-generation",
-    model="meta-llama/Llama-3.2-3B-Instruct",
-    device=LLM_DEVICE,
-    torch_dtype=torch.bfloat16,
-    temperature=0.01,
-)
 
 def generate_function(prompt):
 
@@ -341,6 +334,15 @@ def generate_function(prompt):
 
     if USE_LOCAL_LLM:
 
+        if pipe is None:
+            pipe = pipeline(
+                "text-generation",
+                model="meta-llama/Llama-3.2-3B-Instruct",
+                device=LLM_DEVICE,
+                torch_dtype=torch.bfloat16,
+                temperature=0.01,
+            )
+
         messages = [{"role": "system", "content": [{"type": "text", "text": system_prompt}]}] + messages
 
         # process for huggingface pipeline format
@@ -377,6 +379,8 @@ def generate_function(prompt):
     return fn
 
 llm_ram_cache = {}
+
+pipe = None
 
 @app.route("/edit", methods=["POST"])
 def edit():
@@ -527,7 +531,17 @@ def edit():
                 tempo=tempo,
             )
         elif action == "breakbeat":
-            e = breakbeat(
+            # e = breakbeat(
+            #     e,
+            #     ec,
+            #     n_events,
+            #     beat_range,
+            #     pitch_range,
+            #     drums=edit_drums,
+            #     tag="other",
+            #     tempo=tempo,
+            # )
+            e = reggaeton_beat(
                 e,
                 ec,
                 n_events,
