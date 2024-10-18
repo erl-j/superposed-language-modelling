@@ -261,7 +261,7 @@ pipe = pipeline(
 def generate_function(prompt):
 
     system_prompt = f"""
-    Your task is to write a function that creates a constraint for creating a MIDI loop according to a user provided prompt.
+    Your task is to write a function that creates a constraint for creating or editing a MIDI loop according to a user provided prompt.
     The tag attribute can take on the values : {model.tokenizer.config['tags']}.
     Onset and offset are specified in beats (quarters) (0-15) and ticks (0-23) with 24 ticks per beat.
     """.strip()
