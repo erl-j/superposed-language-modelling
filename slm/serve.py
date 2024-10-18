@@ -23,6 +23,7 @@ from constraints.core import (
     HIHAT_PITCHES,
 )
 from transformers import pipeline
+import time
 
 USE_FP16 = True
 
@@ -149,6 +150,7 @@ def json_camel_to_snake(data):
 
 def sm_to_looprep(sm):
     # make two sequences. one for drums and one for other instruments
+    n_bars = 4
     drum_sequence = []
     harm_sequence = []
     for track in sm.tracks:
@@ -157,7 +159,7 @@ def sm_to_looprep(sm):
                 drum_sequence.append(
                     {
                         "pitch": note.pitch,
-                        "onset": note.start,
+                        "onset": note.start % (sm.tpq * n_bars * 4),
                         "velocity": note.velocity,
                         "duration": sm.tpq // 4,
                         "instrument": track.name,
@@ -167,7 +169,7 @@ def sm_to_looprep(sm):
                 harm_sequence.append(
                     {
                         "pitch": note.pitch,
-                        "onset": note.start,
+                        "onset": note.start % (sm.tpq * n_bars * 4),
                         "velocity": note.velocity,
                         "duration": note.duration,
                         "instrument": track.name,
@@ -176,7 +178,7 @@ def sm_to_looprep(sm):
     return {
         "time_signature": "4/4",
         "tempo": sm.tempos[0].qpm,
-        "n_bars": 4,
+        "n_bars": n_bars,
         "drum_seq": drum_sequence,
         "harm_seq": harm_sequence,
         "ppq": sm.tpq,
@@ -260,7 +262,8 @@ def generate_function(prompt):
 
     system_prompt = f"""
     Your task is to write a function that creates a constraint for creating a MIDI loop according to a user provided prompt.
-    The tag attribute can take on the values : {model.tokenizer.config['tags']}
+    The tag attribute can take on the values : {model.tokenizer.config['tags']}.
+    Onset and offset are specified in beats (quarters) (0-15) and ticks (0-23) with 24 ticks per beat.
     """.strip()
 
     messages = [
@@ -373,6 +376,7 @@ def generate_function(prompt):
         fn = messages[-1]["content"][0]["text"] + response.content[0].text
     return fn
 
+llm_ram_cache = {}
 
 @app.route("/edit", methods=["POST"])
 def edit():
@@ -398,10 +402,23 @@ def edit():
         n_events = N_EVENTS
 
         if action == "prompt":
-            print(data.keys())
-            func_str = generate_function(data["prompt"])
 
-            print(func_str)
+            if data["prompt"] in llm_ram_cache:
+                func_str = llm_ram_cache[data["prompt"]]
+            else:
+                func_str = generate_function(data["prompt"])
+                # now save both prompt and function to a file
+                os.makedirs("llm_cache", exist_ok=True)
+                # create filename from timestamp with random hex suffix
+                filename = f"llm_cache/{int(time.time())}_{random.randint(0, 1 << 32):x}.py"
+
+                with open(filename, "w") as f:
+                    # write the prompt as a comment at the top of the file
+                    f.write(f"# {data['prompt']}\n")
+                    # now write the function
+                    f.write(func_str)
+
+                llm_ram_cache[data["prompt"]] = func_str
 
             exec(func_str)
             # Extract the function name (assuming it's the first def statement)
@@ -632,6 +649,12 @@ def edit():
             )
         else:
             raise ValueError(f"Unknown action: {action}")
+        
+        # if more than n_events, warn!
+        if len(e) > n_events:
+            print(f"Warning: More than {n_events} events generated: {len(e)}")
+            # take random subset of 
+            e = random.sample(e, n_events)
 
         mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
 
