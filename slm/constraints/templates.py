@@ -1,6 +1,5 @@
 from .core import HIHAT_PITCHES, DRUM_PITCHES, TOM_PITCHES, PERCUSSION_PITCHES, CRASH_PITCHES
 
-
 def reggaeton_beat(
     e,
     ec,
@@ -22,8 +21,7 @@ def reggaeton_beat(
         for beat in range(4):
             e += [
                 ec()
-                .intersect({"pitch": {"36 (Drums)"}, "onset/beat": {str(beat + (bar * 4))},
-                           "onset/tick": {"0"}})
+                .intersect({"pitch": {"36 (Drums)"}, "onset/beat": {str(beat + (bar * 4))},"onset/tick": {"0"}})
                 .force_active()
             ]
 

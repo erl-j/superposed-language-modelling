@@ -36,7 +36,7 @@ USE_LOCAL_LLM = False
 
 ROOT_DIR = "./"
 
-MODEL = "drums"
+MODEL = "slm"
 
 OUTPUT_DIR = ROOT_DIR + "artefacts/examples_4"
 TMP_DIR = ROOT_DIR + "artefacts/tmp"
@@ -255,14 +255,32 @@ def generate_function(prompt):
 
     system_prompt = f"""
     Your task is to write a function that creates a constraint for creating or editing a MIDI loop according to a user provided prompt.
+    The attributes of each notes are: {model.tokenizer.note_attribute_order}.
+    Each attribute is constrained to a set of string values.
     The tag attribute can take on the values : {model.tokenizer.config['tags']}.
-    Onset and offset are specified in beats (quarters) (0-15) and ticks (0-23) with 24 ticks per beat.
+    The instruments that are available are the "Piano", "Guitar", "Bass" and "Drums".
+    Pitch is expressed in MIDI pitch number. Drums have their own pitch values, in the form of "pitch (Drums)".
+    To set a pitch constraint, intersect the event constraint with a set of pitch values.
+    Onset and offset are specified in beats (quarters) (integer 0-15) and ticks (integer 0-23) with 24 ticks per beat.
+    Two special attributes are "tempo" and "velocity" which are set only using tempo_constraint and velocity_constraint methods. 
+    These are the only attributes with specific constraint methods. The rest of the attributes are set by intersecting the event with a dictionary of attribute values.
+    To set velocity, use the velocity_constraint method. For example, ev.intersect(ec().velocity_constraint(40)) sets the velocity of the event to near 40.
+    To set tempo, use the tempo_constraint method. For example, ev.intersect(ec().tempo_constraint(120)) sets the tempo of the event to near 120.
+    Each request should be considered independently of the previous requests. Make sure that the constraint is just detailed enough to generate the desired loop.
+    Do not try to generate the loop directly in the function, but rather create a constraint that can be used to generate the loop
+    Always preserve tempo and tag information from the input events.
+    Do not invent any new methods not provided in the examples.
     """.strip()
 
     messages = [
         {
             "role": "user",
-            "content": [{"type": "text", "text": "Generate a funk beat with snares on the 2 and 4 and triplets in the last bar!"}],
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Example 1: Generate a funk beat with snares on the 2 and 4 and triplets in the last bar!",
+                }
+            ],
         },
         {
             "role": "assistant",
@@ -278,7 +296,7 @@ def generate_function(prompt):
                                 # remove all drums
                                 e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Drums"})]
                                 # add 10 kicks
-                                e += [ec().intersect({"pitch": {"36 (Drums)"}}).force_active() for _ in range(10)]
+                                e += [ec().intersect({"pitch": {"36 (Drums)"}}).force_active() for _ in range(10)] # pitch is expressed in MIDI pitch nr, note that only drums have their pitch in the form of "pitch (Drums)"
                                 # snares on the 2 and 4 of each bar
                                 for bar in range(4):
                                     for beat in [1, 3]:
@@ -296,7 +314,7 @@ def generate_function(prompt):
                                 e += [
                                     ec()
                                     .intersect({"pitch": {"38 (Drums)"}})
-                                    .intersect(ec().velocity_constraint(40))
+                                    .intersect(ec().velocity_constraint(40)) # velocity constraint takes one argument
                                     .force_active()
                                     for _ in range(10)
                                 ]
@@ -316,7 +334,59 @@ def generate_function(prompt):
         },
         {
             "role": "user",
-            "content": [{"type": "text", "text": prompt}],
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Example 2: Add a bassline that locks in with the kick drum.",
+                }
+            ],
+        },
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "text",
+                    "text": """
+                            def build_constraint(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo):
+                                # remove inactive notes
+                                e = [ev for ev in e if ev.is_active()]
+                                # remove bass
+                                e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Bass"})]
+                                # find kicks
+                                kicks = [
+                                    ev
+                                    for ev in e
+                                    if {"35 (Drums)", "36 (Drums)", "37 (Drums)"}.intersection(ev.a["pitch"])
+                                ]
+                                # add bass on every kick
+                                for kick in kicks:
+                                    e += [
+                                        ec()
+                                        .intersect(
+                                            {
+                                                "instrument": {"Bass"},
+                                                "onset/beat": kick.a["onset/beat"],
+                                                "onset/tick": kick.a["onset/tick"],
+                                                "pitch": {str(pitch) for pitch in range(30, 46)}, # set pitch range to low pitches
+                                            }
+                                        )
+                                        .force_active()
+                                    ]
+                                # add up to 5 more bass notes
+                                e += [ec().intersect({"instrument": {"Bass"}}) for _ in range(5)]
+                                # intersect with current tempo
+                                e = [ev.intersect(ec().tempo_constraint(tempo)) for ev in e]
+                                # set tag to current tag
+                                e = [ev.intersect({"tag": {tag}}) for ev in e]
+                                # pad with empty notes
+                                e += [ec().force_inactive() for _ in range(n_events - len(e))]
+                                return e""".strip(),
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": "And now for real... " + prompt}],
         },
         {
             "role": "assistant",
@@ -326,7 +396,7 @@ def generate_function(prompt):
                     "text": """
                         def build_constraint(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo):
                             '''
-                            To generate a""".strip(),
+                            We want to""".strip(),
                 },
             ],
         },
