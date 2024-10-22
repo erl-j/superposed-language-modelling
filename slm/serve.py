@@ -52,6 +52,8 @@ model = (
     .eval()
 )
 
+print(model.tokenizer.vocab)
+
 
 def generate(
     mask,
@@ -386,7 +388,7 @@ def generate_function(prompt):
         },
         {
             "role": "user",
-            "content": [{"type": "text", "text": "And now for real... " + prompt}],
+            "content": [{"type": "text", "text": "Here is a new beat." + prompt}],
         },
         {
             "role": "assistant",

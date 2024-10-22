@@ -2,6 +2,8 @@ checkpoints = {
     "mlm": "paper_assets/mlm_.ckpt",
     "slm": "paper_assets/slm_.ckpt",
     "drums": "paper_assets/slm_clean_drums.ckpt",
+    "harmonic": "paper_assets/slm_harmonic.ckpt",
+    "harmonic2": "paper_assets/slm_harmonic2.ckpt",
 }
 
 MLM_CKPT_PTH = (
