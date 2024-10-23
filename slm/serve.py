@@ -36,7 +36,7 @@ USE_LOCAL_LLM = False
 
 ROOT_DIR = "./"
 
-MODEL = "slm"
+MODEL = "harmonic"
 
 OUTPUT_DIR = ROOT_DIR + "artefacts/examples_4"
 TMP_DIR = ROOT_DIR + "artefacts/tmp"
@@ -257,6 +257,7 @@ def generate_function(prompt):
 
     system_prompt = f"""
     Your task is to write a function that creates a constraint for creating or editing a MIDI loop according to a user provided prompt.
+    The constraint is fed to a state of the art machine learning model that generates the loop from the constraints.
     The attributes of each notes are: {model.tokenizer.note_attribute_order}.
     Each attribute is constrained to a set of string values.
     The tag attribute can take on the values : {model.tokenizer.config['tags']}.
@@ -265,11 +266,11 @@ def generate_function(prompt):
     To set a pitch constraint, intersect the event constraint with a set of pitch values.
     Onset and offset are specified in beats (quarters) (integer 0-15) and ticks (integer 0-23) with 24 ticks per beat.
     Two special attributes are "tempo" and "velocity" which are set only using tempo_constraint and velocity_constraint methods. 
-    These are the only attributes with specific constraint methods. The rest of the attributes are set by intersecting the event with a dictionary of attribute values.
+    These two are the only attributes with specific constraint methods. The rest of the attributes are set by intersecting the event with a dictionary of attribute values.
     To set velocity, use the velocity_constraint method. For example, ev.intersect(ec().velocity_constraint(40)) sets the velocity of the event to near 40.
     To set tempo, use the tempo_constraint method. For example, ev.intersect(ec().tempo_constraint(120)) sets the tempo of the event to near 120.
     Each request should be considered independently of the previous requests. Make sure that the constraint is just detailed enough to generate the desired loop.
-    Do not try to generate the loop directly in the function, but rather create a constraint that can be used to generate the loop
+    Do not try to generate the loop directly in the function, but rather create a constraint that can be used to generate the loop.
     Always preserve tempo and tag information from the input events.
     Do not invent any new methods not provided in the examples.
     """.strip()
@@ -295,8 +296,8 @@ def generate_function(prompt):
                                 This funkbeat will contain kicks, snares, hihats (closed and open), ghost snares, and up to 20 optional drum notes.
                                 '''
                                 e = []
-                                # remove all drums
-                                e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Drums"})]
+                                # set aside other instruments
+                                e_other = [ev for ev in e if ev.a["instrument"].isdisjoint({"Drums"})]
                                 # add 10 kicks
                                 e += [ec().intersect({"pitch": {"36 (Drums)"}}).force_active() for _ in range(10)] # pitch is expressed in MIDI pitch nr, note that only drums have their pitch in the form of "pitch (Drums)"
                                 # snares on the 2 and 4 of each bar
@@ -328,8 +329,11 @@ def generate_function(prompt):
                                 e = [ev.intersect(ec().tempo_constraint(96)) for ev in e]
                                 # set tag to funk
                                 e = [ev.intersect({"tag": {"funk", "-"}}) for ev in e]
+                                # add back other instruments
+                                e += e_other
                                 # important: always pad with empty notes!
                                 e += [ec().force_inactive() for _ in range(n_events - len(e))]
+
                                 return e  # return the events""".strip(),
                 }
             ],
@@ -352,12 +356,14 @@ def generate_function(prompt):
                             def build_constraint(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo):
                                 # remove inactive notes
                                 e = [ev for ev in e if ev.is_active()]
-                                # remove bass
-                                e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Bass"})]
+                                # set aside other instruments
+                                e_other = [ev for ev in e if ev.a["instrument"].isdisjoint({"Bass"})]
+                                # start over
+                                e = []
                                 # find kicks
                                 kicks = [
                                     ev
-                                    for ev in e
+                                    for ev in e_other
                                     if {"35 (Drums)", "36 (Drums)", "37 (Drums)"}.intersection(ev.a["pitch"])
                                 ]
                                 # add bass on every kick
@@ -380,6 +386,9 @@ def generate_function(prompt):
                                 e = [ev.intersect(ec().tempo_constraint(tempo)) for ev in e]
                                 # set tag to current tag
                                 e = [ev.intersect({"tag": {tag}}) for ev in e]
+
+                                # add back other instruments
+                                e += e_other
                                 # pad with empty notes
                                 e += [ec().force_inactive() for _ in range(n_events - len(e))]
                                 return e""".strip(),
