@@ -15,6 +15,7 @@ def test_cycle_consistency():
 
     tokenizer_config = {
         "ticks_per_beat":24,
+        "time_hierarchy":"tick",
         "pitch_range":[0, 128],
         "max_beats":4*N_BARS,
         "max_notes":100 * N_BARS,

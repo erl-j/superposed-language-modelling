@@ -258,7 +258,7 @@ def generate_function(prompt):
     system_prompt = f"""
     Your task is to write a function that creates a constraint for creating or editing a MIDI loop according to a user provided prompt.
     The constraint is fed to a state of the art machine learning model that generates the loop from the constraints.
-    The attributes of each notes are: {model.tokenizer.note_attribute_order}.
+    The attributes of each note event are: {model.tokenizer.note_attribute_order}.
     Each attribute is constrained to a set of string values.
     The tag attribute can take on the values : {model.tokenizer.config['tags']}.
     The instruments that are available are the "Piano", "Guitar", "Bass" and "Drums".
