@@ -92,11 +92,18 @@ class SuperposedLanguageModel(pl.LightningModule):
         decoder_logits = self.decoder_output_layer(note_z)
         if self.enforce_constraint_in_forward:
             # force logits to respect constraint
-            decoder_logits[x==0.0] = torch.finfo(x.dtype).min
-            decoder_logits[x==1.0] = torch.finfo(x.dtype).max
+            # decoder_logits[x.isclose(torch.zeros_like(x,dtype=x.type))] = torch.finfo(x.dtype).min
+            # # decoder_logits[x.isclose(torch.ones_like(x,dtype=x.type))] = torch.finfo(x.dtype).max
+            # decoder_logits = einops.rearrange(decoder_logits, "b t a v -> b (t a) v", a=self.n_attributes)
+            # decoder_logits[
+            #     (format_mask * torch.ones_like(decoder_logits, device=self.device)).isclose(torch.zeros_like(decoder_logits))
+            # ] = torch.finfo(x.dtype).min
+
+            decoder_logits[x==0] = torch.finfo(x.dtype).min
+            # decoder_logits[x.isclose(torch.ones_like(x,dtype=x.type))] = torch.finfo(x.dtype).max
             decoder_logits = einops.rearrange(decoder_logits, "b t a v -> b (t a) v", a=self.n_attributes)
             decoder_logits[
-                (format_mask * torch.ones_like(decoder_logits, device=self.device)) == 0
+                (format_mask * torch.ones_like(decoder_logits, device=self.device))==0
             ] = torch.finfo(x.dtype).min
         # crop to decoder length
         return decoder_logits
@@ -457,7 +464,7 @@ if __name__ == "__main__":
         logger=wandb_logger,
         gradient_clip_val=1.0,
         # accumulate_grad_batches=4,
-        check_val_every_n_epoch=10,
+        check_val_every_n_epoch=1 if DATASET == "mmd_loops" else 10,
     )
 
     trainer.fit(
