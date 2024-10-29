@@ -44,6 +44,9 @@ class MergedTokenizer():
         if "use_drum_duration" not in self.config:
             self.config["use_drum_duration"] = False
 
+        if "use_exponential_duration" not in self.config:
+            self.config["use_exponential_duration"] = False
+
         self.drum_pitches = list(range(35, 82))
 
         # exponential tempo bins
@@ -170,6 +173,10 @@ class MergedTokenizer():
                 for offset in range(0, 1 + (self.config["ticks_per_beat"]*self.config["max_beats"])):
                     self.vocab.append("offset/global_tick:" + str(offset))
 
+        elif self.config["use_exponential_duration"]:
+            pass
+
+            
         note_attribute_order.append("velocity")
         self.vocab.append("velocity:-")
         for velocity in self.velocity_bins:

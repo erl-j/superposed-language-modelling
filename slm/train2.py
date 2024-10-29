@@ -323,6 +323,7 @@ if __name__ == "__main__":
         "ignored_track_names": [f"Layers{i}" for i in range(0, 8)],
         "separate_drum_pitch": True,
         "use_drum_duration": False,
+        "use_exponential_duration": True,
     }
 
     tokenizer = MergedTokenizer(tokenizer_config)
