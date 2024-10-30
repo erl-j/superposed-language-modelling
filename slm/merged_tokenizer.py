@@ -174,9 +174,13 @@ class MergedTokenizer():
                     self.vocab.append("offset/global_tick:" + str(offset))
 
         elif self.config["use_exponential_duration"]:
-            pass
+            note_attribute_order.append("duration")
+            self.vocab.append("duration:-")
+            if not self.config["use_drum_duration"]:
+                self.vocab.append("duration:none (Drums)")
+            for duration in self.config["durations"]:
+                self.vocab.append("duration:" + str(duration))
 
-            
         note_attribute_order.append("velocity")
         self.vocab.append("velocity:-")
         for velocity in self.velocity_bins:
@@ -280,6 +284,18 @@ class MergedTokenizer():
                                         )
                                     )
                                 )
+                        elif note_attr == "duration":
+                            if self.config["use_exponential_duration"]:
+                                if track.is_drum and not self.config["use_drum_duration"]:
+                                    note_encoding.append("duration:none (Drums)")
+                                else:
+                                    duration = note.end - note.start
+                                    # quantize to nearest duration value
+                                    duration = min(
+                                        self.config["durations"]*4*self.config["ticks_per_beat"],
+                                        key=lambda x: abs(x - duration),
+                                    )
+                                    note_encoding.append("duration:" + str(duration))
                         elif note_attr == "pitch, onset/beat":
                             note_encoding.append("pitch, onset/beat:" + str(note.pitch) + "," + str(note.start // self.config["ticks_per_beat"]))
                         elif note_attr == "onset/beat":
@@ -414,13 +430,17 @@ class MergedTokenizer():
                         offset_tick = -1
                     else:
                         offset_tick = int(note[i].split(":")[1])
+                elif note_attr == "duration":
+                    assert note[i].split(":")[0] == "duration"
+                    # we do not use duration for decoding only for encoding
+                    # it is only used as conditioning!
                 elif note_attr == "velocity":
                     assert note[i].split(":")[0] == "velocity"
                     velocity = min(int(note[i].split(":")[1]), 127)
                 elif note_attr == "pitch, onset/beat":
                     assert note[i].split(":")[0] == "pitch, onset/beat"
                     pitch = int(note[i].split(":")[1].split(",")[0])
-                    onset = int(note[i].split(":")[1].split(",")[1])
+                    onset_beat = int(note[i].split(":")[1].split(",")[1])
                 elif note_attr == "tempo":
                     assert note[i].split(":")[0] == "tempo"
                     tempo = int(note[i].split(":")[1])
@@ -429,12 +449,12 @@ class MergedTokenizer():
                     tag = note[i].split(":")[1]
 
             if self.config["time_hierarchy"] == "beat_tick":
-                onset_tick = onset * self.config["ticks_per_beat"] + onset_tick
+                onset_tick = onset_beat * self.config["ticks_per_beat"] + onset_tick
                 if offset == -1:
                     offset_tick  = onset_tick + self.config["ticks_per_beat"] // 8
                     offset_tick = min(offset_tick, self.config["max_beats"] * self.config["ticks_per_beat"])
                 else:
-                    offset_tick = offset * self.config["ticks_per_beat"] + offset_tick
+                    offset_tick = offset_beat * self.config["ticks_per_beat"] + offset_tick
             elif self.config["time_hierarchy"] == "tick":
                 onset_tick = onset_tick
                 if offset_tick == -1:

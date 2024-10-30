@@ -14,7 +14,7 @@ from torch import nn
 import einops
 from tqdm import tqdm
 from util import top_k_top_p_filtering
-
+from fractions import Fraction
 
 def random_add_masking(x):
     batch_size = x.shape[0]               
@@ -323,7 +323,9 @@ if __name__ == "__main__":
         "ignored_track_names": [f"Layers{i}" for i in range(0, 8)],
         "separate_drum_pitch": True,
         "use_drum_duration": False,
-        "use_exponential_duration": True,
+        "use_durations": True,
+        "durations": [Fraction(1, 32), Fraction(1, 16), Fraction(1, 8), Fraction(1, 4), Fraction(1, 2), Fraction(1, 1), Fraction(2, 1), Fraction(4, 1)],
+
     }
 
     tokenizer = MergedTokenizer(tokenizer_config)
@@ -442,7 +444,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[3,4],
+        devices=[1,2],
         # precision="16-mixed",
         max_epochs=10_000,
         log_every_n_steps=1,

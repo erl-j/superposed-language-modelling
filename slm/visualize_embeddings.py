@@ -1,11 +1,11 @@
 #%%
 from train2 import SuperposedLanguageModel
-
 import numpy as np
+import matplotlib.pyplot as plt
 #%%
 
 model = SuperposedLanguageModel.load_from_checkpoint(
-    "../checkpoints/snowy-universe-375/epoch=9-step=64850-val/loss_epoch=0.22075.ckpt",
+    "../checkpoints/zesty-dawn-376/last.ckpt",
     map_location="cpu",
 )
 # %%
@@ -23,7 +23,6 @@ unembedding /= np.linalg.norm(unembedding, axis=1, keepdims=True)
 print(embedding.shape, unembedding.shape)
 
 # print self similarity
-import matplotlib.pyplot as plt
 
 # take vocab and split it by ":"
 vocab = [v.split(":")[0] for v in vocab]

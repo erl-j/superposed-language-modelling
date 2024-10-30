@@ -8,6 +8,7 @@ from flask_cors import CORS
 
 sys.path.append("slm/")
 from train import EncoderOnlyModel
+from train2 import SuperposedLanguageModel
 from util import preview_sm, sm_fix_overlap_notes, loop_sm
 import util
 from paper_checkpoints import checkpoints
@@ -43,13 +44,20 @@ TMP_DIR = ROOT_DIR + "artefacts/tmp"
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+# model = (
+#     EncoderOnlyModel.load_from_checkpoint(
+#         ROOT_DIR + checkpoints[MODEL],
+#         map_location=device,
+#     )
+#     .to(device)
+#     .eval()
+# )
+
 model = (
-    EncoderOnlyModel.load_from_checkpoint(
-        ROOT_DIR + checkpoints[MODEL],
+    SuperposedLanguageModel.load_from_checkpoint(
+        "./checkpoints/snowy-universe-375/epoch=9-step=64850-val/loss_epoch=0.22075.ckpt",
         map_location=device,
     )
-    .to(device)
-    .eval()
 )
 
 print(model.tokenizer.vocab)
