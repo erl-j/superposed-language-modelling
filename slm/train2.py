@@ -109,6 +109,7 @@ class SuperposedLanguageModel(pl.LightningModule):
         norm_first=False,
         enforce_constraint_in_forward = True,
         token_atoms = [],
+        use_composite_unembedding = False,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -135,11 +136,15 @@ class SuperposedLanguageModel(pl.LightningModule):
             ),
             num_layers=n_layers,
         )
-        self.decoder_output_layer = nn.Linear(hidden_size, vocab_size)
+        if use_composite_unembedding:
+            self.decoder_output_layer = CompositeEmbeddingLayer(token_atoms, hidden_size, transpose=True)
+        else:
+            self.decoder_output_layer = nn.Linear(hidden_size, vocab_size)
         self.seq_len = max_seq_len
         self.n_attributes = len(self.tokenizer.note_attribute_order)
         self.learning_rate_gamma = learning_rate_gamma
         self.enforce_constraint_in_forward = enforce_constraint_in_forward
+        self.compose_unembedding = use_composite_unembedding
         
 
     def convert_to_half(self):
@@ -437,6 +442,7 @@ if __name__ == "__main__":
             norm_first=True,
             enforce_constraint_in_forward=True,
             token_atoms=token_atoms,
+            use_composite_unembedding=True,
         )
 
     elif FINETUNE:
@@ -538,7 +544,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[2,7],
+        devices=[7],
         # precision="16-mixed",
         max_epochs=10_000,
         log_every_n_steps=1,
