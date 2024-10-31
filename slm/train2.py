@@ -30,6 +30,69 @@ def random_add_masking(x):
     masked_x = torch.clamp(x + mask, 0, 1)
     return masked_x
     
+# token_atoms = [{"tag:rock"}, {"onset_beat:0", "onset_tick:1"}, ]
+
+class CompositeEmbeddingLayer(nn.Module):
+
+    def __init__(self, token_atoms, hidden_size, transpose=False):
+        super().__init__()
+        self.token_atoms = token_atoms
+        self.hidden_size = hidden_size
+        self.embedding_layers = nn.ModuleList()
+        # get set of all 
+        # join embedding plan
+        # take union of all tags
+        # flatten into one set
+        all_atoms = set()
+        for atom_set in token_atoms:
+            all_atoms = all_atoms.union(atom_set)
+        # get list of atoms
+        all_atoms = list(all_atoms)
+        atom2index = {atom: idx for idx, atom in enumerate(all_atoms)}
+        # create a learnable embedding for each atom
+        n_atoms = len(all_atoms)
+        self.atom_embedding = nn.Linear(n_atoms, hidden_size, bias=False)
+        self.token_atoms_matrix = torch.zeros(len(tokenizer.vocab), n_atoms)
+        for token_idx, token_at in enumerate(token_atoms):
+            for atom in token_at:
+                self.token_atoms_matrix[token_idx, atom2index[atom]] = 1
+        self.projection_layer = nn.Linear(hidden_size, hidden_size)
+        self.activation = nn.ReLU()
+        self.projection_layer2 = nn.Linear(hidden_size, hidden_size)
+        self.transpose = transpose
+
+    def forward(self, x):
+        # x is shape ... hidden_size
+        # first pass token atoms through embedding
+        # token atoms has shape n_tokens, n_atoms
+        token_atoms_z = self.atom_embedding(self.token_atoms_matrix.to(x.device))
+        # we now have shape n_tokens, hidden_size
+        # then project
+        token_atoms_z = self.projection_layer(token_atoms_z)
+        token_atoms_z = self.activation(token_atoms_z)
+        token_atoms_z = self.projection_layer2(token_atoms_z)
+
+        # then add to x
+        if not self.transpose:
+            out = x @ token_atoms_z
+        else:
+            out = x @ token_atoms_z.T
+        return out
+
+    
+# token_atoms = ["embed", "pos_embedding_onset", 
+
+# class HybridFreePositionalEmbeddingLayer(nn.Module):
+#     def __init__(self, token_embed_strategies, hidden_size):
+#         super().__init__()
+#         self.token_embed_strategies = token_embed_strategies
+#         self.hidden_size = hidden_size
+#         # get all positional embedding types
+#         self.positional_embedding_types = set([x for x in token_embed_strategies if "pos_embedding" in x])
+#         # get number 
+#         # intialize one fourier positional encoding for each type
+#         for pos_type in self.positional_embedding_types:
+
 
 class SuperposedLanguageModel(pl.LightningModule):
     def __init__(
@@ -45,6 +108,7 @@ class SuperposedLanguageModel(pl.LightningModule):
         learning_rate_gamma=0.9,
         norm_first=False,
         enforce_constraint_in_forward = True,
+        token_atoms = [],
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -56,7 +120,10 @@ class SuperposedLanguageModel(pl.LightningModule):
         self.format_mask = torch.Tensor(self.tokenizer.get_format_mask())
         self.vocab = vocab
         self.positional_encoding  = nn.Parameter(torch.zeros(1, max_seq_len*2, hidden_size), requires_grad=True)
-        self.embedding_layer = nn.Linear(vocab_size, hidden_size, bias=False)
+        if len(token_atoms) > 0:
+            self.embedding_layer = CompositeEmbeddingLayer(token_atoms, hidden_size)
+        else:
+            self.embedding_layer = nn.Linear(vocab_size, hidden_size, bias=False)
         self.transformer = torch.nn.TransformerEncoder(
             encoder_layer=torch.nn.TransformerEncoderLayer(
             d_model=hidden_size,
@@ -73,6 +140,7 @@ class SuperposedLanguageModel(pl.LightningModule):
         self.n_attributes = len(self.tokenizer.note_attribute_order)
         self.learning_rate_gamma = learning_rate_gamma
         self.enforce_constraint_in_forward = enforce_constraint_in_forward
+        
 
     def convert_to_half(self):
         return self.half()
@@ -83,7 +151,7 @@ class SuperposedLanguageModel(pl.LightningModule):
         x = x * format_mask
 
         x = einops.rearrange(x, "b (t a) v -> b t a v", a=self.n_attributes)
-
+        x = x.to(self.device)
         ze = self.embedding_layer(x)
         ze = ze.sum(dim=2)
         zl = self.transformer(ze)
@@ -323,8 +391,8 @@ if __name__ == "__main__":
         "ignored_track_names": [f"Layers{i}" for i in range(0, 8)],
         "separate_drum_pitch": True,
         "use_drum_duration": False,
-        "use_durations": True,
-        "durations": [Fraction(1, 32), Fraction(1, 16), Fraction(1, 8), Fraction(1, 4), Fraction(1, 2), Fraction(1, 1), Fraction(2, 1), Fraction(4, 1)],
+        "use_durations": False,
+        # "durations": [Fraction(1, 32), Fraction(1, 16), Fraction(1, 8), Fraction(1, 4), Fraction(1, 2), Fraction(1, 1), Fraction(2, 1), Fraction(4, 1)],
 
     }
 
@@ -339,6 +407,23 @@ if __name__ == "__main__":
 
     if not FINETUNE:
 
+        token_atoms = []
+        for token in tokenizer.vocab:
+            attr = token.split(":")[0]
+            value = token.split(":")[1]
+            # if starts with onset/global_tick and ends with a numerical value
+            if attr == "onset/global_tick" and value.isnumeric():
+                tick_value = int(value) % tokenizer_config["ticks_per_beat"]
+                beat_value = int(value) // tokenizer_config["ticks_per_beat"]
+                token_atoms.append({f"onset_beat:{beat_value}", f"onset_tick:{tick_value}"})
+            elif attr == "offset/global_tick" and value.isnumeric():
+                tick_value = int(value) % tokenizer_config["ticks_per_beat"]
+                beat_value = int(value) // tokenizer_config["ticks_per_beat"]
+                token_atoms.append({f"offset_beat:{beat_value}", f"offset_tick:{tick_value}"})
+            else:
+                token_atoms.append({token})
+                
+        assert len(token_atoms) == len(tokenizer.vocab)
         model = SuperposedLanguageModel(
             hidden_size=768,
             n_heads=12,
@@ -351,6 +436,7 @@ if __name__ == "__main__":
             learning_rate_gamma=0.99,
             norm_first=True,
             enforce_constraint_in_forward=True,
+            token_atoms=token_atoms,
         )
 
     elif FINETUNE:
@@ -399,6 +485,21 @@ if __name__ == "__main__":
         min_notes=8 * N_BARS if DATASET == "mmd_loops" else 4 * N_BARS,
         max_notes=tokenizer_config["max_notes"],
     )
+
+    val_dl = torch.utils.data.DataLoader(
+        val_ds,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True,
+    )
+
+    # take one batch
+    # sample = next(iter(val_dl))
+    # # try a validation step 
+    # model.validation_step(sample, 0)
+    print(f"Validation step successful")
+
     print(f"Loaded {len(val_ds)} validation records")
 
     trn_ds = MidiDataset(
@@ -422,13 +523,6 @@ if __name__ == "__main__":
         pin_memory=True,
     )
 
-    val_dl = torch.utils.data.DataLoader(
-        val_ds,
-        batch_size=BATCH_SIZE,
-        shuffle=False,
-        num_workers=4,
-        pin_memory=True,
-    )
 
     wandb_logger = WandbLogger(
         log_model=False, project="slm",
@@ -444,7 +538,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[1,2],
+        devices=[2,7],
         # precision="16-mixed",
         max_epochs=10_000,
         log_every_n_steps=1,

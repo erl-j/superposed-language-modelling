@@ -44,9 +44,11 @@ class MergedTokenizer():
         if "use_drum_duration" not in self.config:
             self.config["use_drum_duration"] = False
 
-        if "use_exponential_duration" not in self.config:
-            self.config["use_exponential_duration"] = False
+        if "use_durations" not in self.config:
+            self.config["use_durations"] = False
 
+        if "durations" not in self.config:
+            self.config["durations"] = []
         self.drum_pitches = list(range(35, 82))
 
         # exponential tempo bins
@@ -173,13 +175,14 @@ class MergedTokenizer():
                 for offset in range(0, 1 + (self.config["ticks_per_beat"]*self.config["max_beats"])):
                     self.vocab.append("offset/global_tick:" + str(offset))
 
-        elif self.config["use_exponential_duration"]:
+        if self.config["use_durations"]:
             note_attribute_order.append("duration")
             self.vocab.append("duration:-")
             if not self.config["use_drum_duration"]:
                 self.vocab.append("duration:none (Drums)")
             for duration in self.config["durations"]:
                 self.vocab.append("duration:" + str(duration))
+            self.duration_ticks = np.array([d*4*self.config["ticks_per_beat"] for d in self.config["durations"]])
 
         note_attribute_order.append("velocity")
         self.vocab.append("velocity:-")
@@ -285,16 +288,13 @@ class MergedTokenizer():
                                     )
                                 )
                         elif note_attr == "duration":
-                            if self.config["use_exponential_duration"]:
+                            if self.config["use_durations"]:
                                 if track.is_drum and not self.config["use_drum_duration"]:
                                     note_encoding.append("duration:none (Drums)")
                                 else:
                                     duration = note.end - note.start
                                     # quantize to nearest duration value
-                                    duration = min(
-                                        self.config["durations"]*4*self.config["ticks_per_beat"],
-                                        key=lambda x: abs(x - duration),
-                                    )
+                                    duration = self.config["durations"][np.argmin(np.abs(self.duration_ticks - duration))]
                                     note_encoding.append("duration:" + str(duration))
                         elif note_attr == "pitch, onset/beat":
                             note_encoding.append("pitch, onset/beat:" + str(note.pitch) + "," + str(note.start // self.config["ticks_per_beat"]))

@@ -620,3 +620,45 @@ def synth_beat(
     e = [ev.intersect({"tag": {"other", "-"}}) for ev in e]
 
     return e
+
+
+def band_beat(
+    e,
+    ec,
+    n_events,
+    beat_range,
+    pitch_range,
+    drums,
+    tag,
+    tempo,
+):
+    # add
+    e = []
+    # add 20 bass
+    e += [ec().intersect({"instrument": {"Bass"}}).force_active() for _ in range(20)]
+    # add 40 piano
+    e += [ec().intersect({"instrument": {"Piano"}}).force_active() for _ in range(40)]
+
+    # add 70 drums
+    e += [ec().intersect({"instrument": {"Drums"}}).force_active() for _ in range(70)]
+
+    # add 40 optional notes
+    e += [
+        ec().intersect({"instrument": {"Bass", "Drums", "Piano", "-"}})
+        for _ in range(40)
+    ]
+
+    # pad with empty notes
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
+
+    # set to 125
+    e = [ev.intersect(ec().tempo_constraint(125)) for ev in e]
+
+    # set tag to pop
+    e = [ev.intersect({"tag": {"pop", "-"}}) for ev in e]
+
+    return e
+
+
+
+    

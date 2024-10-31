@@ -55,7 +55,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 model = (
     SuperposedLanguageModel.load_from_checkpoint(
-        "./checkpoints/snowy-universe-375/epoch=9-step=64850-val/loss_epoch=0.22075.ckpt",
+        "./checkpoints/zesty-dawn-376/last.ckpt",
         map_location=device,
     )
 )
@@ -576,7 +576,17 @@ def edit():
                 tempo=tempo,
             )
         elif action == "disco":
-            e = disco_beat(
+            # e = disco_beat(
+            #     e,
+            #     ec,
+            #     n_events,
+            #     beat_range,
+            #     pitch_range,
+            #     drums=edit_drums,
+            #     tag="other",
+            #     tempo=tempo,
+            # )
+            e = band_beat(
                 e,
                 ec,
                 n_events,
@@ -609,7 +619,7 @@ def edit():
                 tempo=tempo,
             )
         elif action == "synth":
-            e = synth_beat(
+             e = band_beat(
                 e,
                 ec,
                 n_events,
@@ -619,6 +629,16 @@ def edit():
                 tag="other",
                 tempo=tempo,
             )
+            # e = synth_beat(
+            #     e,
+            #     ec,
+            #     n_events,
+            #     beat_range,
+            #     pitch_range,
+            #     drums=edit_drums,
+            #     tag="other",
+            #     tempo=tempo,
+            # )
         elif action == "breakbeat":
             # e = breakbeat(
             #     e,
