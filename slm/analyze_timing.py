@@ -3,7 +3,7 @@
 import symusic as sm
 import torch
 
-ckpt = "../../data/mmd_loops/val_midi_records_unique_pr.pt"
+ckpt = "../data/mmd_loops/val_midi_records_unique_pr.pt"
 
 records = torch.load(ckpt)
 
@@ -16,7 +16,7 @@ onsets = []
 offsets = []
 durations = []
 
-tpq = 24
+tpq = 12
 
 for record in tqdm(records):
     for r in record:
@@ -29,7 +29,78 @@ for record in tqdm(records):
                 durations.append(note.duration)
 
 #%%
-ticks = 24 * 16
+
+# get max onset
+max_onset = tpq * 16
+max_offset = tpq * 16
+max_duration = tpq * 16
+
+onset_counts_per_tick = [0] * (max_onset+1)
+
+for onset in onsets:
+    if onset < max_onset:
+        onset_counts_per_tick[onset] += 1
+
+offset_counts_per_tick = [0] * (max_offset+1)
+
+for offset in offsets:
+    if offset < max_offset:
+        offset_counts_per_tick[offset] += 1
+
+duration_counts_per_tick = [0] * (max_duration+1)
+for duration in durations:
+    if duration < max_duration:
+        duration_counts_per_tick[duration] += 1
+
+# plot onset counts per tick
+import matplotlib.pyplot as plt
+import numpy as np
+# log scale
+
+plt.plot(
+    np.log(onset_counts_per_tick)
+)
+plt.show()
+
+plt.plot(
+    np.log(offset_counts_per_tick)
+)
+plt.show()
+
+plt.plot(
+    np.log(duration_counts_per_tick)
+)
+plt.show()
+
+#%%
+
+
+# show ticks in order of frequency
+# count the number of times each tick appears in the onsets, offsets and durations
+# and print the ticks in order of frequency
+# this will help us identify the most common ticks
+
+from collections import Counter
+
+onset_counter = Counter(onsets)
+offset_counter = Counter(offsets)
+duration_counter = Counter(durations)
+
+print("Onset times in order of frequency")
+for onset, count in onset_counter.most_common():
+    print(onset, count)
+
+print("Offset times in order of frequency")
+for offset, count in offset_counter.most_common():
+    print(offset, count)
+
+print("Duration times in order of frequency")
+for duration, count in duration_counter.most_common():
+    print(duration, count)
+
+
+#%%
+ticks = tpq * 16
 onset_counts = [0]  * ticks
 offset_counts = [0] * ticks
 duration_counts = [0] * ticks
@@ -47,7 +118,6 @@ for duration in durations:
         duration_counts[duration] += 1
 
 #%%
-
 
 # print offset times that happen less than 10 times
 print("Offset times that happen less than 10 times")

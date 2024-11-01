@@ -7,7 +7,9 @@ import matplotlib.pyplot as plt
 import paper_checkpoints
 
 model = SuperposedLanguageModel.load_from_checkpoint(
-    "../checkpoints/devilish-dusk-389/last.ckpt",
+    "../checkpoints/luminous-marigold-398/last.ckpt",
+    # "../checkpoints/resplendent-wick-397/last.ckpt",
+    # "../checkpoints/chromatic-triumph-396/last.ckpt",
     # "../checkpoints/zesty-dawn-376/last.ckpt",
     # "../checkpoints/ghostly-pulse-378/last.ckpt",
     map_location="cpu",
@@ -29,9 +31,23 @@ vocab = model.vocab
 
 embedding = model.embedding_layer.weight.detach().numpy()
 
+print(model.embedding_layer.all_atoms)
+
 print(embedding.shape)
 
 unembedding = model.decoder_output_layer.weight.detach().numpy()
+
+# plot norms of embeddings, use log scale
+plt.figure()
+plt.plot(np.log(np.linalg.norm(embedding, axis=1)))
+plt.show()
+
+plt.figure()
+plt.plot(np.log(np.linalg.norm(unembedding, axis=1)))
+plt.show()
+
+#%%
+
 
 # normalize embeddings
 embedding /= np.linalg.norm(embedding, axis=1, keepdims=True)

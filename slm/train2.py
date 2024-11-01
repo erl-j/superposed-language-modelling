@@ -31,7 +31,6 @@ def random_add_masking(x):
     masked_x = torch.clamp(x + mask, 0, 1)
     return masked_x
     
-# token_atoms = [{"tag:rock"}, {"onset_beat:0", "onset_tick:1"}, ]
 class CompositeEmbeddingLayer(nn.Module):
     def __init__(self, token_atoms, hidden_size, transpose=False):
         super().__init__()
@@ -60,17 +59,21 @@ class CompositeEmbeddingLayer(nn.Module):
         self.atom_embedding = nn.Linear(n_atoms, hidden_size, bias=False)
         self.projection_layer = nn.Sequential(
             nn.Linear(hidden_size, hidden_size),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(hidden_size, hidden_size),
+            # # tanh
+            # nn.Tanh(),
         )
 
         # Initialize learnable backup embeddings
         self.raw_embeddings = nn.Parameter(
-            torch.randn(len(token_atoms), hidden_size) / hidden_size**0.5
+            torch.randn(len(token_atoms), hidden_size),
+            requires_grad=True,
         )
 
         # Initialize weights
         self._init_weights()
+        self.weight = self.get_weights()
 
     def _create_token_atoms_matrix(self, token_atoms, n_atoms):
         matrix = torch.zeros(len(token_atoms), n_atoms)
