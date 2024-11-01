@@ -15,6 +15,7 @@ import einops
 from tqdm import tqdm
 from util import top_k_top_p_filtering
 from fractions import Fraction
+import numpy as np
 
 def random_add_masking(x):
     batch_size = x.shape[0]               
@@ -31,52 +32,87 @@ def random_add_masking(x):
     return masked_x
     
 # token_atoms = [{"tag:rock"}, {"onset_beat:0", "onset_tick:1"}, ]
-
 class CompositeEmbeddingLayer(nn.Module):
-
     def __init__(self, token_atoms, hidden_size, transpose=False):
         super().__init__()
         self.token_atoms = token_atoms
         self.hidden_size = hidden_size
-        self.embedding_layers = nn.ModuleList()
-        # get set of all 
-        # join embedding plan
-        # take union of all tags
-        # flatten into one set
-        all_atoms = set()
-        for atom_set in token_atoms:
-            all_atoms = all_atoms.union(atom_set)
-        # get list of atoms
-        all_atoms = list(all_atoms)
-        atom2index = {atom: idx for idx, atom in enumerate(all_atoms)}
-        # create a learnable embedding for each atom
-        n_atoms = len(all_atoms)
-        self.atom_embedding = nn.Linear(n_atoms, hidden_size, bias=False)
-        self.token_atoms_matrix = torch.zeros(len(tokenizer.vocab), n_atoms)
-        for token_idx, token_at in enumerate(token_atoms):
-            for atom in token_at:
-                self.token_atoms_matrix[token_idx, atom2index[atom]] = 1
-        self.projection_layer = nn.Linear(hidden_size, hidden_size)
-        self.activation = nn.ReLU()
-        self.projection_layer2 = nn.Linear(hidden_size, hidden_size)
         self.transpose = transpose
 
-    def forward(self, x):
-        # x is shape ... hidden_size
-        # first pass token atoms through embedding
-        # token atoms has shape n_tokens, n_atoms
-        token_atoms_z = self.atom_embedding(self.token_atoms_matrix.to(x.device))
-        # we now have shape n_tokens, hidden_size
-        # then project
-        token_atoms_z = self.projection_layer(token_atoms_z)
-        token_atoms_z = self.activation(token_atoms_z)
-        token_atoms_z = self.projection_layer2(token_atoms_z)
+        # Create set of all unique atoms
+        all_atoms = set().union(*token_atoms)
+        self.all_atoms = list(all_atoms)
+        self.atom2index = {atom: idx for idx, atom in enumerate(self.all_atoms)}
 
-        # then add to x
-        if not self.transpose:
-            out = x @ token_atoms_z
-        else:
-            out = x @ token_atoms_z.T
+        # Initialize token_atoms_matrix with proper dtype and device handling
+        self.register_buffer(
+            "token_atoms_matrix",
+            self._create_token_atoms_matrix(token_atoms, len(self.all_atoms)),
+        )
+
+        # Register tokens_with_single_atom as buffer
+        self.register_buffer(
+            "tokens_with_single_atom", torch.tensor([len(x) == 0 for x in token_atoms])
+        )
+
+        # Initialize layers
+        n_atoms = len(self.all_atoms)
+        self.atom_embedding = nn.Linear(n_atoms, hidden_size, bias=False)
+        self.projection_layer = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
+        )
+
+        # Initialize learnable backup embeddings
+        self.raw_embeddings = nn.Parameter(
+            torch.randn(len(token_atoms), hidden_size) / hidden_size**0.5
+        )
+
+        # Initialize weights
+        self._init_weights()
+
+    def _create_token_atoms_matrix(self, token_atoms, n_atoms):
+        matrix = torch.zeros(len(token_atoms), n_atoms)
+        for token_idx, token_at in enumerate(token_atoms):
+            for atom in token_at:
+                matrix[token_idx, self.atom2index[atom]] = 1
+        return matrix
+
+    def _init_weights(self):
+        """Initialize weights using Xavier/Glorot initialization"""
+        nn.init.xavier_uniform_(self.atom_embedding.weight)
+        for layer in self.projection_layer:
+            if isinstance(layer, nn.Linear):
+                nn.init.xavier_uniform_(layer.weight)
+                if layer.bias is not None:
+                    nn.init.zeros_(layer.bias)
+
+    def get_weights(self, device=None):
+        if device is None:
+            device = self.token_atoms_matrix.device
+
+        # Compute atomic embeddings
+        token_atoms_z = self.atom_embedding(self.token_atoms_matrix)
+
+        # Apply projection layers
+        token_atoms_z = self.projection_layer(token_atoms_z)
+
+        # Use raw embeddings for tokens with single atoms
+        token_atoms_z = torch.where(
+            self.tokens_with_single_atom.unsqueeze(-1),
+            self.raw_embeddings,
+            token_atoms_z,
+        )
+
+        return token_atoms_z
+
+    def forward(self, x):
+        token_atoms_z = self.get_weights()
+
+        # Apply matrix multiplication based on transpose flag
+        out = x @ (token_atoms_z.T if self.transpose else token_atoms_z)
+
         return out
 
     
@@ -544,7 +580,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[7],
+        devices=[2,7],
         # precision="16-mixed",
         max_epochs=10_000,
         log_every_n_steps=1,

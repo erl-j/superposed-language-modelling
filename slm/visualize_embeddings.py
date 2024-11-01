@@ -7,7 +7,8 @@ import matplotlib.pyplot as plt
 import paper_checkpoints
 
 model = SuperposedLanguageModel.load_from_checkpoint(
-    "../checkpoints/zesty-dawn-376/last.ckpt",
+    "../checkpoints/devilish-dusk-389/last.ckpt",
+    # "../checkpoints/zesty-dawn-376/last.ckpt",
     # "../checkpoints/ghostly-pulse-378/last.ckpt",
     map_location="cpu",
 )
@@ -26,7 +27,9 @@ plt.rcParams["image.cmap"] = "Spectral"
 
 vocab = model.vocab
 
-embedding = model.embedding_layer.weight.detach().numpy().T
+embedding = model.embedding_layer.weight.detach().numpy()
+
+print(embedding.shape)
 
 unembedding = model.decoder_output_layer.weight.detach().numpy()
 
