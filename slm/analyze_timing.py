@@ -52,25 +52,45 @@ for duration in durations:
     if duration < max_duration:
         duration_counts_per_tick[duration] += 1
 
-# plot onset counts per tick
+
+#%%
+
+# use bars
 import matplotlib.pyplot as plt
 import numpy as np
+
 # log scale
+# make figure wide
+plt.figure(figsize=(20, 10))
 
-plt.plot(
-    np.log(onset_counts_per_tick)
+# do not show line
+plt.bar(
+    np.arange(max_onset+1),
+    onset_counts_per_tick,
+    width=1,
+    align="edge"
 )
+# add big tick every beat (tpq ticks)
+plt.xticks(
+    np.arange(0, max_onset+1, tpq),
+    np.arange(0, max_onset+1, tpq) / tpq
+)
+
 plt.show()
 
+#%%
+plt.figure(figsize=(20, 10))
 plt.plot(
-    np.log(offset_counts_per_tick)
-)
+    offset_counts_per_tick)
+
 plt.show()
 
+plt.figure(figsize=(20, 10))
 plt.plot(
-    np.log(duration_counts_per_tick)
-)
+    duration_counts_per_tick)
 plt.show()
+
+#%%
 
 #%%
 

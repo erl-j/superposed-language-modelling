@@ -5,11 +5,13 @@ import random
 import torch
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+import symusic
 
 sys.path.append("slm/")
 from train import EncoderOnlyModel
 from train2 import SuperposedLanguageModel
 from util import preview_sm, sm_fix_overlap_notes, loop_sm
+from merged_tokenizer import instrument_class_to_selected_program_nr
 import util
 from paper_checkpoints import checkpoints
 from constraints.addx import *
@@ -24,6 +26,7 @@ from constraints.core import (
     HIHAT_PITCHES,
 )
 from transformers import pipeline
+import pretty_midi
 import time
 
 USE_FP16 = True
@@ -53,11 +56,10 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 #     .eval()
 # )
 
-model = (
-    SuperposedLanguageModel.load_from_checkpoint(
-        "./checkpoints/zesty-dawn-376/last.ckpt",
-        map_location=device,
-    )
+model = SuperposedLanguageModel.load_from_checkpoint(
+    "./checkpoints/zesty-dawn-376/last.ckpt",
+    # "./checkpoints/desert-dust-401/last.ckpt",
+    map_location=device,
 )
 
 print(model.tokenizer.vocab)
@@ -194,48 +196,103 @@ def sm_to_looprep(sm):
         "ppq": sm.tpq,
     }
 
+def looprep_to_sm(looprep):
 
-def seq2events(sequence, tempo):
+    midi = symusic.Score()
+    # set tempo
+    midi.tempos = [symusic.Tempo(time=0,qpm=looprep["tempo"])]
+    # set time signature
+    midi.time_signatures = [symusic.TimeSignature(time=0,numerator=4, denominator=4)]
+    midi.tpq = model.tokenizer.config["ticks_per_beat"]
+
+    # add drum track
+    drum_track = symusic.Track(name="Drums", program=0, is_drum=True)
+    for note_event in looprep["drum_seq"]:
+        drum_track.notes.append(
+            symusic.Note(
+                pitch=note_event["pitch"],
+                time=note_event["onset"],
+                duration = note_event["duration"],
+                velocity=note_event["velocity"],
+            )
+        )
+    midi.tracks.append(drum_track)
+
+    # add other tracks
+    # group by instrument
+    instruments = {}
+    for note_event in looprep["harm_seq"]:
+        if note_event["instrument"] not in instruments:
+            instruments[note_event["instrument"]] = symusic.Track(name=note_event["instrument"], program=instrument_class_to_selected_program_nr[note_event["instrument"]], is_drum=False)
+        instruments[note_event["instrument"]].notes.append(
+            symusic.Note(
+                pitch=note_event["pitch"],
+                time=note_event["onset"],
+                duration = note_event["duration"],
+                velocity=note_event["velocity"],
+            )
+        )
+    for instrument, track in instruments.items():
+        midi.tracks.append(track)
+    
+    return midi
+
+def seq2events(seq):
+    # take list of dictionnaries with string items to instead be musical event constraints
+    
     events = []
-    for note_event in sequence:
+    for s in seq:
         event = MusicalEventConstraint(
             {
-                "pitch": {
-                    str(note_event["pitch"]) + " (Drums)"
-                    if note_event["instrument"] == "Drums"
-                    else str(note_event["pitch"])
-                },
-                "onset/beat": {
-                    str(note_event["onset"] // model.tokenizer.config["ticks_per_beat"])
-                },
-                "onset/tick": {
-                    str(note_event["onset"] % model.tokenizer.config["ticks_per_beat"])
-                },
-                "velocity": {str(ec().quantize_velocity(int(note_event["velocity"])))},
-                "instrument": {note_event["instrument"]},
-                "tempo": {str(ec().quantize_tempo(tempo))},
-                "tag": {"other"},
-                "offset/beat": {
-                    str(
-                        (note_event["onset"] + note_event["duration"])
-                        // model.tokenizer.config["ticks_per_beat"]
-                    )
-                    if note_event["instrument"] != "Drums"
-                    else "none (Drums)"
-                },
-                "offset/tick": {
-                    str(
-                        (note_event["onset"] + note_event["duration"])
-                        % model.tokenizer.config["ticks_per_beat"]
-                    )
-                    if note_event["instrument"] != "Drums"
-                    else "none (Drums)"
-                },
+                key: {value} for key, value in s.items()
             },
             model.tokenizer,
         )
-        events += [event]
+        events.append(event)
     return events
+
+
+# def seq2events(sequence, tempo):
+#     events = []
+#     for note_event in sequence:
+#         event = MusicalEventConstraint(
+#             {
+#                 "pitch": {
+#                     str(note_event["pitch"]) + " (Drums)"
+#                     if note_event["instrument"] == "Drums"
+#                     else str(note_event["pitch"])
+#                 },
+#                 "onset/beat": {
+#                     str(note_event["onset"] // model.tokenizer.config["ticks_per_beat"])
+#                 },
+#                 "onset/tick": {
+#                     str(note_event["onset"] % model.tokenizer.config["ticks_per_beat"])
+#                 },
+#                 "velocity": {str(ec().quantize_velocity(int(note_event["velocity"])))},
+#                 "instrument": {note_event["instrument"]},
+#                 "tempo": {str(ec().quantize_tempo(tempo))},
+#                 "tag": {"other"},
+#                 "offset/beat": {
+#                     str(
+#                         (note_event["onset"] + note_event["duration"])
+#                         // model.tokenizer.config["ticks_per_beat"]
+#                     )
+#                     if note_event["instrument"] != "Drums"
+#                     else "none (Drums)"
+#                 },
+#                 "offset/tick": {
+#                     str(
+#                         (note_event["onset"] + note_event["duration"])
+#                         % model.tokenizer.config["ticks_per_beat"]
+#                     )
+#                     if note_event["instrument"] != "Drums"
+#                     else "none (Drums)"
+#                 },
+#             },
+#             model.tokenizer,
+#         )
+#         events += [event]
+#     return events
 
 
 # def generate_function(prompt):
@@ -484,8 +541,8 @@ def edit():
         sequence = data["harm_seq"] + data["drum_seq"]
         tempo = data["tempo"]
         edit_drums = data["replace_info"]["replace_part"] == "drum_seq"
-        e = seq2events(sequence, tempo)
-
+        midi = looprep_to_sm(data)
+        e = sm_to_events(midi)
         beat_range = [
             int(tick_range[0]) // model.tokenizer.config["ticks_per_beat"],
             1 + int(tick_range[1]) // model.tokenizer.config["ticks_per_beat"],

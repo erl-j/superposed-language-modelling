@@ -7,10 +7,15 @@ import matplotlib.pyplot as plt
 import paper_checkpoints
 
 model = SuperposedLanguageModel.load_from_checkpoint(
-    "../checkpoints/luminous-marigold-398/last.ckpt",
+    # "../checkpoints/clear-shadow-402/last.ckpt",
+    # "../checkpoints/grateful-terrain-404/last.ckpt",
+    # "../checkpoints/vibrant-wick-399/last.ckpt",
+    # "../checkpoints/luminous-marigold-398/last.ckpt",
     # "../checkpoints/resplendent-wick-397/last.ckpt",
     # "../checkpoints/chromatic-triumph-396/last.ckpt",
-    # "../checkpoints/zesty-dawn-376/last.ckpt",
+    "../checkpoints/zesty-dawn-376/last.ckpt",
+    # "../checkpoints/desert-dust-401/last.ckpt",
+    # "../checkpoints/radiant-frog-400/last.ckpt",
     # "../checkpoints/ghostly-pulse-378/last.ckpt",
     map_location="cpu",
 )
@@ -29,21 +34,23 @@ plt.rcParams["image.cmap"] = "Spectral"
 
 vocab = model.vocab
 
-embedding = model.embedding_layer.weight.detach().numpy()
+embedding = model.embedding_layer.weight.detach().numpy().T
 
-print(model.embedding_layer.all_atoms)
+
 
 print(embedding.shape)
 
 unembedding = model.decoder_output_layer.weight.detach().numpy()
 
+print(unembedding.shape)
+
 # plot norms of embeddings, use log scale
 plt.figure()
-plt.plot(np.log(np.linalg.norm(embedding, axis=1)))
+plt.plot(np.linalg.norm(embedding, axis=1))
 plt.show()
 
 plt.figure()
-plt.plot(np.log(np.linalg.norm(unembedding, axis=1)))
+plt.plot(np.linalg.norm(unembedding, axis=1))
 plt.show()
 
 #%%
@@ -101,7 +108,7 @@ print(vocab)
 onset_vocab = [v for v in vocab if v.startswith("onset/global_tick")]
 
 # take first 25
-onset_vocab = onset_vocab[:55]
+onset_vocab = onset_vocab[:50]
 onset_embeddings = embedding[[i for i, v in enumerate(vocab) if v in onset_vocab]] 
 
 

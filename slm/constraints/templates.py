@@ -105,7 +105,7 @@ def funk_beat(
     e = [ev.intersect(ec().tempo_constraint(96)) for ev in e]
 
     # set tag to funk
-    e = [ev.intersect({"tag": {"funk", "-"}}) for ev in e]
+    # e = [ev.intersect({"tag": {"funk", "-"}}) for ev in e]
 
     return e
 

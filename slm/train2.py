@@ -31,6 +31,15 @@ def random_add_masking(x):
     masked_x = torch.clamp(x + mask, 0, 1)
     return masked_x
     
+
+class Sin(nn.Module):
+
+    def __init__(self):
+        super(Sin, self).__init__()
+
+    def forward(self, x):
+        return torch.sin(x)
+        
 class CompositeEmbeddingLayer(nn.Module):
     def __init__(self, token_atoms, hidden_size, transpose=False):
         super().__init__()
@@ -51,7 +60,7 @@ class CompositeEmbeddingLayer(nn.Module):
 
         # Register tokens_with_single_atom as buffer
         self.register_buffer(
-            "tokens_with_single_atom", torch.tensor([len(x) == 0 for x in token_atoms])
+            "tokens_with_single_atom", torch.tensor([len(x) == 1 for x in token_atoms])
         )
 
         # Initialize layers
@@ -60,9 +69,11 @@ class CompositeEmbeddingLayer(nn.Module):
         self.projection_layer = nn.Sequential(
             nn.Linear(hidden_size, hidden_size),
             nn.GELU(),
+            nn.LayerNorm(hidden_size),
             nn.Linear(hidden_size, hidden_size),
-            # # tanh
-            # nn.Tanh(),
+            nn.GELU(),
+            nn.LayerNorm(hidden_size),
+            nn.Linear(hidden_size, hidden_size),
         )
 
         # Initialize learnable backup embeddings
@@ -73,7 +84,7 @@ class CompositeEmbeddingLayer(nn.Module):
 
         # Initialize weights
         self._init_weights()
-        self.weight = self.get_weights()
+        self.weight = self.get_weights() if self.transpose else self.get_weights().T
 
     def _create_token_atoms_matrix(self, token_atoms, n_atoms):
         matrix = torch.zeros(len(token_atoms), n_atoms)
@@ -84,7 +95,9 @@ class CompositeEmbeddingLayer(nn.Module):
 
     def _init_weights(self):
         """Initialize weights using Xavier/Glorot initialization"""
-        nn.init.xavier_uniform_(self.atom_embedding.weight)
+        nn.init.normal_(self.atom_embedding.weight, 0, 1)
+        # intialize raw embeddings with gaussian N(0,1)
+        nn.init.normal_(self.raw_embeddings, 0, 1)
         for layer in self.projection_layer:
             if isinstance(layer, nn.Linear):
                 nn.init.xavier_uniform_(layer.weight)
@@ -452,20 +465,24 @@ if __name__ == "__main__":
     if not FINETUNE:
 
         token_atoms = []
-        for token in tokenizer.vocab:
-            attr = token.split(":")[0]
-            value = token.split(":")[1]
-            # if starts with onset/global_tick and ends with a numerical value
-            if attr == "onset/global_tick" and value.isnumeric():
-                tick_value = int(value) % tokenizer_config["ticks_per_beat"]
-                beat_value = int(value) // tokenizer_config["ticks_per_beat"]
-                token_atoms.append({f"onset_beat:{beat_value}", f"onset_tick:{tick_value}"})
-            elif attr == "offset/global_tick" and value.isnumeric():
-                tick_value = int(value) % tokenizer_config["ticks_per_beat"]
-                beat_value = int(value) // tokenizer_config["ticks_per_beat"]
-                token_atoms.append({f"offset_beat:{beat_value}", f"offset_tick:{tick_value}"})
-            else:
-                token_atoms.append({token})
+
+        HIERARCHY = "beat_tick"
+
+        if HIERARCHY == "beat_tick":
+            for token in tokenizer.vocab:
+                attr = token.split(":")[0]
+                value = token.split(":")[1]
+                # if starts with onset/global_tick and ends with a numerical value
+                if attr == "onset/global_tick" and value.isnumeric():
+                    tick_value = int(value) % tokenizer_config["ticks_per_beat"]
+                    beat_value = int(value) // tokenizer_config["ticks_per_beat"]
+                    token_atoms.append({f"onset_beat:{beat_value}", f"onset_tick:{tick_value}"})
+                elif attr == "offset/global_tick" and value.isnumeric():
+                    tick_value = int(value) % tokenizer_config["ticks_per_beat"]
+                    beat_value = int(value) // tokenizer_config["ticks_per_beat"]
+                    token_atoms.append({f"offset_beat:{beat_value}", f"offset_tick:{tick_value}"})
+                else:
+                    token_atoms.append({token})
                 
         assert len(token_atoms) == len(tokenizer.vocab)
         model = SuperposedLanguageModel(
@@ -530,6 +547,24 @@ if __name__ == "__main__":
         min_notes=8 * N_BARS if DATASET == "mmd_loops" else 4 * N_BARS,
         max_notes=tokenizer_config["max_notes"],
     )
+
+    val_tokens = val_ds[0]
+
+    token_2_count = {t: 0 for t in tokenizer.vocab}
+    tokens = []
+    # take 10 samples and save tokens
+    for i in tqdm(range(1000)):
+        val_token_ids = val_ds[i]
+        val_tokens = tokenizer.indices_to_tokens(val_token_ids)
+        tokens.append(val_tokens)
+
+    for token in tokens:
+        for t in token:
+            token_2_count[t] += 1
+
+    # print token counts in token order
+    for t in tokenizer.vocab:
+        print(f"{t}: {token_2_count[t]}")
 
     val_dl = torch.utils.data.DataLoader(
         val_ds,
