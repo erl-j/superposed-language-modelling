@@ -7,13 +7,17 @@ import matplotlib.pyplot as plt
 import paper_checkpoints
 
 model = SuperposedLanguageModel.load_from_checkpoint(
+    # "../checkpoints/still-sound-410/last.ckpt",
+    # "../checkpoints/skilled-spaceship-406/last.ckpt",
     # "../checkpoints/clear-shadow-402/last.ckpt",
     # "../checkpoints/grateful-terrain-404/last.ckpt",
     # "../checkpoints/vibrant-wick-399/last.ckpt",
     # "../checkpoints/luminous-marigold-398/last.ckpt",
     # "../checkpoints/resplendent-wick-397/last.ckpt",
     # "../checkpoints/chromatic-triumph-396/last.ckpt",
-    "../checkpoints/zesty-dawn-376/last.ckpt",
+    "../checkpoints/summer-plasma-412/last.ckpt",
+    # "../checkpoints/zesty-dawn-376/last.ckpt",
+    # "../checkpoints/clear-shadow-402/last.ckpt",
     # "../checkpoints/desert-dust-401/last.ckpt",
     # "../checkpoints/radiant-frog-400/last.ckpt",
     # "../checkpoints/ghostly-pulse-378/last.ckpt",
@@ -35,6 +39,12 @@ plt.rcParams["image.cmap"] = "Spectral"
 vocab = model.vocab
 
 embedding = model.embedding_layer.weight.detach().numpy().T
+
+# imshow embeddings
+plt.figure()
+plt.imshow(embedding, interpolation="none")
+plt.colorbar()
+plt.show()
 
 
 

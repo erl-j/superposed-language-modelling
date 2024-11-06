@@ -16,6 +16,9 @@ from tqdm import tqdm
 from util import top_k_top_p_filtering
 from fractions import Fraction
 import numpy as np
+import matplotlib.pyplot as plt
+import math
+
 
 def random_add_masking(x):
     batch_size = x.shape[0]               
@@ -31,15 +34,107 @@ def random_add_masking(x):
     masked_x = torch.clamp(x + mask, 0, 1)
     return masked_x
     
+class HybridPositionalEmbedding(nn.Module):
+    def __init__(
+        self,
+        tokens,
+        pos_encoded_attributes,
+        base_period,
+        hidden_size,
+        transpose=False,
+        num_periods=32,
+    ):
+        super().__init__()
 
-class Sin(nn.Module):
+        self.tokens = tokens
+        self.hidden_size = hidden_size
+        self.transpose = transpose
 
-    def __init__(self):
-        super(Sin, self).__init__()
+        # Create geometric series of periods
+        self.periods = torch.tensor(
+            [base_period / (2**i) for i in range(num_periods // 2)]
+        )
+
+        # Initialize dictionaries for positionally encoded attributes
+        self.pos_encoded_attributes = {}
+        self.pos_encoded_networks = {}
+
+        # Process tokens and separate positionally encoded attributes
+        self.raw_embedding_token_idxs = []
+        for token_idx, token in enumerate(tokens):
+            attr = token.split(":")[0]
+            value = token.split(":")[1]
+
+            if attr in pos_encoded_attributes and value.isnumeric():
+                if attr not in self.pos_encoded_attributes:
+                    self.pos_encoded_attributes[attr] = {"values": [], "indices": []}
+                self.pos_encoded_attributes[attr]["values"].append(int(value))
+                self.pos_encoded_attributes[attr]["indices"].append(token_idx)
+            else:
+                self.raw_embedding_token_idxs.append(token_idx)
+
+        # Convert lists to tensors and create networks
+        for attr in pos_encoded_attributes:
+            if attr in self.pos_encoded_attributes:
+                self.pos_encoded_attributes[attr]["values"] = torch.tensor(
+                    self.pos_encoded_attributes[attr]["values"]
+                )
+                self.pos_encoded_attributes[attr]["indices"] = torch.tensor(
+                    self.pos_encoded_attributes[attr]["indices"]
+                )
+
+                # Create the positional encoding network
+                self.pos_encoded_networks[attr] = nn.Sequential(
+                    nn.Linear(
+                        num_periods, hidden_size
+                    ),  # num_periods = num_sin + num_cos features
+                    nn.GELU(),
+                    nn.LayerNorm(hidden_size),
+                    # nn.LayerNorm(hidden_size), 
+                    nn.Linear(hidden_size, hidden_size),
+                    nn.Tanh(),
+                )
+
+        self.pos_encoded_networks = nn.ModuleDict(self.pos_encoded_networks)
+
+        # Create the raw embedding matrix
+        self.raw_embeddings = nn.Parameter(
+            torch.randn(len(tokens), hidden_size) / np.sqrt(hidden_size),
+            requires_grad=True,
+        )
+        self.weight = self.get_weights() if self.transpose else self.get_weights().T
+
+    def get_weights(self, device=None):
+        if device is None:
+            device = self.raw_embeddings.device
+        embeddings = self.raw_embeddings.to(device).clone()
+        periods = self.periods.to(device)
+
+        for attr in self.pos_encoded_attributes:
+            values = self.pos_encoded_attributes[attr]["values"].to(device)
+
+            # Compute features for multiple periods
+            # Shape: [num_values, num_periods]
+            sin_features = torch.sin(2 * np.pi * values[:, None] / periods[None, :])
+            cos_features = torch.cos(2 * np.pi * values[:, None] / periods[None, :])
+            features = torch.cat([sin_features, cos_features], dim=1)
+
+            # Generate positional encodings
+            pos_encoded = self.pos_encoded_networks[attr].to(device)(features)
+            indices = self.pos_encoded_attributes[attr]["indices"].to(device)
+
+            # Create a new tensor instead of modifying in place
+            new_embeddings = embeddings.clone()
+            new_embeddings[indices, :] = embeddings[indices, :] + pos_encoded
+            embeddings = new_embeddings
+        return embeddings
+
 
     def forward(self, x):
-        return torch.sin(x)
-        
+        device = x.device
+        embeddings = self.get_weights(device)
+        return x @ embeddings.T if self.transpose else x @ embeddings
+    
 class CompositeEmbeddingLayer(nn.Module):
     def __init__(self, token_atoms, hidden_size, transpose=False):
         super().__init__()
@@ -162,6 +257,8 @@ class SuperposedLanguageModel(pl.LightningModule):
         enforce_constraint_in_forward = True,
         token_atoms = [],
         use_composite_unembedding = False,
+        pos_embedding_attributes = [],
+        base_period = None,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -177,6 +274,9 @@ class SuperposedLanguageModel(pl.LightningModule):
             self.embedding_layer = CompositeEmbeddingLayer(token_atoms, hidden_size)
         else:
             self.embedding_layer = nn.Linear(vocab_size, hidden_size, bias=False)
+        if len(pos_embedding_attributes) > 0:
+            self.embedding_layer = HybridPositionalEmbedding(vocab, pos_embedding_attributes, base_period, hidden_size)
+
         self.transformer = torch.nn.TransformerEncoder(
             encoder_layer=torch.nn.TransformerEncoderLayer(
             d_model=hidden_size,
@@ -192,6 +292,8 @@ class SuperposedLanguageModel(pl.LightningModule):
             self.decoder_output_layer = CompositeEmbeddingLayer(token_atoms, hidden_size, transpose=True)
         else:
             self.decoder_output_layer = nn.Linear(hidden_size, vocab_size)
+        if len(pos_embedding_attributes) > 0:
+            self.decoder_output_layer = HybridPositionalEmbedding(vocab, pos_embedding_attributes, base_period, hidden_size, transpose=True)
         self.seq_len = max_seq_len
         self.n_attributes = len(self.tokenizer.note_attribute_order)
         self.learning_rate_gamma = learning_rate_gamma
@@ -485,21 +587,25 @@ if __name__ == "__main__":
                     token_atoms.append({token})
                 
         assert len(token_atoms) == len(tokenizer.vocab)
-        model = SuperposedLanguageModel(
-            hidden_size=768,
-            n_heads=12,
-            feed_forward_size=3072,
-            n_layers=12,
-            vocab=tokenizer.vocab,
-            max_seq_len=tokenizer_config["max_notes"] * len(tokenizer.note_attribute_order),
-            learning_rate=1e-4,
-            tokenizer_config=tokenizer_config,
-            learning_rate_gamma=0.99,
-            norm_first=True,
-            enforce_constraint_in_forward=True,
-            token_atoms=token_atoms,
-            use_composite_unembedding=True,
-        )
+        # model = SuperposedLanguageModel(
+        #     hidden_size=768,
+        #     n_heads=12,
+        #     feed_forward_size=3072,
+        #     n_layers=12,
+        #     vocab=tokenizer.vocab,
+        #     max_seq_len=tokenizer_config["max_notes"] * len(tokenizer.note_attribute_order),
+        #     learning_rate=1e-4,
+        #     tokenizer_config=tokenizer_config,
+        #     learning_rate_gamma=0.99,
+        #     norm_first=True,
+        #     enforce_constraint_in_forward=True,
+        #     token_atoms=token_atoms,
+        #     use_composite_unembedding=True,
+        #     pos_embedding_attributes=["onset/global_tick", "offset/global_tick"],
+        #     base_period=tokenizer_config["ticks_per_beat"]* N_BARS * 4,
+        # )
+
+        model = SuperposedLanguageModel.load_from_checkpoint("./checkpoints/summer-plasma-412/last.ckpt", learning_rate=2e-6, map_location="cpu")
 
     elif FINETUNE:
 
