@@ -55,6 +55,9 @@ class EventConstraint:
     def to_dict(self):
         return self.a
     
+    def __str__(self):
+        return str(self.a)
+    
 class MusicalEventConstraint(EventConstraint):
     '''
     This class extends the EventConstraint class to provide some utilities for musical events.

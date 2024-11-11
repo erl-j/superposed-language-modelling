@@ -550,8 +550,8 @@ if __name__ == "__main__":
         "ignored_track_names": [f"Layers{i}" for i in range(0, 8)],
         "separate_drum_pitch": True,
         "use_drum_duration": False,
-        "use_durations": False,
-        # "durations": [Fraction(1, 32), Fraction(1, 16), Fraction(1, 8), Fraction(1, 4), Fraction(1, 2), Fraction(1, 1), Fraction(2, 1), Fraction(4, 1)],
+        "use_durations": True,
+        "durations": [Fraction(1, 32), Fraction(1, 16), Fraction(1, 8), Fraction(1, 4), Fraction(1, 2), Fraction(1, 1), Fraction(2, 1), Fraction(4, 1)],
 
     }
 
@@ -562,7 +562,7 @@ if __name__ == "__main__":
     # print note attribute order
     print(tokenizer.note_attribute_order)
 
-    FINETUNE = False
+    FINETUNE = True
 
     if not FINETUNE:
 
@@ -587,31 +587,33 @@ if __name__ == "__main__":
                     token_atoms.append({token})
                 
         assert len(token_atoms) == len(tokenizer.vocab)
-        # model = SuperposedLanguageModel(
-        #     hidden_size=768,
-        #     n_heads=12,
-        #     feed_forward_size=3072,
-        #     n_layers=12,
-        #     vocab=tokenizer.vocab,
-        #     max_seq_len=tokenizer_config["max_notes"] * len(tokenizer.note_attribute_order),
-        #     learning_rate=1e-4,
-        #     tokenizer_config=tokenizer_config,
-        #     learning_rate_gamma=0.99,
-        #     norm_first=True,
-        #     enforce_constraint_in_forward=True,
-        #     token_atoms=token_atoms,
-        #     use_composite_unembedding=True,
-        #     pos_embedding_attributes=["onset/global_tick", "offset/global_tick"],
-        #     base_period=tokenizer_config["ticks_per_beat"]* N_BARS * 4,
-        # )
+   
+        # model = SuperposedLanguageModel.load_from_checkpoint("./checkpoints/summer-plasma-412/last.ckpt", learning_rate=2e-6, map_location="cpu")
 
-        model = SuperposedLanguageModel.load_from_checkpoint("./checkpoints/summer-plasma-412/last.ckpt", learning_rate=2e-6, map_location="cpu")
+    model = SuperposedLanguageModel(
+        hidden_size=768,
+        n_heads=12,
+        feed_forward_size=3072,
+        n_layers=12,
+        vocab=tokenizer.vocab,
+        max_seq_len=tokenizer_config["max_notes"] * len(tokenizer.note_attribute_order),
+        learning_rate=1e-4,
+        tokenizer_config=tokenizer_config,
+        learning_rate_gamma=0.99,
+        norm_first=True,
+        enforce_constraint_in_forward=True,
+        # token_atoms=token_atoms,
+        # use_composite_unembedding=True,
+        # pos_embedding_attributes=["onset/global_tick", "offset/global_tick"],
+        # base_period=tokenizer_config["ticks_per_beat"]* N_BARS * 4,
+    )
 
-    elif FINETUNE:
+
+    if FINETUNE:
 
         src_model = SuperposedLanguageModel.load_from_checkpoint(
-            checkpoint_path="./paper_assets/slm_.ckpt",
-            map_location="cpu"
+            "./checkpoints/zesty-dawn-376/last.ckpt",
+            map_location="cpu",
         )
 
         # model= SuperposedLanguageModel(
@@ -639,9 +641,7 @@ if __name__ == "__main__":
         #     neighbour_superposition = src_model.hparams.neighbour_superposition
         # )
 
-        # # model.initialize_from_different_model(src_model, 
-        # #                                       skip_tokens=["onset/tick", "offset/tick"]
-        # #                                       )
+        model.initialize_from_different_model(src_model)
 
     mmd_4bar_filter_fn = lambda x: f"n_bars={N_BARS}" in x
 

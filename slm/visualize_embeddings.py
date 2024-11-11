@@ -7,20 +7,8 @@ import matplotlib.pyplot as plt
 import paper_checkpoints
 
 model = SuperposedLanguageModel.load_from_checkpoint(
-    # "../checkpoints/still-sound-410/last.ckpt",
-    # "../checkpoints/skilled-spaceship-406/last.ckpt",
-    # "../checkpoints/clear-shadow-402/last.ckpt",
-    # "../checkpoints/grateful-terrain-404/last.ckpt",
-    # "../checkpoints/vibrant-wick-399/last.ckpt",
-    # "../checkpoints/luminous-marigold-398/last.ckpt",
-    # "../checkpoints/resplendent-wick-397/last.ckpt",
-    # "../checkpoints/chromatic-triumph-396/last.ckpt",
-    "../checkpoints/summer-plasma-412/last.ckpt",
+    "../checkpoints/faithful-wave-417/last.ckpt",
     # "../checkpoints/zesty-dawn-376/last.ckpt",
-    # "../checkpoints/clear-shadow-402/last.ckpt",
-    # "../checkpoints/desert-dust-401/last.ckpt",
-    # "../checkpoints/radiant-frog-400/last.ckpt",
-    # "../checkpoints/ghostly-pulse-378/last.ckpt",
     map_location="cpu",
 )
 
@@ -158,5 +146,31 @@ plt.xticks(range(len(pitch_vocab)), pitch_vocab)
 plt.colorbar()
 plt.show()
 
+
+# %%
+
+vocab = model.vocab
+print(vocab)
+duration_vocab = [v for v in vocab if v.startswith("duration")]
+
+# take first 25
+duration_vocab = duration_vocab[:50]
+duration_embeddings = embedding[[i for i, v in enumerate(vocab) if v in duration_vocab]] 
+
+
+print(duration_embeddings.shape)
+plt.figure(figsize=(20, 20))
+# set larger font size
+plt.rcParams["font.size"] = 18
+plt.imshow(duration_embeddings @ duration_embeddings.T, interpolation="none")
+# use vocab as yticks
+
+
+plt.yticks(range(len(duration_vocab)), duration_vocab)
+# set x ticks to 90 degree rotation
+plt.xticks(rotation=90)
+plt.xticks(range(len(duration_vocab)), duration_vocab)
+plt.colorbar()
+plt.show()
 
 # %%

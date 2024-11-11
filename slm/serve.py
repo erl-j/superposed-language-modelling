@@ -56,8 +56,22 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 #     .eval()
 # )
 
+def seq2events(seq):
+    # take list of dictionnaries with string items to instead be musical event constraints
+
+    events = []
+    for s in seq:
+        event = MusicalEventConstraint(
+            {key: {value} for key, value in s.items()},
+            model.tokenizer,
+        )
+        events.append(event)
+    return events
+
+
 model = SuperposedLanguageModel.load_from_checkpoint(
-    "./checkpoints/zesty-dawn-376/last.ckpt",
+    # "./checkpoints/zesty-dawn-376/last.ckpt",
+    "./checkpoints/faithful-wave-417/last.ckpt",
     # "./checkpoints/desert-dust-401/last.ckpt",
     map_location=device,
 )
@@ -236,63 +250,6 @@ def looprep_to_sm(looprep):
         midi.tracks.append(track)
     
     return midi
-
-def seq2events(seq):
-    # take list of dictionnaries with string items to instead be musical event constraints
-    
-    events = []
-    for s in seq:
-        event = MusicalEventConstraint(
-            {
-                key: {value} for key, value in s.items()
-            },
-            model.tokenizer,
-        )
-        events.append(event)
-    return events
-
-
-# def seq2events(sequence, tempo):
-#     events = []
-#     for note_event in sequence:
-#         event = MusicalEventConstraint(
-#             {
-#                 "pitch": {
-#                     str(note_event["pitch"]) + " (Drums)"
-#                     if note_event["instrument"] == "Drums"
-#                     else str(note_event["pitch"])
-#                 },
-#                 "onset/beat": {
-#                     str(note_event["onset"] // model.tokenizer.config["ticks_per_beat"])
-#                 },
-#                 "onset/tick": {
-#                     str(note_event["onset"] % model.tokenizer.config["ticks_per_beat"])
-#                 },
-#                 "velocity": {str(ec().quantize_velocity(int(note_event["velocity"])))},
-#                 "instrument": {note_event["instrument"]},
-#                 "tempo": {str(ec().quantize_tempo(tempo))},
-#                 "tag": {"other"},
-#                 "offset/beat": {
-#                     str(
-#                         (note_event["onset"] + note_event["duration"])
-#                         // model.tokenizer.config["ticks_per_beat"]
-#                     )
-#                     if note_event["instrument"] != "Drums"
-#                     else "none (Drums)"
-#                 },
-#                 "offset/tick": {
-#                     str(
-#                         (note_event["onset"] + note_event["duration"])
-#                         % model.tokenizer.config["ticks_per_beat"]
-#                     )
-#                     if note_event["instrument"] != "Drums"
-#                     else "none (Drums)"
-#                 },
-#             },
-#             model.tokenizer,
-#         )
-#         events += [event]
-#     return events
 
 
 # def generate_function(prompt):
