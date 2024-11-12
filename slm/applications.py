@@ -101,7 +101,7 @@ def generate(
 def preview(sm):
     sm = sm.copy()
     sm = sm_fix_overlap_notes(sm)
-    preview_sm(loop_sm(sm, 4, 4))
+    preview_sm(loop_sm(sm, 4, 2))
 
 
 if USE_FP16:
@@ -140,10 +140,6 @@ def sm_to_events(x_sm):
 
 #%%
 
-# add extensions 
-
-
-
 
 # add some chords
 def add_chords(
@@ -156,7 +152,7 @@ def add_chords(
     tag,
     tempo,
 ):
-    tag = "funk"
+    tag = "pop"
 
     instrument = "Piano"
 
@@ -193,12 +189,13 @@ def add_chords(
         .intersect(
             {
                 "instrument": {"Drums"},
+                # "pitch": PERCUSSION_PITCHES,
                 # "onset/global_tick": {str(i) for i in range(0, 24 * 4 * 4, 8)},
                 "duration" : {"none (Drums)"}
             }
         )
         .force_active()
-        for i in range(20)
+        for i in range(40)
     ]
 
     # add 100 optional drums
@@ -208,7 +205,7 @@ def add_chords(
             {
                 "instrument": {"Drums", ""},
                 # "onset/global_tick": {str(i) for i in range(0, 24 * 4 * 4, 8)},
-                # "duration" : {"none (Drums)"}
+                "duration" : {"none (Drums)"}
             }
         )
         for i in range(40)
@@ -221,43 +218,57 @@ def add_chords(
             {
                 "instrument": {"Bass"},
                 # "onset/global_tick": {str(i) for i in range(0, 24 * 4 * 4, 24)},
-                # "duration": {"1/4"},
+                "duration": {"1/4", "1/8"},
             }
         )
         .force_active()
-        for i in range(14)
+        for i in range(16)
     ]
 
-    # add short 20 short guitar notes
+    # # add 10 optional bass notes
+    # e += [
+    #     ec()
+    #     .intersect(
+    #         {
+    #             "instrument": {"Bass", ""},
+    #             # "onset/global_tick": {str(i) for i in range(0, 24 * 4 * 4, 24)},
+    #             # "duration": {"1/4"},
+    #         }
+    #     )
+    #     for i in range(10)
+    # ]
+
+    # # add short 20 short guitar notes
     e += [
         ec()
         .intersect(
             {
                 "instrument": {"Guitar"},
+                "onset/global_tick": {str(i) for i in range(0, 24 * 4 * 4, 12)},
                 "duration": {"1/16", "1/8"},
             }
-        ).intersect(
-            ec().velocity_constraint(40)
         )
-
+        .intersect(ec().velocity_constraint(40))
         .force_active()
         for i in range(20)
     ]
 
-    e += [
-        ec()
-        .intersect(
-            {
-                "instrument": {"Guitar"},
-                "duration": {"1/16", "1/8"},
-            }
-        ).intersect(
-            ec().velocity_constraint(120)
-        )
+
+    # e += [
+    #     ec()
+    #     .intersect(
+    #         {
+    #             "instrument": {"Guitar"},
+    #             "onset/global_tick": {str(i) for i in range(6, 24 * 4 * 4, 12)},
+    #             "duration": {"1/16", "1/8"},
+    #         }
+    #     ).intersect(
+    #         ec().velocity_constraint(120)
+    #     )
         
-        .force_active()
-        for i in range(20)
-    ]
+    #     .force_active()
+    #     for i in range(20)
+    # ]
 
     # add 10 guitar notes
 
@@ -276,6 +287,20 @@ def add_chords(
     #     .force_active()
     #     for i in range(20)
     # ]
+
+    # add 10 brass
+    # e += [
+    #     ec()
+    #     .intersect(
+    #         {
+    #             "instrument": {"Brass"},
+    #             "duration": {"1/16"},
+    #         }
+    #     )
+    #     .force_active()
+    #     for i in range(10)
+    # ]
+
 
     # 
     
@@ -321,10 +346,11 @@ e = add_chords(
     tempo=TEMPO,
 )
 
-TOP_P = 0.9
+TOP_P = 0.95
 TEMPERATURE = 1.0
-TOP_K = 1000
+TOP_K = 100
 TOKENS_PER_STEP = 1
+
 
 mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
 
@@ -335,8 +361,10 @@ x = generate(
     top_k=int(TOP_K),
     tokens_per_step=TOKENS_PER_STEP,
     order="random",
+    # attribute_temperature={"pitch":0.85},
 )
 x_sm = model.tokenizer.decode(x)
+
 x_sm = util.sm_fix_overlap_notes(x_sm)
 
 preview(x_sm)
