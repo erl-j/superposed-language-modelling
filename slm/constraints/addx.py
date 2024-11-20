@@ -1,5 +1,6 @@
 from .core import HIHAT_PITCHES, DRUM_PITCHES, PERCUSSION_PITCHES, TOM_PITCHES
 
+
 def funky_bassline(
     e,
     ec,

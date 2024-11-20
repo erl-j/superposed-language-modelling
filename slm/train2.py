@@ -253,12 +253,14 @@ class SuperposedLanguageModel(pl.LightningModule):
         learning_rate,
         tokenizer_config,
         learning_rate_gamma=0.9,
+        normalize_input=False,
         norm_first=False,
         enforce_constraint_in_forward = True,
         token_atoms = [],
         use_composite_unembedding = False,
         pos_embedding_attributes = [],
         base_period = None,
+        activation = "relu",
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -285,6 +287,7 @@ class SuperposedLanguageModel(pl.LightningModule):
             norm_first= norm_first,
             dropout=0.1,
             batch_first=True,
+            activation=activation,
             ),
             num_layers=n_layers,
         )
@@ -299,6 +302,7 @@ class SuperposedLanguageModel(pl.LightningModule):
         self.learning_rate_gamma = learning_rate_gamma
         self.enforce_constraint_in_forward = enforce_constraint_in_forward
         self.compose_unembedding = use_composite_unembedding
+        self.normalize_input = normalize_input
         
 
     def convert_to_half(self):
@@ -311,27 +315,25 @@ class SuperposedLanguageModel(pl.LightningModule):
 
         x = einops.rearrange(x, "b (t a) v -> b t a v", a=self.n_attributes)
         x = x.to(self.device)
-        ze = self.embedding_layer(x)
+        if self.normalize_input:
+            x2 = x / x.sum(dim=-1, keepdim=True)
+        else:
+            x2 = x
+        ze = self.embedding_layer(x2)
         ze = ze.sum(dim=2)
         zl = self.transformer(ze)
         note_z = einops.rearrange(zl, "b t ft -> b t 1 ft")
         note_z = note_z.repeat(1, 1, self.n_attributes, 1)
         decoder_logits = self.decoder_output_layer(note_z)
         if self.enforce_constraint_in_forward:
-            # force logits to respect constraint
-            # decoder_logits[x.isclose(torch.zeros_like(x,dtype=x.type))] = torch.finfo(x.dtype).min
-            # # decoder_logits[x.isclose(torch.ones_like(x,dtype=x.type))] = torch.finfo(x.dtype).max
-            # decoder_logits = einops.rearrange(decoder_logits, "b t a v -> b (t a) v", a=self.n_attributes)
-            # decoder_logits[
-            #     (format_mask * torch.ones_like(decoder_logits, device=self.device)).isclose(torch.zeros_like(decoder_logits))
-            # ] = torch.finfo(x.dtype).min
-
-            decoder_logits[x==0] = torch.finfo(x.dtype).min
-            # decoder_logits[x.isclose(torch.ones_like(x,dtype=x.type))] = torch.finfo(x.dtype).max
+   
+            # CHANGED THIS TO torch.finfo(decoder_logits.dtype).min FROM torch.finfo(x.dtype).min
+            decoder_logits[x==0] = torch.finfo(decoder_logits.dtype).min
             decoder_logits = einops.rearrange(decoder_logits, "b t a v -> b (t a) v", a=self.n_attributes)
+            # CHANGED THIS TO torch.finfo(decoder_logits.dtype).min FROM torch.finfo(x.dtype).min
             decoder_logits[
                 (format_mask * torch.ones_like(decoder_logits, device=self.device))==0
-            ] = torch.finfo(x.dtype).min
+            ] = torch.finfo(decoder_logits.dtype).min
         # crop to decoder length
         return decoder_logits
 
@@ -357,7 +359,10 @@ class SuperposedLanguageModel(pl.LightningModule):
             x = x
             # multiply by format mask
             x = x * self.format_mask[None, ...].to(x.device).to(dtype)
+            # x = self.tokenizer.normalize_constraint(x
             x = self.tokenizer.collapse_undefined_attributes(x)
+            # sanitize all events
+            x = self.tokenizer.sanitize_mask(x, event_indices=range(self.tokenizer.config["max_notes"]))
             batch, time_attr, ft = x.shape
             # count number of known tokens
             masked_tokens = (x.sum(-1) > 1).sum().int().item()
@@ -387,23 +392,28 @@ class SuperposedLanguageModel(pl.LightningModule):
                     sampled = torch.multinomial(flat_probs, 1).squeeze(-1)
                     flat_x = einops.rearrange(x, "b ta v -> (b ta) v")
                     masked_indices = torch.where(flat_x.sum(-1) > 1)[0]
+                    n_attributes = len(self.tokenizer.note_attribute_order)
                     n_masked = masked_indices.shape[0]
                     n_tokens_to_unmask = tokens_per_step
-                    if order == "random":
+                    if "random" in order:
                         masked_indices = masked_indices[torch.randperm(n_masked)]
-                        indices_to_unmask = masked_indices[:n_tokens_to_unmask]
-                    elif order == "attribute":
-                        indices_to_unmask = masked_indices[:n_tokens_to_unmask]
-                    elif order == "lowest_entropy":
+                    elif "attribute" in order:
+                        pass
+                    elif "lowest_entropy" in order:
                         masked_probs = flat_probs[masked_indices]
                         entropy = -torch.sum(masked_probs * torch.log(masked_probs), dim=-1)
                         masked_indices = masked_indices[torch.argsort(entropy)]
-                        indices_to_unmask = masked_indices[:n_tokens_to_unmask]       
-                    elif order == "highest_entropy":
+                    elif "highest_entropy" in order:
                         masked_probs = flat_probs[masked_indices]
                         entropy = -torch.sum(masked_probs * torch.log(masked_probs), dim=-1)
                         masked_indices = masked_indices[torch.argsort(entropy, descending=True)]
-                        indices_to_unmask = masked_indices[:n_tokens_to_unmask] 
+                    elif "event" in order:
+                        # mod by number of attributes
+                        masked_indices_event_index = masked_indices % n_attributes
+                        masked_indices = masked_indices[torch.argsort(masked_indices_event_index)]
+                    if "reverse" in order:
+                        masked_indices = masked_indices.flip(0)
+                    indices_to_unmask = masked_indices[:n_tokens_to_unmask]
 
                     # replace with sampled values
                     flat_x[indices_to_unmask] = torch.nn.functional.one_hot(
@@ -415,7 +425,13 @@ class SuperposedLanguageModel(pl.LightningModule):
                         flat_x, "(b ta) v -> b ta v", b=batch, ta=time_attr
                     )
 
+                    updated_event_indices = indices_to_unmask // n_attributes
+
+                    # convert to set
+                    updated_event_indices = set(updated_event_indices.cpu().numpy())
+
                     x = self.tokenizer.collapse_undefined_attributes(x)
+                    # x = self.tokenizer.sanitize_mask(x, event_indices=updated_event_indices)
 
                     # masekd tokens after
                     masked_tokens_after = (x.sum(-1) > 1).sum().int().item()
@@ -523,7 +539,7 @@ if __name__ == "__main__":
 
     DATASET = "mmd_loops"
 
-    BATCH_SIZE = 40
+    BATCH_SIZE = 60
 
     tag_list = open(f"./data/{DATASET}/tags.txt").read().splitlines()
 
@@ -555,6 +571,7 @@ if __name__ == "__main__":
 
     }
 
+    USE_RANDOM_SHIFT = False
     tokenizer = MergedTokenizer(tokenizer_config)
 
     print(f"Vocab size: {len(tokenizer.vocab)}")
@@ -562,7 +579,7 @@ if __name__ == "__main__":
     # print note attribute order
     print(tokenizer.note_attribute_order)
 
-    FINETUNE = True
+    FINETUNE = False
 
     if not FINETUNE:
 
@@ -593,7 +610,7 @@ if __name__ == "__main__":
     model = SuperposedLanguageModel(
         hidden_size=768,
         n_heads=12,
-        feed_forward_size=3072,
+        feed_forward_size=4*768,
         n_layers=12,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer_config["max_notes"] * len(tokenizer.note_attribute_order),
@@ -602,6 +619,8 @@ if __name__ == "__main__":
         learning_rate_gamma=0.99,
         norm_first=True,
         enforce_constraint_in_forward=True,
+        normalize_input=True,
+        activation="gelu",
         # token_atoms=token_atoms,
         # use_composite_unembedding=True,
         # pos_embedding_attributes=["onset/global_tick", "offset/global_tick"],
@@ -652,6 +671,7 @@ if __name__ == "__main__":
         tokenizer=tokenizer,
         min_notes=8 * N_BARS if DATASET == "mmd_loops" else 4 * N_BARS,
         max_notes=tokenizer_config["max_notes"],
+        use_random_shift=USE_RANDOM_SHIFT,
     )
 
     val_tokens = val_ds[0]
@@ -696,6 +716,7 @@ if __name__ == "__main__":
         transposition_range=[-4, 4] if DATASET == "mmd_loops" or DATASET == "harmonic" else None,
         min_notes=8 * N_BARS if DATASET == "mmd_loops" else 4 * N_BARS,
         max_notes=tokenizer_config["max_notes"],
+        use_random_shift=USE_RANDOM_SHIFT,
     )
     # print len of dataset
     print(f"Loaded {len(trn_ds)} training records")
@@ -724,8 +745,8 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[2,7],
-        # precision="16-mixed",
+        devices=[2,4],
+        precision="16-mixed",
         max_epochs=10_000,
         log_every_n_steps=1,
         # val_check_interval=10,
@@ -745,7 +766,7 @@ if __name__ == "__main__":
             ),
         ],
         logger=wandb_logger,
-        gradient_clip_val=1.0,
+        # gradient_clip_val=1.0,
         # accumulate_grad_batches=4,
         check_val_every_n_epoch=1 if DATASET == "mmd_loops" else 10,
     )
@@ -754,4 +775,5 @@ if __name__ == "__main__":
         model,
         trn_dl,
         val_dl,
+        # ckpt_path=f"./checkpoints/unique-tree-426/last.ckpt",
     )

@@ -12,8 +12,36 @@ def get_num_notes(sm):
     # for all tracks that don't start with "Layer"
     return sum([len(track.notes) for track in sm.tracks if not track.name.startswith("Layer")])
 
+def random_shift(sm, max_tick, tpq):
+    sm = sm.copy()
+    sm = sm.resample(tpq)
+    shift_ticks = random.randint(0, max_tick)
+    for track_idx in range(len(sm.tracks)):
+        new_notes = []
+        for note_idx in range(len(sm.tracks[track_idx].notes)):
+            note = sm.tracks[track_idx].notes[note_idx]
+            onset_tick = note.start
+            offset_tick = onset_tick + note.duration
+
+            new_onset_tick = (onset_tick + shift_ticks) % max_tick
+            new_offset_tick = (offset_tick + shift_ticks) % max_tick
+
+            if new_offset_tick <= new_onset_tick:
+                new_offset_tick = max_tick
+
+            new_notes.append(
+                symusic.Note(
+                    time=new_onset_tick,
+                    duration=new_offset_tick - new_onset_tick,
+                    pitch=note.pitch,
+                    velocity=note.velocity,
+                )
+            )
+        sm.tracks[track_idx].notes = new_notes
+    return sm
+
 class MidiDataset(torch.utils.data.Dataset):
-    def __init__(self, cache_path, genre_list, path_filter_fn=None, tokenizer=None, transposition_range=None, min_notes=1, max_notes=1e6, group_by_source=False, sm_filter_fn=None):
+    def __init__(self, cache_path, genre_list, path_filter_fn=None, tokenizer=None, transposition_range=None, min_notes=1, max_notes=1e6, group_by_source=False, sm_filter_fn=None, use_random_shift=False):
         self.tokenizer = tokenizer
         self.records = torch.load(cache_path)
         for i in range(len(self.records)):
@@ -27,6 +55,7 @@ class MidiDataset(torch.utils.data.Dataset):
         self.records = [x for x in self.records if len(x) > 0]
         self.transposition_range = transposition_range        
         self.group_by_source = group_by_source
+        self.use_random_shift = use_random_shift
         if not self.group_by_source:
             midi_hash = {}
             new_records = []
@@ -53,6 +82,8 @@ class MidiDataset(torch.utils.data.Dataset):
         if self.transposition_range is not None:
             transposition = random.randint(*self.transposition_range)
             midi = transpose_sm(midi, transposition)
+        if self.use_random_shift:
+            midi = random_shift(midi, self.tokenizer.config["ticks_per_beat"] * self.tokenizer.config["max_beats"], tpq=self.tokenizer.config["ticks_per_beat"])
         return torch.tensor(
             self.tokenizer.encode(
             midi
@@ -60,20 +91,6 @@ class MidiDataset(torch.utils.data.Dataset):
             random.choice(record["genre"] if len(record["genre"]) > 0 else ["other"])
             )
         )
-
-
-
-
-
-
-
-        
-
-
-
-
-
-
 
 # augmentation_config = {
 #     "augmentation_transposition_range":[-7, 7],

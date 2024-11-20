@@ -6,6 +6,7 @@ import pretty_midi
 from util import get_scale
 import einops
 import matplotlib.pyplot as plt
+from constraints.core import MusicalEventConstraint
 # has features over old one.
 # supports velocity bins
 # drums are now a separate instrument
@@ -199,17 +200,66 @@ class MergedTokenizer():
         self.token2idx = {token: idx for idx, token in enumerate(self.vocab)}
 
         self.format_mask = self.get_format_mask()
-    
-    def create_mask(self, events):
-        mask = np.zeros((len(events) * self.attributes_per_note, len(self.vocab)), dtype=int)
-        for event_idx, event in enumerate(events):
-            for attr_idx, note_attr in enumerate(self.note_attribute_order):
-                for token in event[note_attr]:
-                    mask[event_idx * self.attributes_per_note + attr_idx, self.token2idx[f"{note_attr}:{token}"]] = 1
-        # multiply with format mask
-        mask = mask * self.get_format_mask()
-        return torch.tensor(mask).float()
 
+    def mask_to_event_constraint(self, mask):
+        # mask has shape (1, n_notes * n_attributes, vocab_size)
+
+        attributes, vocab = mask.shape
+
+        tokenizer = self
+        blank_event_dict = {
+        attr: {
+            token.split(":")[-1]
+            for token in tokenizer.vocab
+            if token.startswith(f"{attr}:")
+        }
+        for attr in tokenizer.note_attribute_order
+        }
+        ec = lambda: MusicalEventConstraint(blank_event_dict, tokenizer)
+
+        event_constraint = ec()
+        for attr_idx in range(attributes):
+            # get all tokens
+            tokens = mask[attr_idx, :].nonzero().squeeze().tolist()
+            # if not list make it a list
+            if not isinstance(tokens, list):
+                tokens = [tokens]
+            # get strs
+            tokens = [self.vocab[token].split(":")[-1] for token in tokens]
+            note_attr = self.note_attribute_order[attr_idx]
+
+            event_constraint.a[note_attr] = set(tokens)
+        return event_constraint
+    
+    def sanitize_mask(self, mask, event_indices):
+        mask_type = mask.dtype
+        mask_device = mask.device
+        mask = einops.rearrange(mask, "b (n a) v -> b n a v", a=len(self.note_attribute_order))
+        for event_idx in event_indices:
+            event_mask = mask[0, event_idx, :, :]
+            ec = self.mask_to_event_constraint(event_mask)
+            ec = ec.sanitize_undef()
+            mask[0, event_idx, :, :] = self.event_constraint_to_mask(ec)
+        mask = einops.rearrange(mask, "b n a v -> b (n a) v")
+        return mask.to(mask_type).to(mask_device)
+
+    def event_constraint_to_mask(self, ec):
+        mask = torch.zeros((len(self.note_attribute_order), len(self.vocab)))
+        for attr_idx, attr in enumerate(self.note_attribute_order):
+            # get tokens
+            tokens = list(ec.a[attr])
+            tokens = [attr + ":" + token for token in tokens]
+            token_idxs = [self.token2idx[token] for token in tokens]
+            mask[attr_idx, token_idxs] = 1
+        return mask
+    
+    def event_constraints_to_mask(self, ecs):
+        event_masks = [self.event_constraint_to_mask(ec) for ec in ecs]
+        mask = torch.stack(event_masks, dim=0)[None, ...]
+        # reshape 
+        mask = einops.rearrange(mask, "b n a v -> b (n a) v")
+        return mask
+            
     def encode(self, sm, tag):
         tokens = self.sm_to_tokens(sm, tag)
         return self.tokens_to_indices(tokens)
@@ -335,7 +385,73 @@ class MergedTokenizer():
 
         # flatten note_encodings
         note_encodings = pydash.flatten(note_encodings)
-        return note_encodings
+        return note_encodings    
+
+    def normalize_constraint(self, x1h):
+        # first we convert every column to a list of tokens
+        x1h = einops.rearrange(x1h, "b (n a) v -> b n a v", n=self.config["max_notes"], a=len(self.note_attribute_order))
+
+        batch, events, attributes, vocab = x1h.shape
+
+        if batch != 1:
+            raise ValueError("Can only normalize single batch")
+
+        event_constraints = []
+        for ev in range(events):
+            event_constraint = {}
+            for attr in range(attributes):
+                # get all tokens
+                tokens = x1h[0, ev, attr, :].nonzero().squeeze().tolist()
+                # if not list make it a list
+                if not isinstance(tokens, list):
+                    tokens = [tokens]
+                # get strs
+                tokens = [self.vocab[token] for token in tokens]
+                event_constraint[self.note_attribute_order[attr]] = tokens
+            event_constraints.append(event_constraint)
+
+        # now run the following rules.
+
+        # every offset_tick must be greater than the minimum onset_tick
+        for event_idx, ev in enumerate(event_constraints):
+            onset_tick_values = [token.split(":")[1] for token in ev["onset/global_tick"]]
+            # keep only numeric values
+            onset_tick_non_numeric_values = [t for t in onset_tick_values if not t.isnumeric()]
+            onset_tick_numeric_values = [int(t) for t in onset_tick_values if t.isnumeric()]
+
+            offset_tick_values = [token.split(":")[1] for token in ev["offset/global_tick"]]
+            offset_tick_non_numeric_values = [t for t in offset_tick_values if not t.isnumeric()]
+            offset_tick_numeric_values = [int(t) for t in offset_tick_values if t.isnumeric()]
+
+            # find minimum onset tick
+            min_onset_tick = min(onset_tick_numeric_values + [10_0000])
+            max_offset_tick = max(offset_tick_numeric_values+ [0])
+
+            # remove all offset ticks that are smaller than min onset tick
+            offset_tick_numeric_values = [t for t in offset_tick_numeric_values if t >= min_onset_tick]
+
+            # remove all onsets that are larger than max offset
+            onset_tick_numeric_values = [t for t in onset_tick_numeric_values if t <= max_offset_tick]
+
+            onset_tick_values = [str(t) for t in onset_tick_numeric_values] + onset_tick_non_numeric_values
+            offset_tick_values = [str(t) for t in offset_tick_numeric_values] + offset_tick_non_numeric_values 
+
+            event_constraints[event_idx]["onset/global_tick"] = ["onset/global_tick:" + t for t in onset_tick_values]
+            event_constraints[event_idx]["offset/global_tick"] = ["offset/global_tick:" + t for t in offset_tick_values]
+
+        # convert back to x1h
+
+        x1h = torch.zeros((1, self.config["max_notes"], len(self.note_attribute_order), len(self.vocab)), device=x1h.device, dtype=x1h.dtype)
+
+        for event_idx, ev in enumerate(event_constraints):
+            for attr_idx, attr in enumerate(self.note_attribute_order):
+                for token in ev[attr]:
+                    x1h[0, event_idx, attr_idx, self.token2idx[token]] = 1
+
+        x1h = einops.rearrange(x1h, "b n a v -> b (n a) v")
+
+        return x1h
+
     
     def collapse_undefined_attributes(self, x1h):
 

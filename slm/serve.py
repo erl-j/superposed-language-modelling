@@ -40,21 +40,14 @@ USE_LOCAL_LLM = False
 
 ROOT_DIR = "./"
 
-MODEL = "harmonic"
+MODEL = "slm"
 
 OUTPUT_DIR = ROOT_DIR + "artefacts/examples_4"
 TMP_DIR = ROOT_DIR + "artefacts/tmp"
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# model = (
-#     EncoderOnlyModel.load_from_checkpoint(
-#         ROOT_DIR + checkpoints[MODEL],
-#         map_location=device,
-#     )
-#     .to(device)
-#     .eval()
-# )
+
 
 def seq2events(seq):
     # take list of dictionnaries with string items to instead be musical event constraints
@@ -68,11 +61,24 @@ def seq2events(seq):
         events.append(event)
     return events
 
+model = (
+    EncoderOnlyModel.load_from_checkpoint(
+        ROOT_DIR + checkpoints[MODEL],
+        map_location=device,
+    )
+    .to(device)
+    .eval()
+)
 
 model = SuperposedLanguageModel.load_from_checkpoint(
-    "./checkpoints/zesty-dawn-376/last.ckpt",
+    # "./checkpoints/zesty-dawn-376/last.ckpt",
     # "./checkpoints/faithful-wave-417/last.ckpt",
+    # "./checkpoints/vibrant-paper-422/last.ckpt",
     # "./checkpoints/desert-dust-401/last.ckpt",
+    # "./checkpoints/smart-wood-419/last.ckpt",
+    # "./checkpoints/unique-tree-426/last.ckpt",
+    # "./checkpoints/bumbling-dream-427/last.ckpt",
+    "./checkpoints/lively-flower-428/last.ckpt",
     map_location=device,
 )
 
@@ -495,9 +501,10 @@ def edit():
     try:
         pitch_range = data["replace_info"]["pitch_range"]
         tick_range = data["replace_info"]["tick_range"]
-        sequence = data["harm_seq"] + data["drum_seq"]
         tempo = data["tempo"]
         edit_drums = data["replace_info"]["replace_part"] == "drum_seq"
+
+        print(f"got pitch range: {pitch_range}")
         midi = looprep_to_sm(data)
         e = sm_to_events(midi)
         tick_range = [
@@ -508,6 +515,8 @@ def edit():
         pitch_range = [int(pitch_range[0]), int(pitch_range[1])]
 
         n_events = N_EVENTS
+
+        DEFAULT_TAG = "pop"
 
         if action == "prompt":
 
@@ -543,7 +552,7 @@ def edit():
                 tick_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="other",
+                tag=DEFAULT_TAG,
                 tempo=tempo,
             )
         elif action == "repitch":
@@ -554,7 +563,7 @@ def edit():
                 tick_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="other",
+                tag=DEFAULT_TAG,
                 tempo=tempo,
             )
         elif action == "retime":
@@ -565,7 +574,7 @@ def edit():
                 tick_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="other",
+                tag=DEFAULT_TAG,
                 tempo=tempo,
             )
         elif action == "reinstrument":
@@ -576,7 +585,7 @@ def edit():
                 tick_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="other",
+                tag=DEFAULT_TAG,
                 tempo=tempo,
             )
         elif action == "revelocity":
@@ -587,7 +596,7 @@ def edit():
                 tick_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="other",
+                tag=DEFAULT_TAG,
                 tempo=tempo,
             )
         elif action == "disco":
@@ -598,7 +607,7 @@ def edit():
             #     tick_range,
             #     pitch_range,
             #     drums=edit_drums,
-            #     tag="other",
+            #     tag=DEFAULT_TAG,,
             #     tempo=tempo,
             # )
             e = band_beat(
@@ -608,7 +617,7 @@ def edit():
                 tick_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="other",
+                tag=DEFAULT_TAG,
                 tempo=tempo,
             )
         elif action == "metal":
@@ -619,7 +628,7 @@ def edit():
                 tick_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="other",
+                tag=DEFAULT_TAG,
                 tempo=tempo,
             )
         elif action == "goofy":
@@ -630,7 +639,7 @@ def edit():
                 tick_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="other",
+                tag=DEFAULT_TAG,
                 tempo=tempo,
             )
         elif action == "synth":
@@ -641,7 +650,7 @@ def edit():
                 tick_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="other",
+                tag=DEFAULT_TAG,
                 tempo=tempo,
             )
             # e = synth_beat(
@@ -651,7 +660,7 @@ def edit():
             #     beat_range,
             #     pitch_range,
             #     drums=edit_drums,
-            #     tag="other",
+            #     tag=DEFAULT_TAG,,
             #     tempo=tempo,
             # )
         elif action == "breakbeat":
@@ -662,7 +671,7 @@ def edit():
             #     beat_range,
             #     pitch_range,
             #     drums=edit_drums,
-            #     tag="other",
+            #     tag=DEFAULT_TAG,,
             #     tempo=tempo,
             # )
             e = reggaeton_beat(
@@ -672,7 +681,7 @@ def edit():
                 tick_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="other",
+                tag=DEFAULT_TAG,
                 tempo=tempo,
             )
         elif action == "funk":
@@ -683,7 +692,7 @@ def edit():
                 tick_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="other",
+                tag=DEFAULT_TAG,
                 tempo=tempo,
             )
         elif action == "tom_fill":
@@ -694,7 +703,7 @@ def edit():
                 tick_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="other",
+                tag=DEFAULT_TAG,
                 tempo=tempo,
             )
         elif action == "snare_ghost_notes":
@@ -705,7 +714,7 @@ def edit():
                 tick_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="other",
+                tag=DEFAULT_TAG,
                 tempo=tempo,
             )
         elif action == "percussion":
@@ -716,7 +725,7 @@ def edit():
                 tick_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="other",
+                tag=DEFAULT_TAG,
                 tempo=tempo,
             )
         elif action == "dynamic_hihats":
@@ -727,7 +736,7 @@ def edit():
                 tick_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="other",
+                tag=DEFAULT_TAG,
                 tempo=tempo,
             )
         elif action == "locked_in_bassline":
@@ -738,7 +747,7 @@ def edit():
                 tick_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="other",
+                tag=DEFAULT_TAG,
                 tempo=tempo,
             )
         elif action == "chords":
@@ -749,7 +758,7 @@ def edit():
                 tick_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="other",
+                tag=DEFAULT_TAG,
                 tempo=tempo,
             )
         elif action == "lead":
@@ -760,7 +769,7 @@ def edit():
                 tick_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="other",
+                tag=DEFAULT_TAG,
                 tempo=tempo,
             )
         elif action == "arpeggio":
@@ -771,7 +780,7 @@ def edit():
                 tick_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="other",
+                tag=DEFAULT_TAG,
                 tempo=tempo,
             )
         elif action == "funky_bassline":
@@ -782,7 +791,7 @@ def edit():
                 tick_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="other",
+                tag=DEFAULT_TAG,
                 tempo=tempo,
             )
         elif action == "humanize":
@@ -793,7 +802,18 @@ def edit():
                 tick_range,
                 pitch_range,
                 drums=edit_drums,
-                tag="other",
+                tag=DEFAULT_TAG,
+                tempo=tempo,
+            )
+        elif action == "jazz piano":
+            e = jazz_piano(
+                e,
+                ec,
+                n_events,
+                tick_range,
+                pitch_range,
+                drums=edit_drums,
+                tag=DEFAULT_TAG,
                 tempo=tempo,
             )
         else:
@@ -805,7 +825,7 @@ def edit():
             # take random subset of 
             e = random.sample(e, n_events)
 
-        mask = model.tokenizer.create_mask([ev.to_dict() for ev in e]).to(device)
+        mask = model.tokenizer.event_constraints_to_mask(e).to(device)
 
         x = generate(
             mask,
@@ -817,6 +837,17 @@ def edit():
         )
         x_sm = model.tokenizer.decode(x)
         x_sm = util.sm_fix_overlap_notes(x_sm)
+
+
+        def count_less_than_1_durations(x_sm):
+            negative_durations = 0
+            for track in x_sm.tracks:
+                for note in track.notes:
+                    if note.duration < 0:
+                        negative_durations += 1
+            return negative_durations
+        # print count notes with negative durations
+        print(f"Numb of notes with negative durations: {count_less_than_1_durations(x_sm)}")
 
         # print note num
         print(f"Note num: {x_sm.note_num()}")

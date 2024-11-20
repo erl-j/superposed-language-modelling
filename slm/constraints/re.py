@@ -97,6 +97,7 @@ def retime(
         if e[i].a["onset/global_tick"].issubset(ticks) and e[i].a["pitch"].issubset(pitches):
             e[i].a["onset/global_tick"] = ticks
             e[i].a["offset/global_tick"] = ticks
+            e[i].a["duration"] = ec().a["duration"]
 
     # pad with empty notes
     e += [ec().force_inactive() for e in range(n_events - len(e))]
@@ -191,10 +192,6 @@ def humanize(
 
     return e
 
-
-
-        
-
 def replace(
     e,
     ec,
@@ -212,6 +209,10 @@ def replace(
     instruments = set()
     for i in range(len(e)):
         instruments = instruments.union(e[i].a["instrument"])
+    instruments = ec().a["instrument"]
+
+    # non drum events
+    non_drum_events = [ev for ev in e if "Drums" not in ev.a["instrument"]]
 
     # set all tags to tag and all tempos to tempo
     for i in range(len(e)):
@@ -221,12 +222,13 @@ def replace(
     ticks = set([str(r) for r in range(tick_range[0], tick_range[1])])
     pitches = set(
         [
-            f"{str(r)}{' (Drums)' if drums else ''}"
-            for r in range(pitch_range[0], pitch_range[1])
+           f"{r} (Drums)" if drums else f"{r}"  for r in range(pitch_range[0], pitch_range[1])
         ]
     )
 
     notes_before_removal = len(e)
+
+    infill_region_pitches = pitch_range[1] - pitch_range[0]
 
     # remove if in beat range and pitch range
     e = [
@@ -234,57 +236,167 @@ def replace(
         for ev in e
         if not (ev.a["onset/global_tick"].issubset(ticks) and ev.a["pitch"].issubset(pitches))
     ]
-
     notes_after_removal = len(e)
-
     notes_removed = notes_before_removal - notes_after_removal
 
-    # add empty notes
-    # e += [ec().force_inactive() for _ in range(40)]
+    infill_region_ticks = tick_range[1] - tick_range[0]
+    infill_region_bars = infill_region_ticks / 4 * ec().tokenizer.config["ticks_per_beat"]
+    # get valid durations
+    valid_durations = set()
+    for d in ec().tokenizer.config["durations"]:
+        if d <= infill_region_bars:
+            valid_durations.add(str(d))
 
+    print(f"Valid durations: {valid_durations}")
+
+    valid_onsets = {str(r) for r in range(tick_range[0], tick_range[1])} 
+    valid_offsets = {"none (Drums)"} if drums else {str(r) for r in range(tick_range[0]+4, tick_range[1]+1)}
+    valid_pitches = pitches
+    valid_durations = {"none (Drums)"} if drums else valid_durations
+    
     infill_constraint = {
-        "pitch": {
-            f"{str(r)}{' (Drums)' if drums else ''}"
-            for r in range(pitch_range[0], pitch_range[1])
-        }
-        | {"-"},
-        "onset/global_tick": {str(r) for r in range(tick_range[0], tick_range[1])} | {"-"},
-        "offset/global_tick": {str(r) for r in range(tick_range[0], tick_range[1])} | {"-"},
-        "instrument": ({"Drums"} if drums else instruments - {"Drums"})
-        | {"-"},
-        "tag": {tag, "-"},
-        "tempo": {str(ec().quantize_tempo(tempo)), "-"},
+        "pitch": valid_pitches | {"-"},
+        "onset/global_tick": valid_onsets | {"-"},
+        "offset/global_tick":  valid_offsets | {"-"},
+        "instrument": ({"Drums"} if drums else instruments - {"Drums"}) | {"-"},
+        # "duration": valid_durations  | {"-"},
     }
 
     # add notes removed with infill constraint
     e += [
         ec().intersect(infill_constraint).force_active()
-        for _ in range(notes_removed)
+        for _ in range(1)
     ]
 
+    e += [
+        ec().intersect(infill_constraint).force_active() for _ in range(notes_removed)
+    ]
 
+    # pitch time box size
+    pitch_time_box_notes = int( infill_region_bars * infill_region_pitches / 800)
 
-    # count notes per beat
-
-    # add between notes_to_remove - 10 and notes_to_remove + 10 notes. At least 10 notes
-    # lower_bound_notes = max(notes_removed - 10, 10)
-    # upper_bound_notes = notes_removed + 10
-    # add between 0 and
-    # add 3 forced active
-    # e += [ec().intersect(infill_constraint).force_active() for _ in range(3)]
-    # if notes_removed > 0:
-    #     e += [
-    #         ec().intersect(infill_constraint).force_active()
-    #         for _ in range(notes_removed // 2)
-    #     ]
-    #     e += [ec().intersect(infill_constraint) for _ in range(notes_removed)]
-    #
-
-    print(f"Notes removed: {notes_removed}")
+    # add 75 optional notes
+    # e += [
+    #     ec().intersect(infill_constraint)
+    #     for _ in range(25)
+    # ]
 
     # # pad with empty notes
-    e += [ec().force_inactive() for _ in range(n_events - len(e))]
-    # add 10 empty notes
-    # e += [ec().force_inactive() for _ in range(40)]
+    e += [ec().force_inactive() for e in range(n_events - len(e))]
+
+    # set tag
+    e = [ev.intersect({"tag":{f"{tag}","-"}}) for ev in e]
+
+    # set tempo
+
+    e = [ e.intersect(ec().tempo_constraint(tempo)) for e in e]
 
     return e
+
+
+# def replace(
+#     e,
+#     ec,
+#     n_events,
+#     tick_range,
+#     pitch_range,
+#     drums,
+#     tag,
+#     tempo,
+# ):
+    
+#     # convert ticks to beats
+#     beat_range = [int(tick_range[0] / ec().tokenizer.config["ticks_per_beat"]), int(tick_range[1] / ec().tokenizer.config["ticks_per_beat"])]
+#     # remove empty events
+#     e = [ev for ev in e if not ev.is_inactive()]
+
+#     # find instruments that are present
+#     instruments = set()
+#     for i in range(len(e)):
+#         instruments = instruments.union(e[i].a["instrument"])
+#     # instruments = ec().a["instrument"]
+
+#     # non drum events
+#     non_drum_events = [ev for ev in e if "Drums" not in ev.a["instrument"]]
+
+#     # set all tags to tag and all tempos to tempo
+#     for i in range(len(e)):
+#         e[i].a["tag"] = {tag}
+#         e[i].a["tempo"] = {str(ec().quantize_tempo(tempo))}
+
+#     beats = set([str(r) for r in range(beat_range[0], beat_range[1])])
+#     pitches = set(
+#         [
+#             f"{r} (Drums)" if drums else f"{r}"
+#             for r in range(pitch_range[0], pitch_range[1])
+#         ]
+#     )
+
+#     notes_before_removal = len(e)
+
+#     infill_region_pitches = pitch_range[1] - pitch_range[0]
+
+#     # remove if in beat range and pitch range
+#     e = [
+#         ev
+#         for ev in e
+#         if not (
+#             ev.a["onset/beat"].issubset(beats)
+#             and ev.a["pitch"].issubset(pitches)
+#         )
+#     ]
+#     notes_after_removal = len(e)
+#     notes_removed = notes_before_removal - notes_after_removal
+
+#     infill_region_ticks = tick_range[1] - tick_range[0]
+#     infill_region_bars = (
+#         infill_region_ticks / 4 * ec().tokenizer.config["ticks_per_beat"]
+#     )
+#     # get valid durations
+#     valid_durations = set()
+#     for d in ec().tokenizer.config["durations"]:
+#         if d <= infill_region_bars:
+#             valid_durations.add(str(d))
+
+#     print(f"Valid durations: {valid_durations}")
+
+#     valid_onset_beats = {str(r) for r in range(beat_range[0], beat_range[1])}
+#     valid_offset_beats = (
+#         {"none (Drums)"}
+#         if drums
+#         else {str(r) for r in range(beat_range[0], beat_range[1] + 1)}
+#     )
+#     valid_pitches = pitches
+#     # valid_durations = {"none (Drums)"} if drums else valid_durations
+
+#     infill_constraint = {
+#         "pitch": valid_pitches | {"-"},
+#         "onset/beat": valid_onset_beats | {"-"},
+#         "offset/beat": valid_offset_beats | {"-"},
+#         "instrument": ({"Drums"} if drums else instruments - {"Drums"}) | {"-"},
+#         # "duration": valid_durations | {"-"},
+#     }
+
+#     # add notes removed with infill constraint
+#     e += [ec().intersect(infill_constraint).force_active() for _ in range(20)]
+
+#     # pitch time box size
+#     pitch_time_box_notes = int(infill_region_bars * infill_region_pitches / 800)
+
+#     # add 75 optional notes
+#     # e += [
+#     #     ec().intersect(infill_constraint)
+#     #     for _ in range(25)
+#     # ]
+
+#     # # pad with empty notes
+#     e += [ec().force_inactive() for e in range(n_events - len(e))]
+
+#     # set tag
+#     e = [ev.intersect({"tag": {f"{tag}", "-"}}) for ev in e]
+
+#     # set tempo
+
+#     e = [e.intersect(ec().tempo_constraint(tempo)) for e in e]
+
+#     return e

@@ -1,5 +1,37 @@
 from .core import HIHAT_PITCHES, DRUM_PITCHES, TOM_PITCHES, PERCUSSION_PITCHES, CRASH_PITCHES
 
+def jazz_piano(
+    e,
+    ec,
+    n_events,
+    beat_range,
+    pitch_range,
+    drums,
+    tag,
+    tempo,
+) : 
+    e = []
+    
+    # remove all piano
+    e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Piano"})]
+
+    # add between 30 and 100 piano notes
+    e += [ec().intersect({"instrument": {"Piano"}}).force_active() for _ in range(50)]
+
+    # add 70 optional notes
+    e += [ec().intersect({"instrument": {"Piano", "-"}}) for _ in range(120)]
+
+    # set tag to jazz
+    e = [ev.intersect({"tag": {"jazz", "-"}}) for ev in e]
+
+    # pad with empty notes
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
+
+    return e
+
+
+
+
 def reggaeton_beat(
     e,
     ec,

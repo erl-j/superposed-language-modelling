@@ -7,8 +7,13 @@ import matplotlib.pyplot as plt
 import paper_checkpoints
 
 model = SuperposedLanguageModel.load_from_checkpoint(
-    "../checkpoints/faithful-wave-417/last.ckpt",
+    # "../checkpoints/faithful-wave-417/last.ckpt",
+    # "../checkpoints/smart-wood-419/last.ckpt",
     # "../checkpoints/zesty-dawn-376/last.ckpt",
+    # "../checkpoints/cerulean-dragon-425/last.ckpt",
+    # "../checkpoints/unique-tree-426/last.ckpt",
+    # "../checkpoints/bumbling-dream-427/last.ckpt",
+    "../checkpoints/lively-flower-428/last.ckpt",
     map_location="cpu",
 )
 
@@ -33,7 +38,6 @@ plt.figure()
 plt.imshow(embedding, interpolation="none")
 plt.colorbar()
 plt.show()
-
 
 
 print(embedding.shape)
@@ -75,14 +79,14 @@ for i, v in enumerate(vocab):
 
 plt.rcParams["font.size"] = 10
 plt.figure(figsize=(40, 40))
-plt.imshow(embedding @ embedding.T, interpolation="none")
+plt.imshow(embedding @ embedding.T, interpolation="none", vmin=-1, vmax=1)
 # use vocab as yticks
 plt.yticks(range(len(vocab)), vocab)
 plt.colorbar()
 plt.show()
 
 plt.figure(figsize=(40, 40))
-plt.imshow(unembedding @ unembedding.T, interpolation="none")
+plt.imshow(unembedding @ unembedding.T, interpolation="none", vmin=-1, vmax=1)
 # use vocab as yticks
 plt.yticks(range(len(vocab)), vocab)
 plt.colorbar()
@@ -90,7 +94,7 @@ plt.show()
 
 # now take simlarity between embeddings and unembeddings
 plt.figure(figsize=(40, 40))
-plt.imshow(embedding @ unembedding.T, interpolation="none")
+plt.imshow(embedding @ unembedding.T, interpolation="none", vmin=-1, vmax=1)
 # use vocab as yticks
 plt.yticks(range(len(vocab)), vocab)
 plt.colorbar()
@@ -114,7 +118,7 @@ print(onset_embeddings.shape)
 plt.figure(figsize=(20, 20))
 # set larger font size
 plt.rcParams["font.size"] = 18
-plt.imshow(onset_embeddings @ onset_embeddings.T, interpolation="none")
+plt.imshow(onset_embeddings @ onset_embeddings.T, interpolation="none", vmin=-1, vmax=1)
 # use vocab as yticks
 
 
@@ -134,10 +138,10 @@ pitch_vocab = [v for v in vocab if v.startswith("pitch")]
 pitch_embeddings = embedding[[i for i, v in enumerate(vocab) if v in pitch_vocab]]
 
 print(pitch_embeddings.shape)
-plt.figure(figsize=(20, 20))
+plt.figure(figsize=(40, 40))
 # set larger font size
 plt.rcParams["font.size"] = 18
-plt.imshow(pitch_embeddings @ pitch_embeddings.T, interpolation="none")
+plt.imshow(pitch_embeddings @ pitch_embeddings.T, interpolation="none", vmin=-1, vmax=1)
 # use vocab as yticks
 plt.yticks(range(len(pitch_vocab)), pitch_vocab)
 # set x ticks to 90 degree rotation
@@ -162,7 +166,7 @@ print(duration_embeddings.shape)
 plt.figure(figsize=(20, 20))
 # set larger font size
 plt.rcParams["font.size"] = 18
-plt.imshow(duration_embeddings @ duration_embeddings.T, interpolation="none")
+plt.imshow(duration_embeddings @ duration_embeddings.T, interpolation="none", vmin=-1, vmax=1)
 # use vocab as yticks
 
 
