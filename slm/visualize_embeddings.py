@@ -13,7 +13,8 @@ model = SuperposedLanguageModel.load_from_checkpoint(
     # "../checkpoints/cerulean-dragon-425/last.ckpt",
     # "../checkpoints/unique-tree-426/last.ckpt",
     # "../checkpoints/bumbling-dream-427/last.ckpt",
-    "../checkpoints/lively-flower-428/last.ckpt",
+    # "../checkpoints/lively-flower-428/last.ckpt",
+    "../checkpoints/sparkling-dust-435/last.ckpt",
     map_location="cpu",
 )
 

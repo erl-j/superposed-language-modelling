@@ -23,11 +23,11 @@ def funky_bassline(
         for _ in range(10)
     ]
 
-    # add 10 bass notes over 50
+    # add 10 bass notes over 36
     e += [
         ec()
         .intersect({"instrument": {"Bass"}})
-        .intersect(ec().pitch_in_scale_constraint("C major", (50, 100)))
+        .intersect(ec().pitch_in_scale_constraint("C major", (36, 50)))
         .force_active()
         for _ in range(10)
     ]
