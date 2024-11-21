@@ -14,30 +14,27 @@ def funky_bassline(
     # remove all bass
     e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Bass"})]
 
-    # add 10 bass notes under 36
-    e += [
-        ec()
-        .intersect({"instrument": {"Bass"}})
-        .intersect(ec().pitch_in_scale_constraint("C major", (20, 36)))
-        .force_active()
-        for _ in range(10)
-    ]
+    # # add 10 bass notes under 36
+    # e += [
+    #     ec()
+    #     .intersect({"instrument": {"Bass"}})
+    #     .force_active()
+    #     for _ in range(10)
+    # ]
 
     # add 10 bass notes over 36
     e += [
         ec()
         .intersect({"instrument": {"Bass"}})
-        .intersect(ec().pitch_in_scale_constraint("C major", (36, 50)))
         .force_active()
         for _ in range(10)
     ]
 
-    # add 10 optional bass notes
+    # add 20 optional bass notes
     e += [
         ec()
         .intersect({"instrument": {"Bass"}})
-        .intersect(ec().pitch_in_scale_constraint("C major", (20, 100)))
-        for _ in range(10)
+        for _ in range(20)
     ]
 
     # pad with empty notes

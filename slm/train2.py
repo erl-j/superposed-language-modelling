@@ -33,213 +33,6 @@ def random_add_masking(x):
     mask = position_mask[:,:,None] * superposition
     masked_x = torch.clamp(x + mask, 0, 1)
     return masked_x
-    
-class HybridPositionalEmbedding(nn.Module):
-    def __init__(
-        self,
-        tokens,
-        pos_encoded_attributes,
-        base_period,
-        hidden_size,
-        transpose=False,
-        num_periods=32,
-    ):
-        super().__init__()
-
-        self.tokens = tokens
-        self.hidden_size = hidden_size
-        self.transpose = transpose
-
-        # Create geometric series of periods
-        self.periods = torch.tensor(
-            [base_period / (2**i) for i in range(num_periods // 2)]
-        )
-
-        # Initialize dictionaries for positionally encoded attributes
-        self.pos_encoded_attributes = {}
-        self.pos_encoded_networks = {}
-
-        # Process tokens and separate positionally encoded attributes
-        self.raw_embedding_token_idxs = []
-        for token_idx, token in enumerate(tokens):
-            attr = token.split(":")[0]
-            value = token.split(":")[1]
-
-            if attr in pos_encoded_attributes and value.isnumeric():
-                if attr not in self.pos_encoded_attributes:
-                    self.pos_encoded_attributes[attr] = {"values": [], "indices": []}
-                self.pos_encoded_attributes[attr]["values"].append(int(value))
-                self.pos_encoded_attributes[attr]["indices"].append(token_idx)
-            else:
-                self.raw_embedding_token_idxs.append(token_idx)
-
-        # Convert lists to tensors and create networks
-        for attr in pos_encoded_attributes:
-            if attr in self.pos_encoded_attributes:
-                self.pos_encoded_attributes[attr]["values"] = torch.tensor(
-                    self.pos_encoded_attributes[attr]["values"]
-                )
-                self.pos_encoded_attributes[attr]["indices"] = torch.tensor(
-                    self.pos_encoded_attributes[attr]["indices"]
-                )
-
-                # Create the positional encoding network
-                self.pos_encoded_networks[attr] = nn.Sequential(
-                    nn.Linear(
-                        num_periods, hidden_size
-                    ),  # num_periods = num_sin + num_cos features
-                    nn.GELU(),
-                    nn.LayerNorm(hidden_size),
-                    # nn.LayerNorm(hidden_size), 
-                    nn.Linear(hidden_size, hidden_size),
-                    nn.Tanh(),
-                )
-
-        self.pos_encoded_networks = nn.ModuleDict(self.pos_encoded_networks)
-
-        # Create the raw embedding matrix
-        self.raw_embeddings = nn.Parameter(
-            torch.randn(len(tokens), hidden_size) / np.sqrt(hidden_size),
-            requires_grad=True,
-        )
-        self.weight = self.get_weights() if self.transpose else self.get_weights().T
-
-    def get_weights(self, device=None):
-        if device is None:
-            device = self.raw_embeddings.device
-        embeddings = self.raw_embeddings.to(device).clone()
-        periods = self.periods.to(device)
-
-        for attr in self.pos_encoded_attributes:
-            values = self.pos_encoded_attributes[attr]["values"].to(device)
-
-            # Compute features for multiple periods
-            # Shape: [num_values, num_periods]
-            sin_features = torch.sin(2 * np.pi * values[:, None] / periods[None, :])
-            cos_features = torch.cos(2 * np.pi * values[:, None] / periods[None, :])
-            features = torch.cat([sin_features, cos_features], dim=1)
-
-            # Generate positional encodings
-            pos_encoded = self.pos_encoded_networks[attr].to(device)(features)
-            indices = self.pos_encoded_attributes[attr]["indices"].to(device)
-
-            # Create a new tensor instead of modifying in place
-            new_embeddings = embeddings.clone()
-            new_embeddings[indices, :] = embeddings[indices, :] + pos_encoded
-            embeddings = new_embeddings
-        return embeddings
-
-
-    def forward(self, x):
-        device = x.device
-        embeddings = self.get_weights(device)
-        return x @ embeddings.T if self.transpose else x @ embeddings
-    
-class CompositeEmbeddingLayer(nn.Module):
-    def __init__(self, token_atoms, hidden_size, transpose=False):
-        super().__init__()
-        self.token_atoms = token_atoms
-        self.hidden_size = hidden_size
-        self.transpose = transpose
-
-        # Create set of all unique atoms
-        all_atoms = set().union(*token_atoms)
-        self.all_atoms = list(all_atoms)
-        self.atom2index = {atom: idx for idx, atom in enumerate(self.all_atoms)}
-
-        # Initialize token_atoms_matrix with proper dtype and device handling
-        self.register_buffer(
-            "token_atoms_matrix",
-            self._create_token_atoms_matrix(token_atoms, len(self.all_atoms)),
-        )
-
-        # Register tokens_with_single_atom as buffer
-        self.register_buffer(
-            "tokens_with_single_atom", torch.tensor([len(x) == 1 for x in token_atoms])
-        )
-
-        # Initialize layers
-        n_atoms = len(self.all_atoms)
-        self.atom_embedding = nn.Linear(n_atoms, hidden_size, bias=False)
-        self.projection_layer = nn.Sequential(
-            nn.Linear(hidden_size, hidden_size),
-            nn.GELU(),
-            nn.LayerNorm(hidden_size),
-            nn.Linear(hidden_size, hidden_size),
-            nn.GELU(),
-            nn.LayerNorm(hidden_size),
-            nn.Linear(hidden_size, hidden_size),
-        )
-
-        # Initialize learnable backup embeddings
-        self.raw_embeddings = nn.Parameter(
-            torch.randn(len(token_atoms), hidden_size),
-            requires_grad=True,
-        )
-
-        # Initialize weights
-        self._init_weights()
-        self.weight = self.get_weights() if self.transpose else self.get_weights().T
-
-    def _create_token_atoms_matrix(self, token_atoms, n_atoms):
-        matrix = torch.zeros(len(token_atoms), n_atoms)
-        for token_idx, token_at in enumerate(token_atoms):
-            for atom in token_at:
-                matrix[token_idx, self.atom2index[atom]] = 1
-        return matrix
-
-    def _init_weights(self):
-        """Initialize weights using Xavier/Glorot initialization"""
-        nn.init.normal_(self.atom_embedding.weight, 0, 1)
-        # intialize raw embeddings with gaussian N(0,1)
-        nn.init.normal_(self.raw_embeddings, 0, 1)
-        for layer in self.projection_layer:
-            if isinstance(layer, nn.Linear):
-                nn.init.xavier_uniform_(layer.weight)
-                if layer.bias is not None:
-                    nn.init.zeros_(layer.bias)
-
-    def get_weights(self, device=None):
-        if device is None:
-            device = self.token_atoms_matrix.device
-
-        # Compute atomic embeddings
-        token_atoms_z = self.atom_embedding(self.token_atoms_matrix)
-
-        # Apply projection layers
-        token_atoms_z = self.projection_layer(token_atoms_z)
-
-        # Use raw embeddings for tokens with single atoms
-        token_atoms_z = torch.where(
-            self.tokens_with_single_atom.unsqueeze(-1),
-            self.raw_embeddings,
-            token_atoms_z,
-        )
-
-        return token_atoms_z
-
-    def forward(self, x):
-        token_atoms_z = self.get_weights()
-
-        # Apply matrix multiplication based on transpose flag
-        out = x @ (token_atoms_z.T if self.transpose else token_atoms_z)
-
-        return out
-
-    
-# token_atoms = ["embed", "pos_embedding_onset", 
-
-# class HybridFreePositionalEmbeddingLayer(nn.Module):
-#     def __init__(self, token_embed_strategies, hidden_size):
-#         super().__init__()
-#         self.token_embed_strategies = token_embed_strategies
-#         self.hidden_size = hidden_size
-#         # get all positional embedding types
-#         self.positional_embedding_types = set([x for x in token_embed_strategies if "pos_embedding" in x])
-#         # get number 
-#         # intialize one fourier positional encoding for each type
-#         for pos_type in self.positional_embedding_types:
-
 
 class SuperposedLanguageModel(pl.LightningModule):
     def __init__(
@@ -261,6 +54,7 @@ class SuperposedLanguageModel(pl.LightningModule):
         pos_embedding_attributes = [],
         base_period = None,
         activation = "relu",
+        use_cross_entropy_increase_loss = True
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -272,13 +66,8 @@ class SuperposedLanguageModel(pl.LightningModule):
         self.format_mask = torch.Tensor(self.tokenizer.get_format_mask())
         self.vocab = vocab
         self.positional_encoding  = nn.Parameter(torch.zeros(1, max_seq_len*2, hidden_size), requires_grad=True)
-        if len(token_atoms) > 0:
-            self.embedding_layer = CompositeEmbeddingLayer(token_atoms, hidden_size)
-        else:
-            self.embedding_layer = nn.Linear(vocab_size, hidden_size, bias=False)
-        if len(pos_embedding_attributes) > 0:
-            self.embedding_layer = HybridPositionalEmbedding(vocab, pos_embedding_attributes, base_period, hidden_size)
-
+        self.embedding_layer = nn.Linear(vocab_size, hidden_size, bias=False)
+     
         self.transformer = torch.nn.TransformerEncoder(
             encoder_layer=torch.nn.TransformerEncoderLayer(
             d_model=hidden_size,
@@ -291,18 +80,14 @@ class SuperposedLanguageModel(pl.LightningModule):
             ),
             num_layers=n_layers,
         )
-        if use_composite_unembedding:
-            self.decoder_output_layer = CompositeEmbeddingLayer(token_atoms, hidden_size, transpose=True)
-        else:
-            self.decoder_output_layer = nn.Linear(hidden_size, vocab_size)
-        if len(pos_embedding_attributes) > 0:
-            self.decoder_output_layer = HybridPositionalEmbedding(vocab, pos_embedding_attributes, base_period, hidden_size, transpose=True)
+        self.decoder_output_layer = nn.Linear(hidden_size, vocab_size)
         self.seq_len = max_seq_len
         self.n_attributes = len(self.tokenizer.note_attribute_order)
         self.learning_rate_gamma = learning_rate_gamma
         self.enforce_constraint_in_forward = enforce_constraint_in_forward
         self.compose_unembedding = use_composite_unembedding
         self.normalize_input = normalize_input
+        self.use_cross_entropy_increase_loss = use_cross_entropy_increase_loss
         
 
     def convert_to_half(self):
@@ -458,12 +243,25 @@ class SuperposedLanguageModel(pl.LightningModule):
             target_idx.reshape(-1),
             reduction = "none",
         )
+
+        prior = masked_x / masked_x.sum(dim=-1, keepdim=True)
+
+        prior_ce = F.cross_entropy(
+            prior.reshape(-1, prior.shape[-1]),
+            target_idx.reshape(-1),
+            reduction = "none",
+        )
+
+        cross_entropy_increase = (ce - prior_ce).mean()
+
         known_positions = (masked_x.sum(dim=-1) == 1).flatten()
         ce[known_positions] = 0
         # reshape to batch, loss
         ce = ce.reshape(batch_size, -1)
         metrics = {}
         metrics["cross_entropy"] = ce.mean()
+        metrics["cross_entropy_increase"] = cross_entropy_increase
+
         with torch.no_grad():
             # get probability of the correct token
             decoder_output_probs = F.softmax(logits, dim=-1)
@@ -491,6 +289,8 @@ class SuperposedLanguageModel(pl.LightningModule):
         metrics = self.step(batch, batch_idx)
         for metric in metrics:
             self.log(f"trn/{metric}", metrics[metric], on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+        if self.use_cross_entropy_increase_loss:
+            loss = metrics["cross_entropy_increase"]
         else:
             loss = metrics["cross_entropy"]
         self.log("trn/loss", loss, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
@@ -503,6 +303,8 @@ class SuperposedLanguageModel(pl.LightningModule):
             metrics = self.step(batch, batch_idx)
         for metric in metrics:
             self.log(f"val/{metric}", metrics[metric], prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
+        if self.use_cross_entropy_increase_loss:
+            loss = metrics["cross_entropy_increase"]
         else:
             loss = metrics["cross_entropy"]
         self.log("val/loss", loss, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
@@ -534,6 +336,8 @@ class SuperposedLanguageModel(pl.LightningModule):
                 )
         # now copy transformer
         self.transformer.load_state_dict(src_model.transformer.state_dict())
+
+
 
 if __name__ == "__main__":
 
@@ -621,10 +425,7 @@ if __name__ == "__main__":
         enforce_constraint_in_forward=True,
         normalize_input=True,
         activation="gelu",
-        # token_atoms=token_atoms,
-        # use_composite_unembedding=True,
-        # pos_embedding_attributes=["onset/global_tick", "offset/global_tick"],
-        # base_period=tokenizer_config["ticks_per_beat"]* N_BARS * 4,
+        use_cross_entropy_increase_loss=True,
     )
 
 
@@ -745,7 +546,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[2,4],
+        devices=[3,7],
         precision="16-mixed",
         max_epochs=10_000,
         log_every_n_steps=1,
