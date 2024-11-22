@@ -209,7 +209,7 @@ def replace(
     instruments = set()
     for i in range(len(e)):
         instruments = instruments.union(e[i].a["instrument"])
-    instruments = ec().a["instrument"]
+    # instruments = ec().a["instrument"]
 
     # non drum events
     non_drum_events = [ev for ev in e if "Drums" not in ev.a["instrument"]]
@@ -263,10 +263,10 @@ def replace(
     }
 
     # add notes removed with infill constraint
-    e += [
-        ec().intersect(infill_constraint).force_active()
-        for _ in range(1)
-    ]
+    # e += [
+    #     ec().intersect(infill_constraint).force_active()
+    #     for _ in range(1)
+    # ]
 
     e += [
         ec().intersect(infill_constraint).force_active() for _ in range(notes_removed)
@@ -275,11 +275,6 @@ def replace(
     # pitch time box size
     pitch_time_box_notes = int( infill_region_bars * infill_region_pitches / 800)
 
-    # add 75 optional notes
-    # e += [
-    #     ec().intersect(infill_constraint)
-    #     for _ in range(25)
-    # ]
 
     # # pad with empty notes
     e += [ec().force_inactive() for e in range(n_events - len(e))]

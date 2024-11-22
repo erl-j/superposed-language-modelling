@@ -216,7 +216,7 @@ class SuperposedLanguageModel(pl.LightningModule):
                     updated_event_indices = set(updated_event_indices.cpu().numpy())
 
                     x = self.tokenizer.collapse_undefined_attributes(x)
-                    # x = self.tokenizer.sanitize_mask(x, event_indices=updated_event_indices)
+                    x = self.tokenizer.sanitize_mask(x, event_indices=updated_event_indices)
 
                     # masekd tokens after
                     masked_tokens_after = (x.sum(-1) > 1).sum().int().item()
@@ -246,8 +246,10 @@ class SuperposedLanguageModel(pl.LightningModule):
 
         prior = masked_x / masked_x.sum(dim=-1, keepdim=True)
 
+        prior_log_probs = torch.log(prior + 1e-8)
+
         prior_ce = F.cross_entropy(
-            prior.reshape(-1, prior.shape[-1]),
+            prior_log_probs.reshape(-1, prior.shape[-1]),
             target_idx.reshape(-1),
             reduction = "none",
         )
@@ -343,7 +345,8 @@ if __name__ == "__main__":
 
     DATASET = "mmd_loops"
 
-    BATCH_SIZE = 60
+    # BATCH_SIZE = 60 12, 768
+    BATCH_SIZE = 100
 
     tag_list = open(f"./data/{DATASET}/tags.txt").read().splitlines()
 
@@ -412,10 +415,10 @@ if __name__ == "__main__":
         # model = SuperposedLanguageModel.load_from_checkpoint("./checkpoints/summer-plasma-412/last.ckpt", learning_rate=2e-6, map_location="cpu")
 
     model = SuperposedLanguageModel(
-        hidden_size=768,
-        n_heads=12,
-        feed_forward_size=4*768,
-        n_layers=12,
+        hidden_size=512,
+        n_heads=8,
+        feed_forward_size=4*512,
+        n_layers=8,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer_config["max_notes"] * len(tokenizer.note_attribute_order),
         learning_rate=1e-4,
@@ -425,7 +428,7 @@ if __name__ == "__main__":
         enforce_constraint_in_forward=True,
         normalize_input=True,
         activation="gelu",
-        use_cross_entropy_increase_loss=True,
+        # use_cross_entropy_increase_loss=True,
     )
 
 
@@ -546,7 +549,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[3,7],
+        devices=[3,7], 
         precision="16-mixed",
         max_epochs=10_000,
         log_every_n_steps=1,

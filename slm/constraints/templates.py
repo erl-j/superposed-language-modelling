@@ -667,12 +667,12 @@ def band_beat(
     # add
     e = []
     # add 20 bass
-    e += [ec().intersect({"instrument": {"Bass"}}).force_active() for _ in range(20)]
+    e += [ec().intersect({"instrument": {"Bass"}}) for _ in range(20)]
     # add 40 piano
-    e += [ec().intersect({"instrument": {"Piano"}}).force_active() for _ in range(40)]
+    e += [ec().intersect({"instrument": {"Piano"}}) for _ in range(40)]
 
     # add 70 drums
-    e += [ec().intersect({"instrument": {"Drums"}}).force_active() for _ in range(70)]
+    e += [ec().intersect({"instrument": {"Drums"}}) for _ in range(60)]
 
     # add 40 optional notes
     e += [
