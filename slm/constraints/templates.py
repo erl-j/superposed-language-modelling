@@ -22,7 +22,10 @@ def jazz_piano(
     e += [ec().intersect({"instrument": {"Piano", "-"}}) for _ in range(120)]
 
     # set tag to jazz
-    e = [ev.intersect({"tag": {"jazz", "-"}}) for ev in e]
+    e = [ev.intersect({"tag": {"pop", "-"}}) for ev in e]
+
+    # set tempo to 120
+    e = [ev.intersect(ec().tempo_constraint(120)) for ev in e]
 
     # pad with empty notes
     e += [ec().force_inactive() for _ in range(n_events - len(e))]

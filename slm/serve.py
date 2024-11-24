@@ -80,6 +80,7 @@ model = SuperposedLanguageModel.load_from_checkpoint(
     # "./checkpoints/bumbling-dream-427/last.ckpt",
     # "./checkpoints/lively-flower-428/last.ckpt",
     "./checkpoints/sparkling-dust-435/last.ckpt",
+    # "./checkpoints/desert-dragon-439/last.ckpt",
     map_location=device,
 )
 
@@ -827,6 +828,8 @@ def edit():
             e = random.sample(e, n_events)
 
         mask = model.tokenizer.event_constraints_to_mask(e).to(device)
+
+        mask = model.fast_kill_events(mask)
 
         x = generate(
             mask,

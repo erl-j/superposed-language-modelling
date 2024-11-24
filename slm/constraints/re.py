@@ -268,10 +268,13 @@ def replace(
     #     for _ in range(1)
     # ]
 
-    e += [
-        ec().intersect(infill_constraint).force_active() for _ in range(notes_removed)
-    ]
-
+    # e += [
+    #     ec().intersect(infill_constraint).force_active() for _ in range(notes_removed)
+    # ]
+    # add one forced note
+    e += [ec().intersect(infill_constraint).force_active() for _ in range(1)]
+    # add 50 optional notes 
+    e += [ec().intersect(infill_constraint) for _ in range(n_events - len(e)-50)]
     # pitch time box size
     pitch_time_box_notes = int( infill_region_bars * infill_region_pitches / 800)
 

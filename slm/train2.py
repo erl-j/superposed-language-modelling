@@ -121,7 +121,23 @@ class SuperposedLanguageModel(pl.LightningModule):
             ] = torch.finfo(decoder_logits.dtype).min
         # crop to decoder length
         return decoder_logits
+    
+    @torch.inference_mode()
+    def fast_kill_events(self, x, temperature=1):
+        self.eval()
+        dtype = self.embedding_layer.weight.dtype
+        x = x.to(dtype)
 
+        with torch.no_grad():
+            x = x
+            x = x * self.format_mask[None, ...].to(x.device).to(dtype)
+            x = self.tokenizer.collapse_undefined_attributes(x)
+            x = self.tokenizer.sanitize_mask(x, event_indices=range(self.tokenizer.config["max_notes"]))
+            logits = self(x)
+            logits = logits / temperature
+            new_x = self.tokenizer.get_undefined_probs(x, logits)
+        return new_x
+        
     @torch.inference_mode()
     def generate(
         self,
@@ -216,7 +232,8 @@ class SuperposedLanguageModel(pl.LightningModule):
                     updated_event_indices = set(updated_event_indices.cpu().numpy())
 
                     x = self.tokenizer.collapse_undefined_attributes(x)
-                    x = self.tokenizer.sanitize_mask(x, event_indices=updated_event_indices)
+                    # x = self.tokenizer.sanitize_mask(x, event_indices=updated_event_indices)
+
 
                     # masekd tokens after
                     masked_tokens_after = (x.sum(-1) > 1).sum().int().item()

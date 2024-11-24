@@ -386,6 +386,69 @@ class MergedTokenizer():
         # flatten note_encodings
         note_encodings = pydash.flatten(note_encodings)
         return note_encodings    
+    
+    def get_undefined_probs(self, mask, logits):
+        """
+        Sample which events should be marked as undefined based on their probabilities.
+        
+        Args:
+            mask: Original event mask [batch_size, sequence_length]
+            logits: Raw model outputs [batch_size, sequence_length, vocab_size]
+            
+        Returns:
+            Updated mask with sampled undefined events
+        """
+        # Store original dtype
+        dtype = mask.dtype
+        
+        # Reshape logits to separate notes and attributes
+        num_notes = self.config["max_notes"]
+        num_attributes = len(self.note_attribute_order)
+        logits = einops.rearrange(logits, "b (n a) v -> b n a v", n=num_notes, a=num_attributes)
+        
+        # Calculate probabilities for each token
+        probs = torch.nn.functional.softmax(logits, dim=-1)
+        
+        # Create undefined token mask
+        undefined_tokens = torch.tensor([
+            self.token2idx[attr + ":-"] for attr in self.note_attribute_order
+        ], device=logits.device)
+        
+        # Convert to one-hot and expand dimensions
+        undefined_one_hot = torch.nn.functional.one_hot(
+            undefined_tokens, 
+            num_classes=logits.shape[-1]
+        ).to(dtype)  # Convert to same dtype as mask
+        
+        # Calculate probability of undefined for each note
+        undefined_probs = (probs * undefined_one_hot.unsqueeze(0).unsqueeze(0)).sum(dim=-1)  # Sum over vocabulary
+        # undefined_probs = undefined_probs.mean(dim=-1)  # Average over attributes
+
+        # take max over attributes
+        undefined_probs = undefined_probs.max(dim=-1).values
+        
+        # Sample undefined events using random threshold
+        random_nums = torch.rand_like(undefined_probs)
+        undefined_events = random_nums < undefined_probs
+        
+        # Create new mask
+        new_mask = mask.clone()
+        
+        # Reshape undefined_events to match the sequence dimension
+        undefined_events_flat = einops.repeat(
+            undefined_events,
+            'b n -> b (n a)',
+            a=num_attributes
+        )
+        
+        # For each undefined event, set all its attributes to undefined
+        undefined_pattern = undefined_one_hot[0].to(dtype)  # Convert to same dtype as mask
+        new_mask[undefined_events_flat] = undefined_pattern     
+
+        # for non undefined events, remove undefined tokens as an option
+        new_mask[~undefined_events_flat] = new_mask[~undefined_events_flat] * (1 - undefined_pattern)   
+        
+        return new_mask
 
     def normalize_constraint(self, x1h):
         # first we convert every column to a list of tokens
