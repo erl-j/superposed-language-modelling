@@ -80,6 +80,7 @@ model = SuperposedLanguageModel.load_from_checkpoint(
     # "./checkpoints/bumbling-dream-427/last.ckpt",
     # "./checkpoints/lively-flower-428/last.ckpt",
     "./checkpoints/sparkling-dust-435/last.ckpt",
+    # "./checkpoints/pretty-smoke-437/last.ckpt",
     # "./checkpoints/desert-dragon-439/last.ckpt",
     map_location=device,
 )
@@ -130,8 +131,8 @@ blank_event_dict = {
 ec = lambda: MusicalEventConstraint(blank_event_dict, model.tokenizer)
 
 
-def sm_to_events(x_sm):
-    x = model.tokenizer.encode(x_sm, tag="other")
+def sm_to_events(x_sm, tag):
+    x = model.tokenizer.encode(x_sm, tag=tag)
     tokens = model.tokenizer.indices_to_tokens(x)
     # group by n_attributes
     n_attributes = len(model.tokenizer.note_attribute_order)
@@ -508,7 +509,10 @@ def edit():
 
         print(f"got pitch range: {pitch_range}")
         midi = looprep_to_sm(data)
-        e = sm_to_events(midi)
+
+        DEFAULT_TAG = "pop"
+
+        e = sm_to_events(midi,tag=DEFAULT_TAG)
         tick_range = [
             int(tick_range[0]),
             1 + int(tick_range[1]),
@@ -518,7 +522,6 @@ def edit():
 
         n_events = N_EVENTS
 
-        DEFAULT_TAG = "pop"
 
         if action == "prompt":
 
@@ -829,7 +832,7 @@ def edit():
 
         mask = model.tokenizer.event_constraints_to_mask(e).to(device)
 
-        mask = model.fast_kill_events(mask)
+        # mask = model.fast_kill_events(mask)
 
         x = generate(
             mask,

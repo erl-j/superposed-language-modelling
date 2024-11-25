@@ -54,7 +54,8 @@ class SuperposedLanguageModel(pl.LightningModule):
         pos_embedding_attributes = [],
         base_period = None,
         activation = "relu",
-        use_cross_entropy_increase_loss = True
+        use_cross_entropy_increase_loss = True,
+        dropout = 0.1,
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -74,7 +75,7 @@ class SuperposedLanguageModel(pl.LightningModule):
             nhead=n_heads,
             dim_feedforward=feed_forward_size,
             norm_first= norm_first,
-            dropout=0.1,
+            dropout=dropout,
             batch_first=True,
             activation=activation,
             ),
@@ -232,7 +233,7 @@ class SuperposedLanguageModel(pl.LightningModule):
                     updated_event_indices = set(updated_event_indices.cpu().numpy())
 
                     x = self.tokenizer.collapse_undefined_attributes(x)
-                    # x = self.tokenizer.sanitize_mask(x, event_indices=updated_event_indices)
+                    x = self.tokenizer.sanitize_mask(x, event_indices=updated_event_indices)
 
 
                     # masekd tokens after
@@ -363,7 +364,7 @@ if __name__ == "__main__":
     DATASET = "mmd_loops"
 
     # BATCH_SIZE = 60 12, 768
-    BATCH_SIZE = 100
+    BATCH_SIZE = 80
 
     tag_list = open(f"./data/{DATASET}/tags.txt").read().splitlines()
 
@@ -432,10 +433,10 @@ if __name__ == "__main__":
         # model = SuperposedLanguageModel.load_from_checkpoint("./checkpoints/summer-plasma-412/last.ckpt", learning_rate=2e-6, map_location="cpu")
 
     model = SuperposedLanguageModel(
-        hidden_size=512,
-        n_heads=8,
-        feed_forward_size=4*512,
-        n_layers=8,
+        hidden_size=768,
+        n_heads=12,
+        feed_forward_size=4*768,
+        n_layers=12,
         vocab=tokenizer.vocab,
         max_seq_len=tokenizer_config["max_notes"] * len(tokenizer.note_attribute_order),
         learning_rate=1e-4,
@@ -445,6 +446,7 @@ if __name__ == "__main__":
         enforce_constraint_in_forward=True,
         normalize_input=True,
         activation="gelu",
+        dropout=0.0,
         # use_cross_entropy_increase_loss=True,
     )
 

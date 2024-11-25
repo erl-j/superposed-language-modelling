@@ -446,7 +446,7 @@ class MergedTokenizer():
         new_mask[undefined_events_flat] = undefined_pattern     
 
         # for non undefined events, remove undefined tokens as an option
-        new_mask[~undefined_events_flat] = new_mask[~undefined_events_flat] * (1 - undefined_pattern)   
+        # new_mask[~undefined_events_flat] = new_mask[~undefined_events_flat] * (1 - undefined_pattern)   
         
         return new_mask
 

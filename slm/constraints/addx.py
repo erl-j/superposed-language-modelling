@@ -25,17 +25,13 @@ def funky_bassline(
     # add 10 bass notes over 36
     e += [
         ec()
-        .intersect({"instrument": {"Bass"}})
+        .intersect({"instrument": {"Bass", "-"}, 
+                    "pitch": {str(p) for p in range(23, 65)} | {"-"},
+        })
         .force_active()
-        for _ in range(10)
+        for _ in range(30)
     ]
 
-    # add 20 optional bass notes
-    e += [
-        ec()
-        .intersect({"instrument": {"Bass"}})
-        for _ in range(20)
-    ]
 
     # pad with empty notes
     e += [ec().force_inactive() for _ in range(n_events - len(e))]

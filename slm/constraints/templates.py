@@ -10,8 +10,10 @@ def jazz_piano(
     tag,
     tempo,
 ) : 
-    e = []
     
+    # remove empty notes
+    e = [ev for ev in e if ev.is_active()]
+
     # remove all piano
     e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Piano"})]
 
@@ -19,13 +21,13 @@ def jazz_piano(
     e += [ec().intersect({"instrument": {"Piano"}}).force_active() for _ in range(50)]
 
     # add 70 optional notes
-    e += [ec().intersect({"instrument": {"Piano", "-"}}) for _ in range(120)]
-
-    # set tag to jazz
-    e = [ev.intersect({"tag": {"pop", "-"}}) for ev in e]
+    e += [ec().intersect({"instrument": {"Piano", "-"}}) for _ in range(50)]
 
     # set tempo to 120
-    e = [ev.intersect(ec().tempo_constraint(120)) for ev in e]
+    e = [ev.intersect(ec().tempo_constraint(tempo)) for ev in e]
+
+    # add tag constraint
+    e = [ev.intersect({"tag": {tag, "-"}}) for ev in e]
 
     # pad with empty notes
     e += [ec().force_inactive() for _ in range(n_events - len(e))]
@@ -45,54 +47,96 @@ def reggaeton_beat(
     tag,
     tempo,
 ):
-    e = []
-
-    # remove all drums
+    # remove empty notes
+    e = [ev for ev in e if ev.is_active()]
+    tag = "jazz"
+    # set tag to jazz
+    for i in range(len(e)):
+        e[i].a["tag"] = {tag}
+    # remove drums
     e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Drums"})]
+    # add 10 kicks
+    e += [ec().intersect({"pitch": {"36 (Drums)"}}).force_active() for _ in range(20)]
+    # add 10 optional kicks
+    e += [ec().intersect({"pitch": {"36 (Drums)", "-"}}) for _ in range(10)]
+    # add 3 toms
+    e += [ec().intersect({"pitch": TOM_PITCHES}).force_active() for _ in range(10)]
 
-    # Dembow rhythm pattern (repeated for each bar)
-    # first, kick on every beat of every bar
-    for bar in range(4):
-        for beat in range(4):
-            e += [
-                ec()
-                .intersect({"pitch": {"36 (Drums)"}, "onset/beat": {str(beat + (bar * 4))},"onset/tick": {"0"}})
-                .force_active()
-            ]
-
-        e += [
-            ec()
-            .intersect({"pitch": {"38 (Drums)"}, "onset/beat": {str( (bar * 4))}, "onset/tick": {"18"}})
-        ]
-        e += [
-            ec()
-            .intersect({"pitch": {"38 (Drums)"}, "onset/beat": {str(1 +  (bar * 4))}, "onset/tick": {"12"}})
-        ]
-        e += [
-            ec()
-            .intersect({"pitch": {"38 (Drums)"}, "onset/beat": {str(2 +  (bar * 4))}, "onset/tick": {"18"}})
-        ]
-        e += [
-            ec()
-            .intersect({"pitch": {"38 (Drums)"}, "onset/beat": {str(3 +  (bar * 4))}, "onset/tick": {"12"}})
-        ]
-
-    # add 10 active hihats
-    e += [ec().intersect({"pitch": {"42 (Drums)"}}).force_active() for _ in range(10)]
-
-    # # add 60 optional drums that are not kicks or snare
-    e += [ec().intersect({"instrument": {"Drums"}}).intersect({"pitch": DRUM_PITCHES - {"36 (Drums)", "38 (Drums)"}}) for _ in range(30)]
-
-    # set tempo to 110
-    e = [ev.intersect(ec().tempo_constraint(90)) for ev in e]
-
-    # set tag to latin
-    e = [ev.intersect({"tag": {"latin", "-"}}) for ev in e]
+    # add 20 rides
+    e += [ec().intersect({"pitch": HIHAT_PITCHES}).force_active() for _ in range(40)]
+    # 20 optional rides
+    e += [ec().intersect({"pitch": HIHAT_PITCHES | {"-"}}) for _ in range(20)]
+    # add 10 snare
+    e += [ec().intersect({"pitch": {"38 (Drums)"}}).force_active() for _ in range(6)]
+    # add 10 optional snares
+    e += [ec().intersect({"pitch": {"38 (Drums)", "-"}}) for _ in range(10)]
 
     # pad with empty notes
     e += [ec().force_inactive() for _ in range(n_events - len(e))]
+    # set to 160
+    # e = [
+    #     ev.intersect(ec().tempo_constraint(95)).intersect(
+    #         {"instrument": {"Drums", "-"}}
+    #     )
+    #     for ev in e
+    # ]
+    e = [ev.intersect({"tag": {tag, "-"}}) for ev in e]
+
+    # set tempo
+    e = [ev.intersect(ec().tempo_constraint(tempo)) for ev in e]
+
+    # tempo
+
 
     return e
+    # e = []
+
+    # # remove all drums
+    # e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Drums"})]
+
+    # # Dembow rhythm pattern (repeated for each bar)
+    # # first, kick on every beat of every bar
+    # for bar in range(4):
+    #     for beat in range(4):
+    #         e += [
+    #             ec()
+    #             .intersect({"pitch": {"36 (Drums)"}, "onset/beat": {str(beat + (bar * 4))},"onset/tick": {"0"}})
+    #             .force_active()
+    #         ]
+
+    #     e += [
+    #         ec()
+    #         .intersect({"pitch": {"38 (Drums)"}, "onset/beat": {str( (bar * 4))}, "onset/tick": {"18"}})
+    #     ]
+    #     e += [
+    #         ec()
+    #         .intersect({"pitch": {"38 (Drums)"}, "onset/beat": {str(1 +  (bar * 4))}, "onset/tick": {"12"}})
+    #     ]
+    #     e += [
+    #         ec()
+    #         .intersect({"pitch": {"38 (Drums)"}, "onset/beat": {str(2 +  (bar * 4))}, "onset/tick": {"18"}})
+    #     ]
+    #     e += [
+    #         ec()
+    #         .intersect({"pitch": {"38 (Drums)"}, "onset/beat": {str(3 +  (bar * 4))}, "onset/tick": {"12"}})
+    #     ]
+
+    # # add 10 active hihats
+    # e += [ec().intersect({"pitch": {"42 (Drums)"}}).force_active() for _ in range(10)]
+
+    # # # add 60 optional drums that are not kicks or snare
+    # e += [ec().intersect({"instrument": {"Drums"}}).intersect({"pitch": DRUM_PITCHES - {"36 (Drums)", "38 (Drums)"}}) for _ in range(30)]
+
+    # # set tempo to 110
+    # e = [ev.intersect(ec().tempo_constraint(90)) for ev in e]
+
+    # # set tag to latin
+    # e = [ev.intersect({"tag": {"latin", "-"}}) for ev in e]
+
+    # # pad with empty notes
+    # e += [ec().force_inactive() for _ in range(n_events - len(e))]
+
+    # return e
 
 def funk_beat(
     e,
@@ -104,7 +148,8 @@ def funk_beat(
     tag,
     tempo,
 ):
-    e = []
+    # remove empty notes
+    e = [ev for ev in e if ev.is_active()]
 
     # remove all drums
     e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Drums"})]
@@ -137,10 +182,10 @@ def funk_beat(
     e += [ec().force_inactive() for _ in range(n_events - len(e))]
 
     # set to 96
-    e = [ev.intersect(ec().tempo_constraint(96)) for ev in e]
+    e = [ev.intersect(ec().tempo_constraint(tempo)) for ev in e]
 
     # set tag to funk
-    # e = [ev.intersect({"tag": {"funk", "-"}}) for ev in e]
+    e = [ev.intersect({"tag": {tag, "-"}}) for ev in e]
 
     return e
 
