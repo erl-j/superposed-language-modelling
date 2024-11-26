@@ -251,6 +251,8 @@ class SuperposedLanguageModel(pl.LightningModule):
         x = torch.nn.functional.one_hot(batch, num_classes=len(self.vocab)).float()
 
         batch_size = x.shape[0]
+        ta = x.shape[1]
+        v = x.shape[2]
         masked_x = random_add_masking(x)
         masked_x = masked_x * self.format_mask[None, ...].to(masked_x.device)
         target = x
@@ -275,13 +277,18 @@ class SuperposedLanguageModel(pl.LightningModule):
         )
 
         prior_entropy = -torch.sum(prior * prior_log_probs, dim=-1)
+        assert prior_entropy.shape == (batch_size, ta)
 
         # take mean of entropy
-        prior_entropy = prior_entropy.mean(1)
+        prior_entropy = prior_entropy.mean(1, keepdim=True)
 
         ce_reshaped = einops.rearrange(ce, "(b ta) -> b ta", b=batch_size)
+
+        na = ce_reshaped.shape[-1]
+        assert ce_reshaped.shape == (batch_size, na)
+        
         # now divide by prior entropy
-        prior_entropy_scaled_ce = ce_reshaped.mean(axis=1) / (prior_entropy+1e-8)
+        prior_entropy_scaled_ce = ce_reshaped / (prior_entropy+1)
 
 
         cross_entropy_increase = (ce - prior_ce).mean()
