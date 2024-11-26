@@ -62,10 +62,12 @@ def reggaeton_beat(
     # add 3 toms
     e += [ec().intersect({"pitch": TOM_PITCHES}).force_active() for _ in range(10)]
 
+    # add ride 
+    RIDE_PITCHES = {"51 (Drums)", "53 (Drums)", "59 (Drums)"}
     # add 20 rides
-    e += [ec().intersect({"pitch": HIHAT_PITCHES}).force_active() for _ in range(40)]
+    e += [ec().intersect({"pitch":RIDE_PITCHES }).force_active() for _ in range(40)]
     # 20 optional rides
-    e += [ec().intersect({"pitch": HIHAT_PITCHES | {"-"}}) for _ in range(20)]
+    e += [ec().intersect({"pitch": RIDE_PITCHES | {"-"}}) for _ in range(20)]
     # add 10 snare
     e += [ec().intersect({"pitch": {"38 (Drums)"}}).force_active() for _ in range(6)]
     # add 10 optional snares
@@ -541,7 +543,7 @@ def metal_beat(
     # set tempo to 160
     e = [ev.intersect(ec().tempo_constraint(150)) for ev in e]
     # set tag to metal
-    # e = [ev.intersect({"tag": {"metal", "-"}}) for ev in e]
+    # e = [ev.intersect({"tag": {tag, "-"}}) for ev in e]
 
     return e
 

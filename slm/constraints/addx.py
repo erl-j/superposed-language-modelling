@@ -36,6 +36,9 @@ def funky_bassline(
     # pad with empty notes
     e += [ec().force_inactive() for _ in range(n_events - len(e))]
 
+    # add tag constraint
+    e = [ev.intersect({"tag": {tag, "-"}}) for ev in e]
+
     return e
 
 

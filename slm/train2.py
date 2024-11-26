@@ -54,7 +54,8 @@ class SuperposedLanguageModel(pl.LightningModule):
         pos_embedding_attributes = [],
         base_period = None,
         activation = "relu",
-        use_cross_entropy_increase_loss = True,
+        use_cross_entropy_increase_loss = False,
+        use_prior_scaled_ce_loss = False,
         dropout = 0.1,
     ):
         """
@@ -89,6 +90,7 @@ class SuperposedLanguageModel(pl.LightningModule):
         self.compose_unembedding = use_composite_unembedding
         self.normalize_input = normalize_input
         self.use_cross_entropy_increase_loss = use_cross_entropy_increase_loss
+        self.use_prior_scaled_ce_loss = use_prior_scaled_ce_loss
         
 
     def convert_to_half(self):
@@ -272,6 +274,16 @@ class SuperposedLanguageModel(pl.LightningModule):
             reduction = "none",
         )
 
+        prior_entropy = -torch.sum(prior * prior_log_probs, dim=-1)
+
+        # take mean of entropy
+        prior_entropy = prior_entropy.mean(1)
+
+        ce_reshaped = einops.rearrange(ce, "(b ta) -> b ta", b=batch_size)
+        # now divide by prior entropy
+        prior_entropy_scaled_ce = ce_reshaped.mean(axis=1) / (prior_entropy+1e-8)
+
+
         cross_entropy_increase = (ce - prior_ce).mean()
 
         known_positions = (masked_x.sum(dim=-1) == 1).flatten()
@@ -281,6 +293,7 @@ class SuperposedLanguageModel(pl.LightningModule):
         metrics = {}
         metrics["cross_entropy"] = ce.mean()
         metrics["cross_entropy_increase"] = cross_entropy_increase
+        metrics["prior_entropy_scaled_ce"] = prior_entropy_scaled_ce.mean()
 
         with torch.no_grad():
             # get probability of the correct token
@@ -311,6 +324,8 @@ class SuperposedLanguageModel(pl.LightningModule):
             self.log(f"trn/{metric}", metrics[metric], on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
         if self.use_cross_entropy_increase_loss:
             loss = metrics["cross_entropy_increase"]
+        elif self.use_prior_scaled_ce_loss:
+            loss = metrics["prior_entropy_scaled_ce"]
         else:
             loss = metrics["cross_entropy"]
         self.log("trn/loss", loss, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
@@ -325,6 +340,8 @@ class SuperposedLanguageModel(pl.LightningModule):
             self.log(f"val/{metric}", metrics[metric], prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
         if self.use_cross_entropy_increase_loss:
             loss = metrics["cross_entropy_increase"]
+        elif self.use_prior_scaled_ce_loss:
+            loss = metrics["prior_entropy_scaled_ce"]
         else:
             loss = metrics["cross_entropy"]
         self.log("val/loss", loss, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
@@ -446,8 +463,9 @@ if __name__ == "__main__":
         enforce_constraint_in_forward=True,
         normalize_input=True,
         activation="gelu",
-        dropout=0.0,
-        # use_cross_entropy_increase_loss=True,
+        dropout=0.1,
+        use_cross_entropy_increase_loss=False,
+        use_prior_scaled_ce_loss=True,
     )
 
 
@@ -568,7 +586,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[3,7], 
+        devices=[0,1], 
         precision="16-mixed",
         max_epochs=10_000,
         log_every_n_steps=1,
