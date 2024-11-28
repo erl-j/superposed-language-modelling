@@ -235,7 +235,7 @@ class SuperposedLanguageModel(pl.LightningModule):
                     updated_event_indices = set(updated_event_indices.cpu().numpy())
 
                     x = self.tokenizer.collapse_undefined_attributes(x)
-                    x = self.tokenizer.sanitize_mask(x, event_indices=updated_event_indices)
+                    # x = self.tokenizer.sanitize_mask(x, event_indices=updated_event_indices)
 
 
                     # masekd tokens after
