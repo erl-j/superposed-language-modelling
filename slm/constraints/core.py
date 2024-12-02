@@ -63,8 +63,16 @@ class MusicalEventConstraint(EventConstraint):
     This class extends the EventConstraint class to provide some utilities for musical events.
     '''
 
-    def __init__(self, blank_event, tokenizer):
-        super().__init__(blank_event)
+    def __init__(self, tokenizer):
+        blank_event_dict = {
+            attr: {
+                token.split(":")[-1]
+                for token in tokenizer.vocab
+                if token.startswith(f"{attr}:")
+            }
+            for attr in tokenizer.note_attribute_order
+        }
+        super().__init__(blank_event_dict)
         self.tokenizer = tokenizer
 
     def pitch_in_scale_constraint(self,scale, pitch_range):

@@ -207,15 +207,7 @@ class MergedTokenizer():
         attributes, vocab = mask.shape
 
         tokenizer = self
-        blank_event_dict = {
-        attr: {
-            token.split(":")[-1]
-            for token in tokenizer.vocab
-            if token.startswith(f"{attr}:")
-        }
-        for attr in tokenizer.note_attribute_order
-        }
-        ec = lambda: MusicalEventConstraint(blank_event_dict, tokenizer)
+        ec = lambda: MusicalEventConstraint(tokenizer)
 
         event_constraint = ec()
         for attr_idx in range(attributes):
