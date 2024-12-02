@@ -2,12 +2,247 @@
 
 import symusic as sm
 import torch
-
+import tempfile
+import muspy
+from tqdm import tqdm
 ckpt = "../data/mmd_loops/val_midi_records_unique_pr.pt"
 
 records = torch.load(ckpt)
 
-# %%
+
+# flat the records
+records = [r for record in records for r in record]
+
+# preserve only those with "n_bars=4.0" in the path
+records = [record for record in records if "n_bars=4.0" in record["path"]]
+
+# Filter out records containing program 0 non-drum tracks
+filtered_records = [
+    record
+    for record in records
+    if not any(
+        track.program == 0 and not track.is_drum for track in record["midi"].tracks
+    )
+]
+
+print(f"Original dataset size: {len(records)}")
+print(f"Filtered dataset size: {len(filtered_records)}")
+print(f"Removed {len(records) - len(filtered_records)} records")
+
+tempos = []
+for record_idx, record in enumerate(tqdm(records)):
+    record = records[record_idx]
+    tempos.append(record["midi"].tempos[0].qpm)
+    # dump to tmpfile
+    with tempfile.NamedTemporaryFile(suffix=".mid") as f:
+        record["midi"].dump_midi(f.name)
+        muspy_midi = muspy.read_midi(f.name)
+    pis_rate = muspy.scale_consistency(muspy_midi)
+    # add pis rate to record
+    records[record_idx]["pis_rate"] = pis_rate
+
+#%%
+# preview 10 midi files with the worst pis rates
+from util import preview_sm
+import numpy as np
+
+# remove nan records
+records = [record for record in records if not np.isnan(record["pis_rate"])]
+
+#%%
+
+# get all track names and program numbers
+
+track_meta = []
+
+for record in records:
+    midi = record["midi"]
+    for track in midi.tracks:
+        track_meta.append(({"name": track.name, "program": track.program, "is_drum": track.is_drum}))
+
+
+#%%
+
+# for each program number, show 10 most common track names
+from collections import Counter
+
+program_track_name_counter = Counter((track["program"], track["name"]) for track in track_meta)
+
+for (program, track_name), count in program_track_name_counter.most_common():
+    print(program, track_name, count)
+
+
+
+#%%
+
+# print track names by count
+from collections import Counter
+
+track_name_counter = Counter(track["name"] for track in track_meta)
+
+for track_name, count in track_name_counter.most_common():
+    print(track_name, count)
+
+
+# print program numbers by count
+program_counter = Counter(track["program"] for track in track_meta)
+
+#%%
+for program, count in program_counter.most_common():
+    print(program, count)
+
+
+# non drum program counter
+
+#%%
+
+non_drum_program_counter = Counter(track["program"] for track in track_meta if not track["is_drum"])
+
+for program, count in non_drum_program_counter.most_common():
+    print(program, count)
+
+
+#%%
+
+worst_records = sorted(records, key=lambda x: x["pis_rate"])
+
+for record in worst_records[:100]:
+    preview_sm(record["midi"])
+    print(record["pis_rate"])
+
+
+#%% compute bpm
+
+records = [{**record, "bpm": record["midi"].tempos[0].qpm} for record in records]
+
+# now scatter plot bpm vs pis rate
+
+#%%
+piano_tracks = []
+drum_tracks = []
+piano_named_tracks = []
+
+for record in tqdm(records):
+    for track in record["midi"].tracks:
+        if track.program==0 and not track.is_drum:
+            print(track.name)
+            piano_tracks.append(track)
+        elif track.is_drum:
+            drum_tracks.append(track)
+
+        if track.name == "Piano":
+            piano_named_tracks.append(track)
+
+        
+
+#%% get number of distinct pitches
+
+n_distinct_pitches_in_piano_tracks = [len(set(note.pitch for note in track.notes)) for track in piano_tracks]
+piano_range_size = [max(note.pitch for note in track.notes) - min(note.pitch for note in track.notes) for track in piano_tracks]
+
+n_distinct_pitches_in_drum_tracks = [len(set(note.pitch for note in track.notes)) for track in drum_tracks]
+drum_range_size = [max(note.pitch for note in track.notes) - min(note.pitch for note in track.notes) for track in drum_tracks]
+
+n_distinct_pitches_in_named_piano_tracks = [len(set(note.pitch for note in track.notes)) for track in piano_named_tracks]
+named_piano_range_size = [max(note.pitch for note in track.notes) - min(note.pitch for note in track.notes) for track in piano_named_tracks]
+
+#%%
+
+# make scatter plot of n_distinct vs range
+
+import matplotlib.pyplot as plt
+
+plt.scatter(n_distinct_pitches_in_piano_tracks, piano_range_size, alpha=0.1, label="piano")
+plt.scatter(n_distinct_pitches_in_drum_tracks, drum_range_size, alpha=0.1, label="drum")
+plt.scatter(n_distinct_pitches_in_named_piano_tracks, named_piano_range_size, alpha=0.1, label="named piano")
+plt.legend()
+plt.xlabel("n distinct pitches")
+plt.ylabel("range size")
+plt.show()
+
+
+# plot histogram distinct pitches, with both piano and drum tracks
+# import matplotlib.pyplot as plt
+
+# plt.hist(n_distinct_pitches_in_piano_tracks, bins=100, range=(0, 40))
+# plt.show()
+
+# plt.hist(n_distinct_pitches_in_drum_tracks, bins=100, range=(0, 40))
+# plt.show()
+
+# plt.hist(n_distinct_pitches_in_named_piano_tracks, bins=100, range=(0, 40))
+# plt.show()
+
+
+
+
+
+# plt.hist(piano_range_size, bins=100, range=(0, 40))
+
+# plt.show()
+
+
+# plt.hist(drum_range_size, bins=100, range=(0, 40))
+
+# plt.show()
+
+# plt.hist(named_piano_range_size, bins=100, range=(0, 40))
+
+# plt.show()
+
+
+
+#%%
+#%%
+import matplotlib.pyplot as plt
+
+plt.scatter([record["bpm"] for record in records], [record["pis_rate"] for record in records], alpha=0.1, s=1)
+plt.show()
+
+# for each interval of bpm, show the pis histogram
+bpm_intervals = [(i, i+10) for i in range(50, 200, 10)]
+
+for bpm_interval in bpm_intervals:
+    bpm_min, bpm_max = bpm_interval
+    records_in_interval = [record for record in records if bpm_min <= record["bpm"] < bpm_max]
+    pis_rates = [record["pis_rate"] for record in records_in_interval]
+    plt.hist(pis_rates, bins=100)
+    plt.title(f"bpm: {bpm_min}-{bpm_max}")
+    plt.show()
+
+
+#%%
+
+
+# best_records = sorted(records, key=lambda x: x["pis_rate"], reverse=True)
+
+# for record in best_records[:10]:
+#     preview_sm(record["midi"])
+#     print(record["pis_rate"])
+
+#%%
+# histogram of pis rates
+pis_rates = [record["pis_rate"] for record in records]
+
+
+import matplotlib.pyplot as plt
+
+plt.hist(pis_rates, bins=100)
+plt.show()
+#%%
+
+# make histogram of tempos
+import matplotlib.pyplot as plt
+
+plt.hist(tempos, bins=100)
+plt.show()
+
+#%%
+# get the most common tempo
+
+
+
+#%%
 
 from tqdm import tqdm
 # record onset times, offset times and durations

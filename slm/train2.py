@@ -401,9 +401,9 @@ if __name__ == "__main__":
         "pitch_range": [0, 128],
         "max_beats": 4 * N_BARS,
         "max_notes": 75 * N_BARS if DATASET == "mmd_loops" else 20 * N_BARS,
-        "min_tempo": 50,
-        "max_tempo": 200,
-        "n_tempo_bins": 16,
+        "min_tempo": 40,
+        "max_tempo": 300,
+        "n_tempo_bins": 32,
         "n_velocity_bins": 32,
         "time_signatures": None,
         "tags": tag_list,
@@ -512,14 +512,22 @@ if __name__ == "__main__":
 
     mmd_4bar_filter_fn = lambda x: f"n_bars={N_BARS}" in x
 
+    # if a track has program 0 and is not a drum track and does not contain the word "piano" in the name, filter out the whole midi
+    # we can't risk having mislabelled tracks in the dataset
+    sm_filter_fn = lambda sm: not any(
+        track.program == 0 and not track.is_drum and "piano" not in track.name.lower()
+        for track in sm.tracks
+    )
+
     val_ds = MidiDataset(
         cache_path=f"./data/{DATASET}/val_midi_records_unique_pr.pt",
         path_filter_fn=mmd_4bar_filter_fn if DATASET == "mmd_loops" else None,
         genre_list=tag_list,
         tokenizer=tokenizer,
-        min_notes=8 * N_BARS if DATASET == "mmd_loops" else 4 * N_BARS,
+        min_notes=4 * N_BARS if DATASET == "mmd_loops" else 4 * N_BARS,
         max_notes=tokenizer_config["max_notes"],
         use_random_shift=USE_RANDOM_SHIFT,
+        sm_filter_fn=sm_filter_fn,
     )
 
     val_tokens = val_ds[0]
@@ -561,10 +569,11 @@ if __name__ == "__main__":
         path_filter_fn=mmd_4bar_filter_fn if DATASET == "mmd_loops" else None,
         genre_list=tag_list,
         tokenizer=tokenizer,
-        transposition_range=[-4, 4] if DATASET == "mmd_loops" or DATASET == "harmonic" else None,
-        min_notes=8 * N_BARS if DATASET == "mmd_loops" else 4 * N_BARS,
+        transposition_range=[-6, 6] if DATASET == "mmd_loops" or DATASET == "harmonic" else None,
+        min_notes=4 * N_BARS if DATASET == "mmd_loops" else 4 * N_BARS,
         max_notes=tokenizer_config["max_notes"],
         use_random_shift=USE_RANDOM_SHIFT,
+        sm_filter_fn=sm_filter_fn,
     )
     # print len of dataset
     print(f"Loaded {len(trn_ds)} training records")
@@ -593,7 +602,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[0,1], 
+        devices=[3,4], 
         precision="16-mixed",
         max_epochs=10_000,
         log_every_n_steps=1,

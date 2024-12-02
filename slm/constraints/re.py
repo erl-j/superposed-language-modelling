@@ -210,6 +210,7 @@ def replace(
     for i in range(len(e)):
         instruments = instruments.union(e[i].a["instrument"])
     # if empty every instrument is present
+    instruments = ec().a["instrument"]
     if len(instruments) == 0:
         instruments = ec().a["instrument"]
 
