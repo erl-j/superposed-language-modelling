@@ -85,7 +85,8 @@ model = SuperposedLanguageModel.load_from_checkpoint(
     # "./checkpoints/desert-dragon-439/last.ckpt",
     # "./checkpoints/efficient-flower-443/last.ckpt",
     # "./checkpoints/sparkling-dust-435/epoch=271-step=1175856-val/loss_epoch=0.16102.ckpt",
-    "./checkpoints/misunderstood-eon-449/last.ckpt",
+    # "./checkpoints/misunderstood-eon-449/last.ckpt",
+    "./checkpoints/chocolate-river-450/last.ckpt",
     map_location=device,
 )
 
