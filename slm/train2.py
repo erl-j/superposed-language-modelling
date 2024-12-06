@@ -19,6 +19,31 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 
+def attribute_dropout(x, n_attributes, dropout_prob):
+    """
+    Applies attribute dropout to input tensor x. For each sample and attribute,
+    with probability dropout_prob, that attribute is set to all ones across the entire sequence.
+
+    Args:
+        x: Input tensor of shape (batch_size, seq_len * n_attributes, vocab_size)
+        n_attributes: Number of attributes per position
+        dropout_prob: Probability of dropping out an attribute
+    """
+    batch_size = x.shape[0]
+    seq_len = x.shape[1] // n_attributes
+    vocab_size = x.shape[2]
+
+    # Reshape to separate attributes dimension
+    x = einops.rearrange(x, "b (t a) v -> b t a v", a=n_attributes)
+
+    # Generate dropout mask per sample and attribute
+    mask = torch.rand((batch_size, 1, n_attributes), device=x.device) > dropout_prob
+    mask = mask.expand(-1, seq_len, -1).unsqueeze(-1)
+
+    # Where mask is False, set to ones, otherwise keep original values
+    x = torch.where(mask, x, torch.ones_like(x))
+
+    return einops.rearrange(x, "b t a v -> b (t a) v")
 
 def random_add_masking_mml(x):
     batch_size = x.shape[0]               
