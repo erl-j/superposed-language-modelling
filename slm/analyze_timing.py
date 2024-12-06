@@ -10,8 +10,58 @@ ckpt = "../data/mmd_loops/val_midi_records_unique_pr.pt"
 records = torch.load(ckpt)
 
 
+#%%
+# count loops per record
+loop_counts = [len([r for r in record if "n_bars=4" in r["path"]]) for record in records]
+
+# plot histogram of loop counts
+import matplotlib.pyplot as plt
+
+plt.hist(loop_counts, bins=100)
+plt.xlabel("Number of loops per song")
+plt.ylabel("Number of songs")
+plt.show()
+
+# make cumulative histogram
+plt.hist(loop_counts, bins=100, cumulative=True)
+plt.xlabel("Number of loops per song")
+plt.ylabel("Number of songs")
+plt.show()
+
+# i want to know how many loops are from a song with 1 loop, 2 loops, 3 loops, etc
+# repeat loop_count[i] loop_count[i] times
+loop_counts_bis = []
+for i, count in enumerate(loop_counts):
+    loop_counts_bis.extend([count] * count)
+
+# make histogram of loop counts bis
+plt.hist(loop_counts_bis, bins=100)
+plt.xlabel("Number of loops per song loop came from")
+plt.ylabel("Number of loops")
+plt.show()
+
+
+#%%
+
 # flat the records
 records = [r for record in records for r in record]
+
+# count n_bars=1.0, 2.0 and 4.0. regex
+import re
+
+counts = [int(record["path"].split("n_bars=")[1][0]) for record in records]
+
+# print counts
+from collections import Counter
+
+counter = Counter(counts)
+
+for count, n in counter.items():
+    print(f"n_bars={count}.0: {n}")
+
+
+
+#%%
 
 # preserve only those with "n_bars=4.0" in the path
 records = [record for record in records if "n_bars=4.0" in record["path"]]
@@ -40,6 +90,14 @@ for record_idx, record in enumerate(tqdm(records)):
     pis_rate = muspy.scale_consistency(muspy_midi)
     # add pis rate to record
     records[record_idx]["pis_rate"] = pis_rate
+
+#%% 
+
+# histogram of pis rates
+import matplotlib.pyplot as plt
+
+plt.hist([record["pis_rate"] for record in records], bins=100)
+plt.show()
 
 #%%
 # preview 10 midi files with the worst pis rates

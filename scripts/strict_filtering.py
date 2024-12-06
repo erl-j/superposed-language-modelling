@@ -17,18 +17,48 @@ records = [r for record in records for r in record]
 # preserve only those with "n_bars=4.0" in the path
 records = [record for record in records if "n_bars=4.0" in record["path"]]
 
+for i in range(len(records)):
+    records[i]["bpm"] = records[i]["midi"].tempos[0].qpm
+
+#%%
+# remove 120 bpm
+records_without_120 = [record for record in records if record["bpm"] != 120]
+
+print(f"Original dataset size: {len(records)}")
+print(f"Filtered dataset size: {len(records_without_120)}")
+
+#%%
+
+# print tempo distribution with histogram
+import matplotlib.pyplot as plt
+import numpy as np
+
+tempos = [record["bpm"] for record in records]
+plt.hist(tempos, bins=100)
+plt.show()
+
+# plot tempo distribution with histogram
+tempos = [record["bpm"] for record in records_without_120]
+plt.hist(tempos, bins=100)
+#%%
+
+
 sm_filter_fn = lambda sm : not any(track.program == 0 and not track.is_drum and "piano" not in track.name.lower() for track in sm.tracks)
 # Filter out records containing program 0 non-drum tracks
 filtered_records = [
     record
     for record in records
-    if sm_filter_fn(record["midi"])
+    if sm_filter_fn(record["midi"]) and record["bpm"] != 120
 ]
 
 print(f"Original dataset size: {len(records)}")
 print(f"Filtered dataset size: {len(filtered_records)}")
 print(f"Removed {len(records) - len(filtered_records)} records")
 
+#%%
+# plot tempo histogram
+tempos = [record["bpm"] for record in filtered_records]
+plt.hist(tempos, bins=260, range=(40, 300))
 #%%
 
 track_meta = []

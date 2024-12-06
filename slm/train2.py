@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 import math
 
 
-def random_add_masking(x):
+def random_add_masking_mml(x):
     batch_size = x.shape[0]               
     masking_probs = torch.rand(batch_size, device=x.device)
     position_mask = (
@@ -32,6 +32,63 @@ def random_add_masking(x):
     superposition = torch.rand_like(x, device=x.device)<superposition_probs[:,None,None]
     mask = position_mask[:,:,None] * superposition
     masked_x = torch.clamp(x + mask, 0, 1)
+    return masked_x
+
+def random_add_masking_variable_superposition(x):
+    batch_size = x.shape[0]
+    position_masking_probs = torch.rand(batch_size, device=x.device)
+    position_mask = (
+        torch.rand((x.shape[0], x.shape[1]), device=x.device) < position_masking_probs[:, None]
+    )
+    # Instead of per-sample superposition probs, use per-position probs
+    superposition_probs = torch.rand((x.shape[0], x.shape[1]), device=x.device)
+    superposition = (
+        torch.rand_like(x, device=x.device) < superposition_probs[:, :, None]
+    )
+    mask = position_mask[:, :, None] * superposition
+    masked_x = torch.clamp(x + mask, 0, 1)
+    return masked_x
+
+def random_add_masking_variable_superposition_ratio(x, format_mask):
+    batch_size, seq_len, vocab_size = x.shape
+    position_masking_ratios = torch.rand(batch_size, device=x.device)
+
+    position_mask = torch.zeros(
+        (batch_size, seq_len), dtype=torch.bool, device=x.device
+    )
+    for i in range(batch_size):
+        n_positions = int(seq_len * position_masking_ratios[i])
+        indices = torch.randperm(seq_len, device=x.device)[:n_positions]
+        position_mask[i, indices] = True
+
+    superposition_ratios = torch.rand((batch_size, seq_len), device=x.device)
+    superposition = torch.zeros_like(x, dtype=torch.bool, device=x.device)
+
+    for i in range(batch_size):
+        for j in range(seq_len):
+            if position_mask[i, j]:
+                valid_vocab = torch.where(format_mask[j] == 1)[0]
+                n_vocab = int(len(valid_vocab) * superposition_ratios[i, j])
+                vocab_indices = valid_vocab[
+                    torch.randperm(len(valid_vocab), device=x.device)[:n_vocab]
+                ]
+                superposition[i, j, vocab_indices] = True
+
+    masked_x = torch.clamp(x + superposition, 0, 1)
+    return masked_x
+
+def mlm_mask(x):
+    batch_size = x.shape[0]
+    masking_probs = torch.rand(batch_size, device=x.device)
+    position_mask = (
+        torch.rand((x.shape[0], x.shape[1]), device=x.device)
+        < masking_probs[:, None]
+    )
+    # first channel is masking channel
+    mask = position_mask[:,:,None]
+    # if position mask is true, set to 0
+    masked_x = x * (1 - mask)
+    masked_x = torch.cat([mask, masked_x], dim=-1)
     return masked_x
 
 class SuperposedLanguageModel(pl.LightningModule):
@@ -57,6 +114,13 @@ class SuperposedLanguageModel(pl.LightningModule):
         use_cross_entropy_increase_loss = False,
         use_prior_scaled_ce_loss = False,
         dropout = 0.1,
+        use_input_bias = False,
+        use_output_bias = True,
+        use_embedding_l2_normalization = False,
+        use_unembedding_l2_normalization = False,
+        use_mlm = False,
+        weight_by_loops_in_parent_song = False,
+        random_add_masking_type = "mml"
     ):
         """
         seq_len: length of chart sequence (equal or longer to audio sequence)
@@ -68,7 +132,7 @@ class SuperposedLanguageModel(pl.LightningModule):
         self.format_mask = torch.Tensor(self.tokenizer.get_format_mask())
         self.vocab = vocab
         self.positional_encoding  = nn.Parameter(torch.zeros(1, max_seq_len*2, hidden_size), requires_grad=True)
-        self.embedding_layer = nn.Linear(vocab_size, hidden_size, bias=False)
+        self.embedding_layer = nn.Linear(vocab_size if not use_mlm else vocab_size + 1, hidden_size, bias=use_input_bias)
      
         self.transformer = torch.nn.TransformerEncoder(
             encoder_layer=torch.nn.TransformerEncoderLayer(
@@ -82,22 +146,41 @@ class SuperposedLanguageModel(pl.LightningModule):
             ),
             num_layers=n_layers,
         )
-        self.decoder_output_layer = nn.Linear(hidden_size, vocab_size)
+        self.decoder_output_layer = nn.Linear(hidden_size, vocab_size, bias=use_output_bias)
         self.seq_len = max_seq_len
         self.n_attributes = len(self.tokenizer.note_attribute_order)
         self.learning_rate_gamma = learning_rate_gamma
         self.enforce_constraint_in_forward = enforce_constraint_in_forward
-        self.compose_unembedding = use_composite_unembedding
         self.normalize_input = normalize_input
         self.use_cross_entropy_increase_loss = use_cross_entropy_increase_loss
         self.use_prior_scaled_ce_loss = use_prior_scaled_ce_loss
+        self.weight_by_loops_in_parent_song = weight_by_loops_in_parent_song
+        self.random_add_masking_type = random_add_masking_type
         
 
     def convert_to_half(self):
         return self.half()
+    
+    def mlm_forward(self, x_masked):
+        '''
+        x_masked: b, t, v+1
+        logits: b, t, v
+        '''
+        x = einops.rearrange(x_masked, "b (t a) vm -> b t a v", a=self.n_attributes)
+        position_mask = x[:,:,0]
+        x = self.embedding_layer(x)
+        ze = x.sum(dim=1)
+        zl = self.transformer(ze)
+        note_z = einops.rearrange(zl, "b t ft -> b t 1 ft")
+        note_z = note_z.repeat(1, 1, self.n_attributes, 1)
+        decoder_logits = self.decoder_output_layer(note_z)
+        # now we want to have carry over unmasking. Meaning that unmasked tokens retain their original value
+        # and masked tokens get the value of the decoder logits
+        x_not_masked = x_masked[:,:,1:]
+        x_not_masked[position_mask] = decoder_logits[position_mask]
+        return x_not_masked
 
     def forward(self, x):
-
         format_mask = self.format_mask[None, ...].to(x.device).to(x.dtype)
         x = x * format_mask
 
@@ -248,12 +331,17 @@ class SuperposedLanguageModel(pl.LightningModule):
     
     def step(self, batch, batch_idx):
 
-        x = torch.nn.functional.one_hot(batch, num_classes=len(self.vocab)).float()
+        x = torch.nn.functional.one_hot(batch["token_ids"], num_classes=len(self.vocab)).float()
 
         batch_size = x.shape[0]
         ta = x.shape[1]
         v = x.shape[2]
-        masked_x = random_add_masking(x)
+
+        if self.random_add_masking_type == "mml":
+            masked_x = random_add_masking_mml(x)
+        elif self.random_add_masking_type == "variable_superposition":
+            masked_x = random_add_masking_variable_superposition(x)
+
         masked_x = masked_x * self.format_mask[None, ...].to(masked_x.device)
         target = x
 
@@ -284,14 +372,9 @@ class SuperposedLanguageModel(pl.LightningModule):
 
         ce_reshaped = einops.rearrange(ce, "(b ta) -> b ta", b=batch_size)
 
-        na = ce_reshaped.shape[-1]
-        assert ce_reshaped.shape == (batch_size, na)
-        
+        na = ce_reshaped.shape[-1]        
         # now divide by prior entropy
         prior_entropy_scaled_ce = ce_reshaped / (prior_entropy+1)
-
-
-        cross_entropy_increase = (ce - prior_ce).mean()
 
         known_positions = (masked_x.sum(dim=-1) == 1).flatten()
         ce[known_positions] = 0
@@ -299,42 +382,76 @@ class SuperposedLanguageModel(pl.LightningModule):
         ce = ce.reshape(batch_size, -1)
         metrics = {}
         metrics["cross_entropy"] = ce.mean()
-        metrics["cross_entropy_increase"] = cross_entropy_increase
         metrics["prior_entropy_scaled_ce"] = prior_entropy_scaled_ce.mean()
 
+
+        weights = 1/batch["n_loops_in_parent_song"].float()
+
+        # now scale so sum matches batch size
+        weights = weights / weights.sum() * batch_size
+
+        # now calculate cross entropy and prior entropy scaled cross entropy
+        metrics["cross_entropy_weighted_by_song"] = (ce / weights).mean()
+        metrics["prior_entropy_scaled_ce_weighted_by_song"] = (prior_entropy_scaled_ce / weights).mean()
+
         with torch.no_grad():
-            # get probability of the correct token
             decoder_output_probs = F.softmax(logits, dim=-1)
             probability = torch.gather(
                 decoder_output_probs, dim=-1, index=target_idx.unsqueeze(-1)
             ).squeeze(-1)
+            
+            # Global metrics
             metrics["probability"] = probability.mean()
-            # sort yhat by probability
+
+            # scale by song
+            metrics["probability_weighted_by_song"] = (probability / weights).mean()
+            
+            # Per attribute metrics
+            probability_by_attr = einops.rearrange(
+                probability, "b (t a) -> b t a", 
+                a=self.n_attributes
+            )
+            for i, attr in enumerate(self.tokenizer.note_attribute_order):
+                metrics[f"probability/{attr}"] = probability_by_attr[:,:,i].mean()
+            
             decoder_output_probs_sort = torch.argsort(
                 decoder_output_probs, dim=-1, descending=True
             )
+   
+            # Global accuracy metrics
             for k in [1, 2, 4]:
-                metrics[f"accuracy@{k}"] = (
-                    (
-                        target_idx.unsqueeze(-1)
-                        == decoder_output_probs_sort[:, :, :k]
-                    )
-                    .any(dim=-1)
-                    .float()
-                    .mean()
+                accuracy = (
+                    target_idx.unsqueeze(-1) == decoder_output_probs_sort[:, :, :k]
+                ).any(dim=-1).float()
+                
+                metrics[f"accuracy@{k}"] = accuracy.mean()
+
+                # scale by song
+                metrics[f"accuracy_weighted_by_song@{k}"] = (accuracy / weights).mean()
+                
+                # Per attribute accuracy
+                accuracy_by_attr = einops.rearrange(
+                    accuracy, "b (t a) -> b t a",
+                    a=self.n_attributes
                 )
+                for i, attr in enumerate(self.tokenizer.note_attribute_order):
+                    metrics[f"accuracy@{k}/{attr}"] = accuracy_by_attr[:,:,i].mean()
         return metrics
 
     def training_step(self, batch, batch_idx):
         metrics = self.step(batch, batch_idx)
         for metric in metrics:
             self.log(f"trn/{metric}", metrics[metric], on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
-        if self.use_cross_entropy_increase_loss:
-            loss = metrics["cross_entropy_increase"]
-        elif self.use_prior_scaled_ce_loss:
-            loss = metrics["prior_entropy_scaled_ce"]
+        if self.use_prior_scaled_ce_loss:
+            if self.weight_by_loops_in_parent_song:
+                loss = metrics["prior_entropy_scaled_ce_weighted_by_song"]
+            else:
+                loss = metrics["prior_entropy_scaled_ce"]
         else:
-            loss = metrics["cross_entropy"]
+            if self.weight_by_loops_in_parent_song:
+                loss = metrics["cross_entropy_weighted_by_song"]
+            else:
+                loss = metrics["cross_entropy"]
         self.log("trn/loss", loss, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
         # log wandb name
         self.log("gpu", loss.device.index)
@@ -345,9 +462,7 @@ class SuperposedLanguageModel(pl.LightningModule):
             metrics = self.step(batch, batch_idx)
         for metric in metrics:
             self.log(f"val/{metric}", metrics[metric], prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
-        if self.use_cross_entropy_increase_loss:
-            loss = metrics["cross_entropy_increase"]
-        elif self.use_prior_scaled_ce_loss:
+        if self.use_prior_scaled_ce_loss:
             loss = metrics["prior_entropy_scaled_ce"]
         else:
             loss = metrics["cross_entropy"]
@@ -388,6 +503,8 @@ if __name__ == "__main__":
     DATASET = "mmd_loops"
 
     # BATCH_SIZE = 60 12, 768
+    #BATCH_SIZE = 80
+
     BATCH_SIZE = 80
 
     tag_list = open(f"./data/{DATASET}/tags.txt").read().splitlines()
@@ -397,7 +514,6 @@ if __name__ == "__main__":
     tokenizer_config = {
         "ticks_per_beat": 24 if (DATASET == "mmd_loops" or DATASET ==  "harmonic") else 48,
         "time_hierarchy": "tick",
-        "use_duration": True,
         "pitch_range": [0, 128],
         "max_beats": 4 * N_BARS,
         "max_notes": 75 * N_BARS if DATASET == "mmd_loops" else 20 * N_BARS,
@@ -473,6 +589,9 @@ if __name__ == "__main__":
         dropout=0.1,
         use_cross_entropy_increase_loss=False,
         use_prior_scaled_ce_loss=True,
+        use_output_bias=False,
+        weight_by_loops_in_parent_song=False,
+        random_add_masking_type="variable_superposition"
     )
 
 
@@ -530,13 +649,13 @@ if __name__ == "__main__":
         sm_filter_fn=sm_filter_fn,
     )
 
-    val_tokens = val_ds[0]
+    val_tokens = val_ds[0]["token_ids"]
 
     token_2_count = {t: 0 for t in tokenizer.vocab}
     tokens = []
     # take 10 samples and save tokens
     for i in tqdm(range(1000)):
-        val_token_ids = val_ds[i]
+        val_token_ids = val_ds[i]["token_ids"]
         val_tokens = tokenizer.indices_to_tokens(val_token_ids)
         tokens.append(val_tokens)
 
@@ -602,7 +721,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[3,4], 
+        devices=[1,7], 
         precision="16-mixed",
         max_epochs=10_000,
         log_every_n_steps=1,
@@ -632,5 +751,4 @@ if __name__ == "__main__":
         model,
         trn_dl,
         val_dl,
-        # ckpt_path=f"./checkpoints/unique-tree-426/last.ckpt",
     )

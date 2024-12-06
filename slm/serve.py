@@ -86,7 +86,14 @@ model = SuperposedLanguageModel.load_from_checkpoint(
     # "./checkpoints/efficient-flower-443/last.ckpt",
     # "./checkpoints/sparkling-dust-435/epoch=271-step=1175856-val/loss_epoch=0.16102.ckpt",
     # "./checkpoints/misunderstood-eon-449/last.ckpt",
-    "./checkpoints/chocolate-river-450/last.ckpt",
+    # "./checkpoints/chocolate-river-450/last.ckpt",
+    # "./checkpoints/fragrant-dew-452/last.ckpt",
+    # "./checkpoints/lilac-feather-455/last.ckpt",
+    # "./checkpoints/copper-monkey-456/last.ckpt",
+    # "./checkpoints/fragrant-dew-452/last.ckpt",
+    # "./checkpoints/ruby-glade-461/last.ckpt",
+    # "./checkpoints/prime-cosmos-462/last.ckpt",
+    "./checkpoints/drawn-universe-463/last.ckpt",
     map_location=device,
 )
 
@@ -454,6 +461,17 @@ def edit():
             # Call the function (this assumes no arguments for simplicity)
             e = locals()[func_name](
                 e, ec, n_events, beat_range, pitch_range, edit_drums, "other", tempo
+            )
+        elif action == "unconditional":
+            e = unconditional(
+                e,
+                ec,
+                n_events,
+                tick_range,
+                pitch_range,
+                drums=edit_drums,
+                tag=DEFAULT_TAG,
+                tempo=tempo,
             )
         elif action == "replace":
             e = replace(

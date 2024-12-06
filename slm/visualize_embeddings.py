@@ -16,7 +16,12 @@ model = SuperposedLanguageModel.load_from_checkpoint(
     # "../checkpoints/lively-flower-428/last.ckpt",
     # "../checkpoints/sparkling-dust-435/last.ckpt",
     # "../checkpoints/misunderstood-eon-449/last.ckpt",
-    "../checkpoints/chocolate-river-450/last.ckpt",
+    # "../checkpoints/chocolate-river-450/last.ckpt",
+    # "../checkpoints/fragrant-dew-452/last.ckpt",
+    # "../checkpoints/lilac-feather-455/last.ckpt",
+    # "../checkpoints/copper-monkey-456/last.ckpt",
+    # "../checkpoints/ruby-glade-461/last.ckpt",
+    "../checkpoints/drawn-universe-463/last.ckpt",
     map_location="cpu",
 )
 
@@ -179,5 +184,56 @@ plt.xticks(rotation=90)
 plt.xticks(range(len(duration_vocab)), duration_vocab)
 plt.colorbar()
 plt.show()
+
+# %%
+
+# plot velocity embeddings
+vocab = model.vocab
+velocity_vocab = [v for v in vocab if v.startswith("velocity")]
+
+# take first 25
+
+velocity_embeddings = embedding[[i for i, v in enumerate(vocab) if v in velocity_vocab]]
+
+plt.figure(figsize=(40, 40))
+# set larger font size
+plt.rcParams["font.size"] = 18
+plt.imshow(velocity_embeddings @ velocity_embeddings.T, interpolation="none", vmin=-1, vmax=1)
+# use vocab as yticks
+plt.yticks(range(len(velocity_vocab)), velocity_vocab)
+
+#%%
+# plot tempo embeddings
+vocab = model.vocab
+print(vocab)
+tempo_vocab = [v for v in vocab if v.startswith("tempo")]
+tempo_embeddings = embedding[[i for i, v in enumerate(vocab) if v in tempo_vocab]]
+plt.figure(figsize=(40, 40))
+plt.rcParams["font.size"] = 18
+plt.imshow(tempo_embeddings @ tempo_embeddings.T, interpolation="none", vmin=-1, vmax=1)
+plt.yticks(range(len(tempo_vocab)), tempo_vocab)
+plt.colorbar()
+plt.show()
+
+#%% plot tag embeddings
+
+vocab = model.vocab
+print(vocab)
+
+tag_vocab = [v for v in vocab if v.startswith("tag")]
+
+tag_embeddings = embedding[[i for i, v in enumerate(vocab) if v in tag_vocab]]
+
+plt.figure(figsize=(40, 40))
+plt.rcParams["font.size"] = 18
+
+plt.imshow(tag_embeddings @ tag_embeddings.T, interpolation="none", vmin=-1, vmax=1)
+plt.yticks(range(len(tag_vocab)), tag_vocab)
+plt.colorbar()
+
+plt.show()
+
+
+
 
 # %%
