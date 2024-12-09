@@ -93,7 +93,8 @@ model = SuperposedLanguageModel.load_from_checkpoint(
     # "./checkpoints/fragrant-dew-452/last.ckpt",
     # "./checkpoints/ruby-glade-461/last.ckpt",
     # "./checkpoints/prime-cosmos-462/last.ckpt",
-    "./checkpoints/drawn-universe-463/last.ckpt",
+    # "./checkpoints/drawn-universe-463/last.ckpt",
+    "./checkpoints/dulcet-jazz-464/last.ckpt",
     map_location=device,
 )
 

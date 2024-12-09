@@ -556,9 +556,8 @@ if __name__ == "__main__":
         "ignored_track_names": [f"Layers{i}" for i in range(0, 8)],
         "separate_drum_pitch": True,
         "use_drum_duration": False,
-        "use_durations": True,
-        "durations": [Fraction(1, 32), Fraction(1, 16), Fraction(1, 8), Fraction(1, 4), Fraction(1, 2), Fraction(1, 1), Fraction(2, 1), Fraction(4, 1)],
-
+        # "use_durations": True,
+        # "durations": [Fraction(1, 32), Fraction(1, 16), Fraction(1, 8), Fraction(1, 4), Fraction(1, 2), Fraction(1, 1), Fraction(2, 1), Fraction(4, 1)],
     }
 
     USE_RANDOM_SHIFT = False
@@ -568,34 +567,6 @@ if __name__ == "__main__":
 
     # print note attribute order
     print(tokenizer.note_attribute_order)
-
-    FINETUNE = False
-
-    if not FINETUNE:
-
-        token_atoms = []
-
-        HIERARCHY = "beat_tick"
-
-        if HIERARCHY == "beat_tick":
-            for token in tokenizer.vocab:
-                attr = token.split(":")[0]
-                value = token.split(":")[1]
-                # if starts with onset/global_tick and ends with a numerical value
-                if attr == "onset/global_tick" and value.isnumeric():
-                    tick_value = int(value) % tokenizer_config["ticks_per_beat"]
-                    beat_value = int(value) // tokenizer_config["ticks_per_beat"]
-                    token_atoms.append({f"onset_beat:{beat_value}", f"onset_tick:{tick_value}"})
-                elif attr == "offset/global_tick" and value.isnumeric():
-                    tick_value = int(value) % tokenizer_config["ticks_per_beat"]
-                    beat_value = int(value) // tokenizer_config["ticks_per_beat"]
-                    token_atoms.append({f"offset_beat:{beat_value}", f"offset_tick:{tick_value}"})
-                else:
-                    token_atoms.append({token})
-                
-        assert len(token_atoms) == len(tokenizer.vocab)
-   
-        # model = SuperposedLanguageModel.load_from_checkpoint("./checkpoints/summer-plasma-412/last.ckpt", learning_rate=2e-6, map_location="cpu")
 
     model = SuperposedLanguageModel(
         hidden_size=768,
@@ -619,6 +590,7 @@ if __name__ == "__main__":
         random_add_masking_type="variable_superposition"
     )
 
+    FINETUNE = False
 
     if FINETUNE:
 
@@ -746,7 +718,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[1,7], 
+        devices=[3,4], 
         precision="16-mixed",
         max_epochs=10_000,
         log_every_n_steps=1,

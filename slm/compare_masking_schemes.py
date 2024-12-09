@@ -62,7 +62,7 @@ val_ds = MidiDataset(
 format_mask = torch.Tensor(tokenizer.get_format_mask())
 
 # Batch processing
-n_samples = 1000
+n_samples = 200
 batch_size = 100
 n_batches = (n_samples + batch_size - 1) // batch_size
 
