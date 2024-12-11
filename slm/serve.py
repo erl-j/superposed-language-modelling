@@ -30,7 +30,7 @@ import pretty_midi
 import time
 from conversion_utils import looprep_to_sm, sm_to_events, sm_to_looprep
 
-USE_FP16 = True
+USE_FP16 = False
 
 
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
