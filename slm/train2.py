@@ -204,14 +204,14 @@ class SuperposedLanguageModel(pl.LightningModule):
         Generate completions using masked language modeling.
         
         Args:
-            x: One hot encoded constraint tensor (batch_size, (n_events * attributes), vocab)
-            sampling_steps: Number of steps to sample for
+            x: Input tensor (batch_size, time*attributes, vocab_size)
+            sampling_steps: Number of steps to sample for (optional)
             temperature: Sampling temperature
-            top_p: Top-p sampling parameter
-            top_k: Top-k sampling parameter
-            order: Order to unmask tokens ("random", "attribute", "lowest_entropy", "highest_entropy", "event")
-            attribute_temperature: Dict of temperatures per attribute
-            tokens_per_step: Number of tokens to unmask per step
+            top_p: Nucleus sampling threshold
+            top_k: Top-k sampling threshold
+            order: Token generation order ("random", "attribute", "lowest_entropy", "highest_entropy", "event")
+            attribute_temperature: Dict of temperatures per attribute (optional)
+            tokens_per_step: Number of tokens to generate per step
         
         Returns:
             Generated tensor with same shape as input
@@ -221,19 +221,21 @@ class SuperposedLanguageModel(pl.LightningModule):
         x = x.to(dtype)
         
         with torch.no_grad():
-            # Apply format mask and collapse undefined attributes
+            # Apply format mask and prepare input
             x = x * self.format_mask[None, ...].to(x.device).to(dtype)
             x = self.tokenizer.collapse_undefined_attributes(x)
             x = self.tokenizer.sanitize_mask(x, event_indices=range(self.tokenizer.config["max_notes"]))
             constraint = x
             batch, time_attr, vocab_size = x.shape
             
-            # Create initial masked input by adding mask channel
-            # Places with sum > 1 are masked
+            # Create mask channel and prepare masked input
             mask_channel = (x.sum(-1) > 1)[..., None].float()
-            x_masked = torch.cat([mask_channel, x], dim=-1)
-            
-            # Count masked tokens for progress bar
+            x_part = x.clone()  # Clone to avoid modifying original
+            x_part = x_part * (x_part.sum(-1, keepdim=True) <= 1).float()
+            x_masked = torch.cat([mask_channel, x_part], dim=-1)
+
+            # Verify initial state
+            assert (x.sum(-1) > 1).sum().int().item() >= 0, "No tokens to generate"
             masked_tokens = mask_channel.sum().int().item()
             
             with tqdm(total=masked_tokens) as pbar:
@@ -242,13 +244,13 @@ class SuperposedLanguageModel(pl.LightningModule):
                     
                     # Get model predictions
                     logits = self.mlm_forward(x_masked)
-
                     flat_logits = einops.rearrange(logits, "b ta v -> (b ta) v")
                     
                     # Apply sampling modifications
-                    flat_logits = top_k_top_p_filtering(flat_logits, top_k=top_k, top_p=top_p)
+                    if top_k > 0 or top_p < 1:
+                        flat_logits = top_k_top_p_filtering(flat_logits, top_k=top_k, top_p=top_p)
                     
-                    # Handle attribute temperatures
+                    # Handle attribute-specific temperatures
                     t = temperature
                     if attribute_temperature is not None:
                         attr_t = torch.ones(self.n_attributes, device=x.device) * temperature
@@ -262,17 +264,10 @@ class SuperposedLanguageModel(pl.LightningModule):
                         )
                         t = attr_t
                     
-                    # Convert to probabilities
+                    # Convert to probabilities and apply constraint
                     flat_probs = F.softmax(flat_logits / t, dim=-1)
-                    # apply constraint
                     flat_probs = flat_probs * constraint.view(-1, vocab_size)
-
-                    # Renormalize
-                    flat_probs = flat_probs / flat_probs.sum(dim=-1, keepdim=True)
-
-                    # print min and max probs
-                    print(f"min prob: {flat_probs.min()}")
-                    print(f"max prob: {flat_probs.max()}")
+                    flat_probs = flat_probs / (flat_probs.sum(dim=-1, keepdim=True))
                     
                     # Sample new tokens
                     sampled = torch.multinomial(flat_probs, 1).squeeze(-1)
@@ -280,25 +275,24 @@ class SuperposedLanguageModel(pl.LightningModule):
                     # Find masked positions
                     flat_mask = einops.rearrange(mask_channel, "b ta 1 -> (b ta)")
                     masked_indices = torch.where(flat_mask > 0)[0]
-                    
-                    # Order the masked indices according to specified strategy
                     n_attributes = len(self.tokenizer.note_attribute_order)
                     n_masked = masked_indices.shape[0]
                     
                     if n_masked == 0:
                         break
-                        
+                    
+                    # Order masked indices according to strategy
                     if "random" in order:
                         masked_indices = masked_indices[torch.randperm(n_masked)]
                     elif "attribute" in order:
                         pass
                     elif "lowest_entropy" in order:
                         masked_probs = flat_probs[masked_indices]
-                        entropy = -torch.sum(masked_probs * torch.log(masked_probs), dim=-1)
+                        entropy = -torch.sum(masked_probs * torch.log(masked_probs + 1e-10), dim=-1)
                         masked_indices = masked_indices[torch.argsort(entropy)]
                     elif "highest_entropy" in order:
                         masked_probs = flat_probs[masked_indices]
-                        entropy = -torch.sum(masked_probs * torch.log(masked_probs), dim=-1)
+                        entropy = -torch.sum(masked_probs * torch.log(masked_probs + 1e-10), dim=-1)
                         masked_indices = masked_indices[torch.argsort(entropy, descending=True)]
                     elif "event" in order:
                         masked_indices_event_index = masked_indices % n_attributes
@@ -307,42 +301,42 @@ class SuperposedLanguageModel(pl.LightningModule):
                     if "reverse" in order:
                         masked_indices = masked_indices.flip(0)
                     
-                    # Select indices to unmask this step
+                    # Select indices to unmask
                     indices_to_unmask = masked_indices[:tokens_per_step]
                     
-                    # Update the tokens and mask
+                    # Update tokens
                     flat_x = einops.rearrange(x, "b ta v -> (b ta) v")
                     flat_x[indices_to_unmask] = torch.nn.functional.one_hot(
                         sampled[indices_to_unmask],
                         num_classes=vocab_size
                     ).to(dtype)
-                    
                     x = einops.rearrange(flat_x, "(b ta) v -> b ta v", b=batch, ta=time_attr)
                     
-                    # Update mask channel
+                    # Update mask
                     flat_mask = flat_mask.clone()
                     flat_mask[indices_to_unmask] = 0
                     mask_channel = einops.rearrange(flat_mask, "(b ta) -> b ta 1", b=batch)
                     
-                    # Concatenate updated mask with tokens
-                    x_masked = torch.cat([mask_channel, x], dim=-1)
-                    
-                    # Collapse undefined attributes
+                    # Update x_masked for next iteration
                     x = self.tokenizer.collapse_undefined_attributes(x)
+                    x_part = x.clone()
+                    x_part = x_part * (x_part.sum(-1, keepdim=True) <= 1).float()
+                    x_masked = torch.cat([mask_channel, x_part], dim=-1)
                     
-                    # Update progress bar
+                    # Update progress
                     masked_tokens_after = mask_channel.sum().int().item()
                     pbar.update(masked_tokens_before - masked_tokens_after)
                     
                     if masked_tokens_after == 0:
                         break
-        # make sure the output is the same shape as the input
-        assert x.shape == (batch, time_attr, vocab_size)
-        # make sure all tokens are valid
-        assert (x.sum(-1) > 1).sum().int().item() == 0
-        assert (x < 0).sum().int().item() == 0
-                        
-        return x
+            
+            # Verify output
+            assert x.shape == (batch, time_attr, vocab_size), "Output shape mismatch"
+            assert (x.sum(-1) > 1).sum().int().item() == 0, "Invalid token distributions"
+            assert (x < 0).sum().int().item() == 0, "Negative values in output"
+            assert torch.all(x == x * constraint), "Constraint violation"
+            
+            return x
         
     @torch.inference_mode()
     def generate(

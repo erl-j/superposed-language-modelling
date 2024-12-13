@@ -1,6 +1,6 @@
 #%%
 from train2 import SuperposedLanguageModel
-from train import EncoderOnlyModel
+# from train import EncoderOnlyModel
 import numpy as np
 import matplotlib.pyplot as plt
 #%%
@@ -22,7 +22,8 @@ model = SuperposedLanguageModel.load_from_checkpoint(
     # "../checkpoints/copper-monkey-456/last.ckpt",
     # "../checkpoints/ruby-glade-461/last.ckpt",
     # "../checkpoints/drawn-universe-463/last.ckpt",
-    "../checkpoints/dulcet-jazz-464/last.ckpt",
+    # "../checkpoints/dulcet-jazz-464/last.ckpt",
+    "../checkpoints/stoic-capybara-480/last.ckpt",
     map_location="cpu",
 )
 
