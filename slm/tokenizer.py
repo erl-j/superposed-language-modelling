@@ -32,7 +32,7 @@ instrument_class_to_selected_program_nr = {
     "Sound Effects":112
 }
 
-class MergedTokenizer():
+class Tokenizer():
     def __init__(self, config):
         self.config = config
 

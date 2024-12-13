@@ -9,7 +9,7 @@ sys.path.append("slm/")
 from train import EncoderOnlyModel
 from train2 import SuperposedLanguageModel
 from util import preview_sm, sm_fix_overlap_notes, loop_sm
-from merged_tokenizer import instrument_class_to_selected_program_nr
+from slm.tokenizer import instrument_class_to_selected_program_nr
 import util
 from paper_checkpoints import checkpoints
 from constraints.addx import *

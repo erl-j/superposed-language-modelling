@@ -9,7 +9,7 @@ import wandb
 from data import MidiDataset
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, RichProgressBar
 from pytorch_lightning.loggers import WandbLogger
-from merged_tokenizer import MergedTokenizer
+from slm.tokenizer import Tokenizer
 from torch import nn
 from augmentation import transpose_sm
 import einops
@@ -49,7 +49,7 @@ class EncoderOnlyModel(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         vocab_size = len(vocab)
-        self.tokenizer = MergedTokenizer(tokenizer_config)
+        self.tokenizer = Tokenizer(tokenizer_config)
         self.format_mask = torch.Tensor(self.tokenizer.get_format_mask())
         self.vocab = vocab
         # intialize positional encoding. one per step in sequence

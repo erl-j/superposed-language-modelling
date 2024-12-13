@@ -90,15 +90,39 @@ def random_add_masking_variable_superposition_ratio(x, format_mask):
     return masked_x
 
 
-def mlm_mask(x):
-    batch_size = x.shape[0]
-    masking_probs = torch.rand(batch_size, device=x.device)
-    position_mask = (
-        torch.rand((x.shape[0], x.shape[1]), device=x.device) < masking_probs[:, None]
+def mlm_mask(x: torch.Tensor) -> torch.Tensor:
+    """
+    Applies masking for Masked Language Modeling (MLM) training.
+
+    Args:
+        x: Input tensor of shape (batch_size, sequence_length, vocab_size)
+           containing one-hot encoded tokens
+
+    Returns:
+        Masked tensor of shape (batch_size, sequence_length, vocab_size + 1)
+        where the first channel indicates masked positions (1 = masked, 0 = unmasked)
+        and the remaining channels contain the original tokens (zeroed out at masked positions)
+    """
+    batch_size, seq_length, vocab_size = x.shape
+
+    # Generate random masking probability for each sequence in batch
+    batch_mask_probs = torch.rand(batch_size, device=x.device)
+
+    # Create masking matrix - True where token should be masked
+    # Shape: (batch_size, sequence_length)
+    masking_matrix = (
+        torch.rand((batch_size, seq_length), device=x.device)
+        < batch_mask_probs[:, None]
     )
-    # first channel is masking channel
-    mask = position_mask[:, :, None]
-    # if position mask is true, set to 0
-    masked_x = x * (1 - mask)
-    masked_x = torch.cat([mask, masked_x], dim=-1)
-    return masked_x
+
+    # Convert to mask channel by adding feature dimension
+    # Shape: (batch_size, sequence_length, 1)
+    mask_channel = masking_matrix[:, :, None]
+
+    # Zero out tokens at masked positions
+    # Use logical not (~) instead of (1 - mask)
+    masked_tokens = x * (~mask_channel)
+
+    # Concatenate mask channel with masked tokens
+    # Convert boolean mask to float for concatenation
+    return torch.cat([mask_channel.float(), masked_tokens], dim=-1)

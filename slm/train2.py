@@ -9,7 +9,7 @@ import wandb
 from data import MidiDataset
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, RichProgressBar
 from pytorch_lightning.loggers import WandbLogger
-from merged_tokenizer import MergedTokenizer
+from tokenizer import Tokenizer
 from torch import nn
 import einops
 from tqdm import tqdm
@@ -57,7 +57,7 @@ class SuperposedLanguageModel(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         vocab_size = len(vocab)
-        self.tokenizer = MergedTokenizer(tokenizer_config)
+        self.tokenizer = Tokenizer(tokenizer_config)
         self.format_mask = torch.Tensor(self.tokenizer.get_format_mask())
         self.vocab = vocab
         self.positional_encoding  = nn.Parameter(torch.zeros(1, max_seq_len*2, hidden_size), requires_grad=True)
@@ -85,31 +85,66 @@ class SuperposedLanguageModel(pl.LightningModule):
         self.use_prior_scaled_ce_loss = use_prior_scaled_ce_loss
         self.weight_by_loops_in_parent_song = weight_by_loops_in_parent_song
         self.random_add_masking_type = random_add_masking_type
+        self.use_mlm = use_mlm
         
 
     def convert_to_half(self):
         return self.half()
     
     def mlm_forward(self, x_masked):
-        '''
-        x_masked: b, t, v+1
-        logits: b, t, v
-        '''
-        x = einops.rearrange(x_masked, "b (t a) vm -> b t a v", a=self.n_attributes)
-        position_mask = x[:,:,0]
-        x = self.embedding_layer(x)
-        ze = x.sum(dim=1)
-        zl = self.transformer(ze)
-        note_z = einops.rearrange(zl, "b t ft -> b t 1 ft")
-        note_z = note_z.repeat(1, 1, self.n_attributes, 1)
-        decoder_logits = self.decoder_output_layer(note_z)
-        # now we want to have carry over unmasking. Meaning that unmasked tokens retain their original value
-        # and masked tokens get the value of the decoder logits
-        x_not_masked = x_masked[:,:,1:]
-        x_not_masked[position_mask] = decoder_logits[position_mask]
-        return x_not_masked
+        """
+        Forward pass for Masked Language Modeling (MLM).
+        
+        Args:
+            x_masked: Input tensor of shape (batch_size, time*attributes, vocab_size+1)
+                    where the first channel indicates masked positions
+        
+        Returns:
+            Tensor of shape (batch_size, time*attributes, vocab_size) containing model logits,
+            with unmasked positions having extreme negative values (-inf) except for the correct token
+        """
+        # Reshape to expose attribute dimension
+        x = einops.rearrange(x_masked, "b (t a) vm -> b t a vm", a=self.n_attributes)
+        
+        # Split mask channel and token values
+        position_mask = x[:,:,:,:1]  # Shape: b t a 1
+        x_not_masked = x[:,:,:,1:]   # Shape: b t a v
+        
+        # Pass through embedding layer and transformer
+        x = self.embedding_layer(x)  # Shape: b t a h
+        ze = x.sum(dim=2)  # Shape: b t h
+        zl = self.transformer(ze)  # Shape: b t h
+        
+        # Expand transformer output for per-attribute predictions
+        note_z = einops.rearrange(zl, "b t ft -> b t 1 ft")  # Shape: b t 1 h
+        note_z = note_z.repeat(1, 1, self.n_attributes, 1)   # Shape: b t a h
+        
+        # Generate logits
+        logits = self.decoder_output_layer(note_z)  # Shape: b t a v
+        
+        # Reshape everything to sequence form
+        logits = einops.rearrange(logits, "b t a v -> b (t a) v")
+        x_orig = einops.rearrange(x_not_masked, "b t a v -> b (t a) v")
+        mask = einops.rearrange(position_mask.bool().squeeze(-1), "b t a -> b (t a)")
+        
+        # Create a mask for positions we want to set to negative infinity
+        # For unmasked positions (mask=False), we want -inf everywhere except where x_orig=1
+        neg_inf_mask = ~mask.unsqueeze(-1) & ~x_orig.bool()
+        
+        # Apply the mask using where
+        logits = torch.where(
+            neg_inf_mask,
+            torch.tensor(
+                torch.finfo(logits.dtype).min,
+                device=logits.device, dtype=logits.dtype),
+            logits
+        )
+        
+        return logits
 
     def forward(self, x):
+        if self.use_mlm:
+            return self.mlm_forward(x)
         format_mask = self.format_mask[None, ...].to(x.device).to(x.dtype)
         x = x * format_mask
 
@@ -152,6 +187,162 @@ class SuperposedLanguageModel(pl.LightningModule):
             logits = logits / temperature
             new_x = self.tokenizer.get_undefined_probs(x, logits)
         return new_x
+    
+    @torch.inference_mode()
+    def mlm_generate(
+        self,
+        x,
+        sampling_steps=None,
+        temperature=1,
+        top_p=1,
+        top_k=0,
+        order="random",
+        attribute_temperature=None,
+        tokens_per_step=1,
+    ):
+        """
+        Generate completions using masked language modeling.
+        
+        Args:
+            x: One hot encoded constraint tensor (batch_size, (n_events * attributes), vocab)
+            sampling_steps: Number of steps to sample for
+            temperature: Sampling temperature
+            top_p: Top-p sampling parameter
+            top_k: Top-k sampling parameter
+            order: Order to unmask tokens ("random", "attribute", "lowest_entropy", "highest_entropy", "event")
+            attribute_temperature: Dict of temperatures per attribute
+            tokens_per_step: Number of tokens to unmask per step
+        
+        Returns:
+            Generated tensor with same shape as input
+        """
+        self.eval()
+        dtype = self.embedding_layer.weight.dtype
+        x = x.to(dtype)
+        
+        with torch.no_grad():
+            # Apply format mask and collapse undefined attributes
+            x = x * self.format_mask[None, ...].to(x.device).to(dtype)
+            x = self.tokenizer.collapse_undefined_attributes(x)
+            x = self.tokenizer.sanitize_mask(x, event_indices=range(self.tokenizer.config["max_notes"]))
+            constraint = x
+            batch, time_attr, vocab_size = x.shape
+            
+            # Create initial masked input by adding mask channel
+            # Places with sum > 1 are masked
+            mask_channel = (x.sum(-1) > 1)[..., None].float()
+            x_masked = torch.cat([mask_channel, x], dim=-1)
+            
+            # Count masked tokens for progress bar
+            masked_tokens = mask_channel.sum().int().item()
+            
+            with tqdm(total=masked_tokens) as pbar:
+                while True:
+                    masked_tokens_before = mask_channel.sum().int().item()
+                    
+                    # Get model predictions
+                    logits = self.mlm_forward(x_masked)
+
+                    flat_logits = einops.rearrange(logits, "b ta v -> (b ta) v")
+                    
+                    # Apply sampling modifications
+                    flat_logits = top_k_top_p_filtering(flat_logits, top_k=top_k, top_p=top_p)
+                    
+                    # Handle attribute temperatures
+                    t = temperature
+                    if attribute_temperature is not None:
+                        attr_t = torch.ones(self.n_attributes, device=x.device) * temperature
+                        for k, v in attribute_temperature.items():
+                            attr_idx = self.tokenizer.note_attribute_order.index(k)
+                            attr_t[attr_idx] = v
+                        attr_t = einops.repeat(
+                            attr_t, "a -> (b e a) 1",
+                            e=self.tokenizer.config["max_notes"],
+                            b=batch
+                        )
+                        t = attr_t
+                    
+                    # Convert to probabilities
+                    flat_probs = F.softmax(flat_logits / t, dim=-1)
+                    # apply constraint
+                    flat_probs = flat_probs * constraint.view(-1, vocab_size)
+
+                    # Renormalize
+                    flat_probs = flat_probs / flat_probs.sum(dim=-1, keepdim=True)
+
+                    # print min and max probs
+                    print(f"min prob: {flat_probs.min()}")
+                    print(f"max prob: {flat_probs.max()}")
+                    
+                    # Sample new tokens
+                    sampled = torch.multinomial(flat_probs, 1).squeeze(-1)
+                    
+                    # Find masked positions
+                    flat_mask = einops.rearrange(mask_channel, "b ta 1 -> (b ta)")
+                    masked_indices = torch.where(flat_mask > 0)[0]
+                    
+                    # Order the masked indices according to specified strategy
+                    n_attributes = len(self.tokenizer.note_attribute_order)
+                    n_masked = masked_indices.shape[0]
+                    
+                    if n_masked == 0:
+                        break
+                        
+                    if "random" in order:
+                        masked_indices = masked_indices[torch.randperm(n_masked)]
+                    elif "attribute" in order:
+                        pass
+                    elif "lowest_entropy" in order:
+                        masked_probs = flat_probs[masked_indices]
+                        entropy = -torch.sum(masked_probs * torch.log(masked_probs), dim=-1)
+                        masked_indices = masked_indices[torch.argsort(entropy)]
+                    elif "highest_entropy" in order:
+                        masked_probs = flat_probs[masked_indices]
+                        entropy = -torch.sum(masked_probs * torch.log(masked_probs), dim=-1)
+                        masked_indices = masked_indices[torch.argsort(entropy, descending=True)]
+                    elif "event" in order:
+                        masked_indices_event_index = masked_indices % n_attributes
+                        masked_indices = masked_indices[torch.argsort(masked_indices_event_index)]
+                    
+                    if "reverse" in order:
+                        masked_indices = masked_indices.flip(0)
+                    
+                    # Select indices to unmask this step
+                    indices_to_unmask = masked_indices[:tokens_per_step]
+                    
+                    # Update the tokens and mask
+                    flat_x = einops.rearrange(x, "b ta v -> (b ta) v")
+                    flat_x[indices_to_unmask] = torch.nn.functional.one_hot(
+                        sampled[indices_to_unmask],
+                        num_classes=vocab_size
+                    ).to(dtype)
+                    
+                    x = einops.rearrange(flat_x, "(b ta) v -> b ta v", b=batch, ta=time_attr)
+                    
+                    # Update mask channel
+                    flat_mask = flat_mask.clone()
+                    flat_mask[indices_to_unmask] = 0
+                    mask_channel = einops.rearrange(flat_mask, "(b ta) -> b ta 1", b=batch)
+                    
+                    # Concatenate updated mask with tokens
+                    x_masked = torch.cat([mask_channel, x], dim=-1)
+                    
+                    # Collapse undefined attributes
+                    x = self.tokenizer.collapse_undefined_attributes(x)
+                    
+                    # Update progress bar
+                    masked_tokens_after = mask_channel.sum().int().item()
+                    pbar.update(masked_tokens_before - masked_tokens_after)
+                    
+                    if masked_tokens_after == 0:
+                        break
+        # make sure the output is the same shape as the input
+        assert x.shape == (batch, time_attr, vocab_size)
+        # make sure all tokens are valid
+        assert (x.sum(-1) > 1).sum().int().item() == 0
+        assert (x < 0).sum().int().item() == 0
+                        
+        return x
         
     @torch.inference_mode()
     def generate(
@@ -165,6 +356,17 @@ class SuperposedLanguageModel(pl.LightningModule):
         attribute_temperature=None,
         tokens_per_step=1,
     ):
+        if self.use_mlm:
+            return self.mlm_generate(
+                x,
+                sampling_steps=sampling_steps,
+                temperature=temperature,
+                top_p=top_p,
+                top_k=top_k,
+                order=order,
+                attribute_temperature=attribute_temperature,
+                tokens_per_step=tokens_per_step,
+            )
         if sampling_steps is None:
             sampling_steps = self.tokenizer.config["max_notes"]*len(self.tokenizer.note_attribute_order)
         self.eval()
@@ -259,19 +461,24 @@ class SuperposedLanguageModel(pl.LightningModule):
         return x
     
     def step(self, batch, batch_idx):
-
-        x = torch.nn.functional.one_hot(batch["token_ids"], num_classes=len(self.vocab)).float()
+        x = torch.nn.functional.one_hot(
+            batch["token_ids"], num_classes=len(self.vocab)
+        ).float()
 
         batch_size = x.shape[0]
         ta = x.shape[1]
         v = x.shape[2]
 
-        if self.random_add_masking_type == "mml":
-            masked_x = random_add_masking_mml(x)
-        elif self.random_add_masking_type == "variable_superposition":
-            masked_x = random_add_masking_variable_superposition(x)
-
-        masked_x = masked_x * self.format_mask[None, ...].to(masked_x.device)
+        if self.use_mlm:
+            masked_x = mlm_mask(x)
+        else:
+            if self.random_add_masking_type == "mml":
+                masked_x = random_add_masking_mml(x)
+            elif self.random_add_masking_type == "variable_superposition":
+                masked_x = random_add_masking_variable_superposition(x)
+    
+            masked_x = masked_x * self.format_mask[None, ...].to(masked_x.device)
+        
         target = x
 
         logits = self(masked_x)
@@ -280,91 +487,96 @@ class SuperposedLanguageModel(pl.LightningModule):
         ce = F.cross_entropy(
             logits.reshape(-1, logits.shape[-1]),
             target_idx.reshape(-1),
-            reduction = "none",
+            reduction="none",
         )
 
-        prior = masked_x / masked_x.sum(dim=-1, keepdim=True)
+        # prior = masked_x / masked_x.sum(dim=-1, keepdim=True)
+        # prior_log_probs = torch.log(prior + 1e-8)
+        # prior_ce = F.cross_entropy(
+        #     prior_log_probs.reshape(-1, prior.shape[-1]),
+        #     target_idx.reshape(-1),
+        #     reduction="none",
+        # )
+        # prior_entropy = -torch.sum(prior * prior_log_probs, dim=-1)
+        # assert prior_entropy.shape == (batch_size, ta)
+        # # take mean of entropy
+        # prior_entropy = prior_entropy.mean(1, keepdim=True)
 
-        prior_log_probs = torch.log(prior + 1e-8)
+        # ce_reshaped = einops.rearrange(ce, "(b ta) -> b ta", b=batch_size)
+        # # now divide by prior entropy
+        # prior_entropy_scaled_ce = ce_reshaped / (prior_entropy + 1)
 
-        prior_ce = F.cross_entropy(
-            prior_log_probs.reshape(-1, prior.shape[-1]),
-            target_idx.reshape(-1),
-            reduction = "none",
-        )
-
-        prior_entropy = -torch.sum(prior * prior_log_probs, dim=-1)
-        assert prior_entropy.shape == (batch_size, ta)
-
-        # take mean of entropy
-        prior_entropy = prior_entropy.mean(1, keepdim=True)
-
-        ce_reshaped = einops.rearrange(ce, "(b ta) -> b ta", b=batch_size)
-
-        na = ce_reshaped.shape[-1]        
-        # now divide by prior entropy
-        prior_entropy_scaled_ce = ce_reshaped / (prior_entropy+1)
-
-        known_positions = (masked_x.sum(dim=-1) == 1).flatten()
-        ce[known_positions] = 0
+        # known_positions = (masked_x.sum(dim=-1) == 1).flatten()
+        # ce[known_positions] = 0
         # reshape to batch, loss
         ce = ce.reshape(batch_size, -1)
         metrics = {}
         metrics["cross_entropy"] = ce.mean()
-        metrics["prior_entropy_scaled_ce"] = prior_entropy_scaled_ce.mean()
+        # metrics["prior_entropy_scaled_ce"] = prior_entropy_scaled_ce.mean()
 
-
-        weights = 1/batch["n_loops_in_parent_song"].float()
-
-        # now scale so sum matches batch size
+        weights = 1 / batch["n_loops_in_parent_song"].float()
         weights = weights / weights.sum() * batch_size
 
-        # now calculate cross entropy and prior entropy scaled cross entropy
         metrics["cross_entropy_weighted_by_song"] = (ce / weights).mean()
-        metrics["prior_entropy_scaled_ce_weighted_by_song"] = (prior_entropy_scaled_ce / weights).mean()
+        # metrics["prior_entropy_scaled_ce_weighted_by_song"] = (
+        #     prior_entropy_scaled_ce / weights
+        # ).mean()
 
         with torch.no_grad():
             decoder_output_probs = F.softmax(logits, dim=-1)
+
+            # Calculate entropy of predictions
+            log_probs = F.log_softmax(logits, dim=-1)
+            entropy = -(decoder_output_probs * log_probs).sum(
+                dim=-1
+            )  # Shape: [batch_size, time*attributes]
+
+            # Log global entropy
+            metrics["entropy"] = entropy.mean()
+
+            # Calculate and log per-attribute entropy
+            entropy_by_attr = einops.rearrange(
+                entropy, "b (t a) -> b t a", a=self.n_attributes
+            )
+            for i, attr in enumerate(self.tokenizer.note_attribute_order):
+                metrics[f"entropy/{attr}"] = entropy_by_attr[:, :, i].mean()
+
             probability = torch.gather(
                 decoder_output_probs, dim=-1, index=target_idx.unsqueeze(-1)
             ).squeeze(-1)
-            
+
             # Global metrics
             metrics["probability"] = probability.mean()
-
-            # scale by song
             metrics["probability_weighted_by_song"] = (probability / weights).mean()
-            
+
             # Per attribute metrics
             probability_by_attr = einops.rearrange(
-                probability, "b (t a) -> b t a", 
-                a=self.n_attributes
+                probability, "b (t a) -> b t a", a=self.n_attributes
             )
             for i, attr in enumerate(self.tokenizer.note_attribute_order):
-                metrics[f"probability/{attr}"] = probability_by_attr[:,:,i].mean()
-            
+                metrics[f"probability/{attr}"] = probability_by_attr[:, :, i].mean()
+
             decoder_output_probs_sort = torch.argsort(
                 decoder_output_probs, dim=-1, descending=True
             )
-   
+
             # Global accuracy metrics
             for k in [1, 2, 4]:
                 accuracy = (
-                    target_idx.unsqueeze(-1) == decoder_output_probs_sort[:, :, :k]
-                ).any(dim=-1).float()
-                
-                metrics[f"accuracy@{k}"] = accuracy.mean()
+                    (target_idx.unsqueeze(-1) == decoder_output_probs_sort[:, :, :k])
+                    .any(dim=-1)
+                    .float()
+                )
 
-                # scale by song
+                metrics[f"accuracy@{k}"] = accuracy.mean()
                 metrics[f"accuracy_weighted_by_song@{k}"] = (accuracy / weights).mean()
-                
+
                 # Per attribute accuracy
                 accuracy_by_attr = einops.rearrange(
-                    accuracy, "b (t a) -> b t a",
-                    a=self.n_attributes
+                    accuracy, "b (t a) -> b t a", a=self.n_attributes
                 )
                 for i, attr in enumerate(self.tokenizer.note_attribute_order):
-                    metrics[f"accuracy@{k}/{attr}"] = accuracy_by_attr[:,:,i].mean()
+                    metrics[f"accuracy@{k}/{attr}"] = accuracy_by_attr[:, :, i].mean()
         return metrics
 
     def training_step(self, batch, batch_idx):
@@ -465,7 +677,7 @@ if __name__ == "__main__":
     }
 
     USE_RANDOM_SHIFT = False
-    tokenizer = MergedTokenizer(tokenizer_config)
+    tokenizer = Tokenizer(tokenizer_config)
 
     print(f"Vocab size: {len(tokenizer.vocab)}")
 
@@ -488,10 +700,11 @@ if __name__ == "__main__":
         activation="gelu",
         dropout=0.1,
         use_cross_entropy_increase_loss=False,
-        use_prior_scaled_ce_loss=True,
+        use_prior_scaled_ce_loss=False,
         use_output_bias=False,
         weight_by_loops_in_parent_song=False,
-        random_add_masking_type="variable_superposition"
+        random_add_masking_type="variable_superposition",
+        use_mlm=True
     )
 
     FINETUNE = False
@@ -622,7 +835,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[3,4], 
+        devices=[0,1], 
         precision="16-mixed",
         max_epochs=10_000,
         log_every_n_steps=1,

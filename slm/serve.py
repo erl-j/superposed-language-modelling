@@ -11,7 +11,7 @@ sys.path.append("slm/")
 from train import EncoderOnlyModel
 from train2 import SuperposedLanguageModel
 from util import preview_sm, sm_fix_overlap_notes, loop_sm
-from merged_tokenizer import instrument_class_to_selected_program_nr
+from slm.tokenizer import instrument_class_to_selected_program_nr
 import util
 from paper_checkpoints import checkpoints
 from constraints.addx import *
@@ -94,7 +94,9 @@ model = SuperposedLanguageModel.load_from_checkpoint(
     # "./checkpoints/ruby-glade-461/last.ckpt",
     # "./checkpoints/prime-cosmos-462/last.ckpt",
     # "./checkpoints/drawn-universe-463/last.ckpt",
-    "./checkpoints/dulcet-jazz-464/last.ckpt",
+    # "./checkpoints/dulcet-jazz-464/last.ckpt",
+    # "./checkpoints/clean-oath-465/last.ckpt",
+    "./checkpoints/stoic-capybara-480/last.ckpt",
     map_location=device,
 )
 

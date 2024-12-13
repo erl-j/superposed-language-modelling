@@ -1,6 +1,6 @@
 #%%
 import torch
-from merged_tokenizer import MergedTokenizer
+from slm.tokenizer import Tokenizer
 from data import MidiDataset
 from fractions import Fraction
 import matplotlib.pyplot as plt
@@ -46,7 +46,7 @@ tokenizer_config = {
     ],
 }
 
-tokenizer = MergedTokenizer(tokenizer_config)
+tokenizer = Tokenizer(tokenizer_config)
 
 # Initialize dataset
 val_ds = MidiDataset(
