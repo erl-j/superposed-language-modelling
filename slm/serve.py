@@ -96,7 +96,8 @@ model = SuperposedLanguageModel.load_from_checkpoint(
     # "./checkpoints/drawn-universe-463/last.ckpt",
     # "./checkpoints/dulcet-jazz-464/last.ckpt",
     # "./checkpoints/clean-oath-465/last.ckpt",
-    "./checkpoints/stoic-capybara-480/last.ckpt",
+    # "./checkpoints/stoic-capybara-480/last.ckpt",
+    "../checkpoints/stoic-capybara-480/epoch=34-step=99260-val/loss_epoch=1.11820.ckpt",
     map_location=device,
 )
 

@@ -850,7 +850,7 @@ if __name__ == "__main__":
             ),
         ],
         logger=wandb_logger,
-        # gradient_clip_val=1.0,
+        gradient_clip_val=1.0,
         # accumulate_grad_batches=4,
         check_val_every_n_epoch=1 if DATASET == "mmd_loops" else 10,
     )
