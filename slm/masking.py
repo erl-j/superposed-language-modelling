@@ -61,33 +61,33 @@ def random_add_masking_variable_superposition(x):
     return masked_x
 
 
-def random_add_masking_variable_superposition_ratio(x, format_mask):
-    batch_size, seq_len, vocab_size = x.shape
-    position_masking_ratios = torch.rand(batch_size, device=x.device)
+# def random_add_masking_variable_superposition_ratio(x, format_mask):
+#     batch_size, seq_len, vocab_size = x.shape
+#     position_masking_ratios = torch.rand(batch_size, device=x.device)
 
-    position_mask = torch.zeros(
-        (batch_size, seq_len), dtype=torch.bool, device=x.device
-    )
-    for i in range(batch_size):
-        n_positions = int(seq_len * position_masking_ratios[i])
-        indices = torch.randperm(seq_len, device=x.device)[:n_positions]
-        position_mask[i, indices] = True
+#     position_mask = torch.zeros(
+#         (batch_size, seq_len), dtype=torch.bool, device=x.device
+#     )
+#     for i in range(batch_size):
+#         n_positions = int(seq_len * position_masking_ratios[i])
+#         indices = torch.randperm(seq_len, device=x.device)[:n_positions]
+#         position_mask[i, indices] = True
 
-    superposition_ratios = torch.rand((batch_size, seq_len), device=x.device)
-    superposition = torch.zeros_like(x, dtype=torch.bool, device=x.device)
+#     superposition_ratios = torch.rand((batch_size, seq_len), device=x.device)
+#     superposition = torch.zeros_like(x, dtype=torch.bool, device=x.device)
 
-    for i in range(batch_size):
-        for j in range(seq_len):
-            if position_mask[i, j]:
-                valid_vocab = torch.where(format_mask[j] == 1)[0]
-                n_vocab = int(len(valid_vocab) * superposition_ratios[i, j])
-                vocab_indices = valid_vocab[
-                    torch.randperm(len(valid_vocab), device=x.device)[:n_vocab]
-                ]
-                superposition[i, j, vocab_indices] = True
+#     for i in range(batch_size):
+#         for j in range(seq_len):
+#             if position_mask[i, j]:
+#                 valid_vocab = torch.where(format_mask[j] == 1)[0]
+#                 n_vocab = int(len(valid_vocab) * superposition_ratios[i, j])
+#                 vocab_indices = valid_vocab[
+#                     torch.randperm(len(valid_vocab), device=x.device)[:n_vocab]
+#                 ]
+#                 superposition[i, j, vocab_indices] = True
 
-    masked_x = torch.clamp(x + superposition, 0, 1)
-    return masked_x
+#     masked_x = torch.clamp(x + superposition, 0, 1)
+#     return masked_x
 
 
 def mlm_mask(x: torch.Tensor) -> torch.Tensor:

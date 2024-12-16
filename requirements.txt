@@ -1,4 +1,4 @@
-symusic
+symusic == 0.4.8
 seaborn
 lightning
 matplotlib

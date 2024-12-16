@@ -254,11 +254,24 @@ class Tokenizer():
             
     def encode(self, sm, tag):
         tokens = self.sm_to_tokens(sm, tag)
-        return self.tokens_to_indices(tokens)
+        if self.config["fold_event_attributes"]:
+            # output of size (n_notes * n_attributes)
+            return self.tokens_to_indices(tokens)
+        else:
+            token_ids = self.tokens_to_indices(tokens)
+            # convert to numpy
+            token_ids = np.array(token_ids)
+            token_ids = einops.rearrange(token_ids, "(n a) -> n a", a=self.attributes_per_note)
+            return token_ids
 
     def decode(self, indices):
-        tokens = self.indices_to_tokens(indices)
-        return self.tokens_to_sm(tokens)
+        if self.config["fold_event_attributes"]:
+            tokens = self.indices_to_tokens(indices)
+            return self.tokens_to_sm(tokens)
+        else:
+            indices = einops.rearrange(indices, "n a -> (n a)")
+            tokens = self.indices_to_tokens(indices)
+            return self.tokens_to_sm(tokens)
 
     def tokens_to_indices(self, tokens):
         return [self.token2idx[token] for token in tokens]
@@ -388,6 +401,8 @@ class Tokenizer():
 
         # flatten note_encodings
         note_encodings = pydash.flatten(note_encodings)
+
+        # 
         return note_encodings    
     
     def get_undefined_probs(self, mask, logits):
