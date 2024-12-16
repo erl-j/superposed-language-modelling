@@ -829,7 +829,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[0,1], 
+        devices=[3,7], 
         precision="16-mixed",
         max_epochs=10_000,
         log_every_n_steps=1,

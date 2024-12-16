@@ -278,6 +278,17 @@ class Tokenizer():
                     if token.startswith(note_attr):
                         format_mask[note_idx * self.attributes_per_note + attr_idx, self.token2idx[token]] = 1
         return format_mask
+
+    def get_syntax_mask(self):
+        '''
+        Returns a (n_attributes, vocab_size) mask that indicates which tokens are valid for each attribute.
+        '''
+        syntax_mask = np.zeros((len(self.note_attribute_order), len(self.vocab)))
+        for attr_idx, note_attr in enumerate(self.note_attribute_order):
+            for token in self.vocab:
+                if token.startswith(note_attr):
+                    syntax_mask[attr_idx, self.token2idx[token]] = 1
+        return syntax_mask
      
     def sm_to_tokens(self, sm, tag):
 
