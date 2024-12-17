@@ -226,13 +226,15 @@ class Tokenizer():
     def sanitize_mask(self, mask, event_indices):
         mask_type = mask.dtype
         mask_device = mask.device
-        mask = einops.rearrange(mask, "b (n a) v -> b n a v", a=len(self.note_attribute_order))
+        if self.config["fold_event_attributes"]:
+            mask = einops.rearrange(mask, "b (n a) v -> b n a v", a=len(self.note_attribute_order))
         for event_idx in event_indices:
             event_mask = mask[0, event_idx, :, :]
             ec = self.mask_to_event_constraint(event_mask)
             ec = ec.sanitize_undef()
             mask[0, event_idx, :, :] = self.event_constraint_to_mask(ec)
-        mask = einops.rearrange(mask, "b n a v -> b (n a) v")
+        if self.config["fold_event_attributes"]:
+            mask = einops.rearrange(mask, "b n a v -> b (n a) v")
         return mask.to(mask_type).to(mask_device)
 
     def event_constraint_to_mask(self, ec):
@@ -536,6 +538,8 @@ class Tokenizer():
     
     def collapse_undefined_attributes(self, x1h):
 
+        if not self.config["fold_event_attributes"]:
+            x1h = einops.rearrange(x1h, "b n a v -> b (n a) v")
         dtype = x1h.dtype
 
         x1h = x1h.clone()
@@ -553,7 +557,9 @@ class Tokenizer():
 
         x1h = torch.where(x1h_has_undefined_attribute[...,None,None], all_undef, x1h)
 
-        x1h = einops.rearrange(x1h, "b n a v -> b (n a) v")
+
+        if self.config["fold_event_attributes"]:
+            x1h = einops.rearrange(x1h, "b n a v -> b (n a) v")
 
         return x1h
 

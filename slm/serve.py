@@ -10,6 +10,7 @@ import symusic
 sys.path.append("slm/")
 from train import EncoderOnlyModel
 from train2 import SuperposedLanguageModel
+from train3 import TrainingWrapper
 from util import preview_sm, sm_fix_overlap_notes, loop_sm
 from slm.tokenizer import instrument_class_to_selected_program_nr
 import util
@@ -62,46 +63,51 @@ def seq2events(seq):
         events.append(event)
     return events
 
-model = (
-    EncoderOnlyModel.load_from_checkpoint(
-        ROOT_DIR + checkpoints[MODEL],
-        map_location=device,
-    )
-    .to(device)
-    .eval()
-)
+# model = (
+#     EncoderOnlyModel.load_from_checkpoint(
+#         ROOT_DIR + checkpoints[MODEL],
+#         map_location=device,
+#     )
+#     .to(device)
+#     .eval()
+# )
 
-model = SuperposedLanguageModel.load_from_checkpoint(
-    # "./checkpoints/zesty-dawn-376/last.ckpt",
-    # "./checkpoints/faithful-wave-417/last.ckpt",
-    # "./checkpoints/vibrant-paper-422/last.ckpt",
-    # "./checkpoints/desert-dust-401/last.ckpt",
-    # "./checkpoints/smart-wood-419/last.ckpt",
-    # "./checkpoints/unique-tree-426/last.ckpt",
-    # "./checkpoints/bumbling-dream-427/last.ckpt",
-    # "./checkpoints/lively-flower-428/last.ckpt",
-    # "./checkpoints/sparkling-dust-435/last.ckpt",
-    # "./checkpoints/pretty-smoke-437/last.ckpt",
-    # "./checkpoints/desert-dragon-439/last.ckpt",
-    # "./checkpoints/efficient-flower-443/last.ckpt",
-    # "./checkpoints/sparkling-dust-435/epoch=271-step=1175856-val/loss_epoch=0.16102.ckpt",
-    # "./checkpoints/misunderstood-eon-449/last.ckpt",
-    # "./checkpoints/chocolate-river-450/last.ckpt",
-    # "./checkpoints/fragrant-dew-452/last.ckpt",
-    # "./checkpoints/lilac-feather-455/last.ckpt",
-    # "./checkpoints/copper-monkey-456/last.ckpt",
-    # "./checkpoints/fragrant-dew-452/last.ckpt",
-    # "./checkpoints/ruby-glade-461/last.ckpt",
-    # "./checkpoints/prime-cosmos-462/last.ckpt",
-    # "./checkpoints/drawn-universe-463/last.ckpt",
-    # "./checkpoints/dulcet-jazz-464/last.ckpt",
-    # "./checkpoints/clean-oath-465/last.ckpt",
-    # "./checkpoints/stoic-capybara-480/last.ckpt",
-    "./checkpoints/stoic-capybara-480/epoch=34-step=99260-val/loss_epoch=1.11820.ckpt",
+# model = SuperposedLanguageModel.load_from_checkpoint(
+#     # "./checkpoints/zesty-dawn-376/last.ckpt",
+#     # "./checkpoints/faithful-wave-417/last.ckpt",
+#     # "./checkpoints/vibrant-paper-422/last.ckpt",
+#     # "./checkpoints/desert-dust-401/last.ckpt",
+#     # "./checkpoints/smart-wood-419/last.ckpt",
+#     # "./checkpoints/unique-tree-426/last.ckpt",
+#     # "./checkpoints/bumbling-dream-427/last.ckpt",
+#     # "./checkpoints/lively-flower-428/last.ckpt",
+#     # "./checkpoints/sparkling-dust-435/last.ckpt",
+#     # "./checkpoints/pretty-smoke-437/last.ckpt",
+#     # "./checkpoints/desert-dragon-439/last.ckpt",
+#     # "./checkpoints/efficient-flower-443/last.ckpt",
+#     # "./checkpoints/sparkling-dust-435/epoch=271-step=1175856-val/loss_epoch=0.16102.ckpt",
+#     # "./checkpoints/misunderstood-eon-449/last.ckpt",
+#     # "./checkpoints/chocolate-river-450/last.ckpt",
+#     # "./checkpoints/fragrant-dew-452/last.ckpt",
+#     # "./checkpoints/lilac-feather-455/last.ckpt",
+#     # "./checkpoints/copper-monkey-456/last.ckpt",
+#     # "./checkpoints/fragrant-dew-452/last.ckpt",
+#     # "./checkpoints/ruby-glade-461/last.ckpt",
+#     # "./checkpoints/prime-cosmos-462/last.ckpt",
+#     # "./checkpoints/drawn-universe-463/last.ckpt",
+#     # "./checkpoints/dulcet-jazz-464/last.ckpt",
+#     # "./checkpoints/clean-oath-465/last.ckpt",
+#     # "./checkpoints/stoic-capybara-480/last.ckpt",
+#     "./checkpoints/stoic-capybara-480/epoch=34-step=99260-val/loss_epoch=1.11820.ckpt",
+#     map_location=device,
+# )
+
+# print(model.tokenizer.vocab)
+
+model = TrainingWrapper.load_from_checkpoint(
+    "./checkpoints/effortless-sound-516/last.ckpt",
     map_location=device,
 )
-
-print(model.tokenizer.vocab)
 
 
 def generate(
@@ -113,7 +119,12 @@ def generate(
     attribute_temperature=None,
     order=None,
 ):
-    return model.generate(
+    # hack to see if we are using latest version
+    if model.model is not None:
+        import einops
+        mask = einops.rearrange(mask, "batch (event attribute) v -> batch event attribute v", attribute = len(model.tokenizer.note_attribute_order))
+
+    out = model.generate(
         mask,
         temperature=temperature,
         tokens_per_step=tokens_per_step,
@@ -122,6 +133,15 @@ def generate(
         order=order,
         attribute_temperature=attribute_temperature,
     )[0].argmax(axis=1)
+
+    if model.model is not None:
+        import einops
+
+        out = einops.rearrange(
+            out, "batch event attribute -> batch (event attribute)"
+        )
+
+    return out
 
 
 def preview(sm):

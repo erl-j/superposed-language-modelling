@@ -1,6 +1,7 @@
 from slm.tokenizer import instrument_class_to_selected_program_nr
 import symusic
 from constraints.core import MusicalEventConstraint
+import einops
 
 def looprep_to_sm(looprep, tpq):
     midi = symusic.Score()
@@ -52,6 +53,8 @@ def looprep_to_sm(looprep, tpq):
 def sm_to_events(x_sm, tag, tokenizer):
     ec = lambda : MusicalEventConstraint(tokenizer)
     x = tokenizer.encode(x_sm, tag=tag)
+    if not tokenizer.config["fold_event_attributes"]:
+        x = einops.rearrange(x, "event attribute -> (event attribute)")
     tokens = tokenizer.indices_to_tokens(x)
     # group by n_attributes
     n_attributes = len(tokenizer.note_attribute_order)

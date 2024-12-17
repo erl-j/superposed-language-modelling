@@ -90,7 +90,7 @@ def random_add_masking_variable_superposition(x):
 #     return masked_x
 
 
-def mlm_mask(x: torch.Tensor) -> torch.Tensor:
+def mlm_mask(x: torch.Tensor, mask_first = True) -> torch.Tensor:
     """
     Applies masking for Masked Language Modeling (MLM) training.
 
@@ -100,7 +100,8 @@ def mlm_mask(x: torch.Tensor) -> torch.Tensor:
 
     Returns:
         Masked tensor of shape (batch_size, sequence_length, vocab_size + 1)
-        where the first channel indicates masked positions (1 = masked, 0 = unmasked)
+        where the first channel indicates masked positions (1 = masked, 0 = unmasked) if mask_first=True
+        otherwise the last channel indicates masked positions.
         and the remaining channels contain the original tokens (zeroed out at masked positions)
     """
     batch_size, seq_length, vocab_size = x.shape
@@ -125,4 +126,8 @@ def mlm_mask(x: torch.Tensor) -> torch.Tensor:
 
     # Concatenate mask channel with masked tokens
     # Convert boolean mask to float for concatenation
-    return torch.cat([mask_channel.float(), masked_tokens], dim=-1)
+    if mask_first:
+        masked_x = torch.cat((mask_channel.float(), masked_tokens), dim=-1)
+    else:
+        masked_x = torch.cat((masked_tokens, mask_channel.float()), dim=-1)
+    return masked_x
