@@ -105,7 +105,9 @@ def seq2events(seq):
 # print(model.tokenizer.vocab)
 
 model = TrainingWrapper.load_from_checkpoint(
-    "./checkpoints/effortless-sound-516/last.ckpt",
+    # "./checkpoints/effortless-sound-516/last.ckpt",
+    # "./checkpoints/misunderstood-plasma-522/last.ckpt",
+    "./checkpoints/misunderstood-monkey-520/last.ckpt",
     map_location=device,
 )
 
@@ -132,14 +134,15 @@ def generate(
         top_k=top_k,
         order=order,
         attribute_temperature=attribute_temperature,
-    )[0].argmax(axis=1)
+    )[0].argmax(-1)
+    
+    # print(out.shape)
+    # if model.model is not None:
+    #     import einops
 
-    if model.model is not None:
-        import einops
-
-        out = einops.rearrange(
-            out, "batch event attribute -> batch (event attribute)"
-        )
+    #     out = einops.rearrange(
+    #         out, "event attribute -> (event attribute)"
+    #     )
 
     return out
 

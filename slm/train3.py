@@ -67,6 +67,24 @@ class SuperposedLanguageModel(torch.nn.Module):
             return self.mlm_forward(x)
         else:
             return self.slm_forward(x)
+        
+    def mlm_forward_w_constraint(self, x):
+        '''
+        Forward pass for Masked Language Model (MLM) with constraint.
+        Input:
+            x: Input tensor of shape (batch_size, events, attributes, vocab_size)
+        '''
+        # first, if more than 1 non zero token is present
+        mask = (x.sum(-1) > 1).float()
+        # multiply with x
+        x_masked = x * (1-mask[..., None])
+        # add mask channel at the end
+        x_masked = torch.cat([x_masked, mask[..., None]], dim=-1)
+        # assert that every column sums to one
+        assert torch.allclose(x_masked.sum(-1), torch.ones_like(x_masked[..., 0]))
+        # pass through transformer
+        logits = self(x_masked)
+        return logits
 
     def generate(self,
         x,
@@ -83,81 +101,8 @@ class SuperposedLanguageModel(torch.nn.Module):
         Input:
             constraint: Input tensor of shape (batch_size, events, attributes, vocab_size)
         '''
-        if self.use_mlm:
-            return self.mlm_generate(
-                    x,
-                    sampling_steps,
-                    temperature,
-                    top_p,
-                    top_k,
-                    order,
-                    attribute_temperature,
-                    tokens_per_step,
-                    )
-                
-        else:
-            return self.slm_generate(
-                x,
-                sampling_steps,
-                temperature,
-                top_p,
-                top_k,
-                order,
-                attribute_temperature,
-                tokens_per_step,
-            )
-
-    def slm_forward(self,x):
-        '''
-        Forward pass for Superposed Language Model (SLM).
-        Input:
-            x: Input tensor of shape (batch_size, events, attributes, vocab_size)
-        '''
-        b,e,a,v = x.shape
-        syntax_mask = self.syntax_mask[None,None,...].to(x.device).to(x.dtype)
-        syntax_mask = einops.repeat(syntax_mask, "1 1 a v -> b e a v", b=b,e=e)
-        # apply syntax mask
-        x = x * syntax_mask
-        # renormalize
-        x = x / x.sum(dim=-1, keepdim=True)
-        # embed attributes
-        z_prior = self.embedding_layer(x)
-        z_prior = z_prior.sum(dim=2)
-
-        # pass through transformer, get new
-        z_post = self.main_block(z_prior)
-        # pass through unembedding layer
-        logits = self.unembedding_layer(z_post)
-        # now we repeat in attribute dimension a times
-        logits = einops.repeat(logits, "b e v -> b e a v", a=len(self.tokenizer.note_attribute_order)).clone()
-        
-        zero = torch.zeros_like(x, device=x.device, dtype=x.dtype)
-        one = torch.ones_like(x, device=x.device, dtype=x.dtype)
-        
-        # apply syntax mask to logits with appropriate tolerance
-        logits[syntax_mask.isclose(zero, rtol=1e-5)] = torch.finfo(logits.dtype).min
-        
-        # enforce constraint with appropriate tolerances
-        if self.enforce_constraint_in_forward:
-            logits[x.isclose(zero, rtol=1e-5)] = torch.finfo(logits.dtype).min
-            logits[x.isclose(one, rtol=1e-5)] = torch.finfo(logits.dtype).max
-        return logits
-    
-    @torch.inference_mode
-    def slm_generate(
-        self,
-        x,
-        sampling_steps=None,
-        temperature=1,
-        top_p=1,
-        top_k=0,
-        order="random",
-        attribute_temperature=None,
-        tokens_per_step=1,
-    ):
         self.eval()
         # normalize mask
-        x = x / x.sum(dim=-1, keepdim=True)
         if sampling_steps is None:
             sampling_steps = self.tokenizer.config["max_notes"]*len(self.tokenizer.note_attribute_order)
         dtype = self.embedding_layer.weight.dtype
@@ -173,7 +118,10 @@ class SuperposedLanguageModel(torch.nn.Module):
             with tqdm(total=masked_tokens) as pbar:
                 while True:
                     masked_tokens_before = (x.sum(-1) > 1).sum().int().item()
-                    logits = self(x)
+                    if self.use_mlm:
+                        logits = self.mlm_forward_w_constraint(x)
+                    else:
+                        logits = self(x)
                     flat_logits = einops.rearrange(logits, "b t a v -> (b t a) v")
                     flat_logits = top_k_top_p_filtering(flat_logits, top_k=top_k, top_p=top_p)
                     t = temperature
@@ -188,8 +136,9 @@ class SuperposedLanguageModel(torch.nn.Module):
                         t = attr_t
                     flat_probs = F.softmax(flat_logits / t, dim=-1)
                     flat_x = einops.rearrange(x, "b e a v -> (b e a) v")
+                    flat_probs = flat_probs * flat_x
                     # renormalize
-                    flat_probs = flat_probs / flat_probs.sum(dim=-1, keepdim=True)
+                    flat_probs = flat_probs / (flat_probs.sum(dim=-1, keepdim=True))
                     sampled = torch.multinomial(flat_probs, 1).squeeze(-1)
                     masked_indices = torch.where(flat_x.sum(-1) > 1)[0]
                     n_attributes = len(self.tokenizer.note_attribute_order)
@@ -241,6 +190,43 @@ class SuperposedLanguageModel(torch.nn.Module):
                         break
         print(f"output shape {x.shape}")
         return x
+
+    def slm_forward(self,x):
+        '''
+        Forward pass for Superposed Language Model (SLM).
+        Input:
+            x: Input tensor of shape (batch_size, events, attributes, vocab_size)
+        '''
+        b,e,a,v = x.shape
+        syntax_mask = self.syntax_mask[None,None,...].to(x.device).to(x.dtype)
+        syntax_mask = einops.repeat(syntax_mask, "1 1 a v -> b e a v", b=b,e=e)
+        # apply syntax mask
+        x = x * syntax_mask
+        # renormalize
+        x = x / x.sum(dim=-1, keepdim=True)
+        # embed attributes
+        z_prior = self.embedding_layer(x)
+        z_prior = z_prior.sum(dim=2)
+
+        # pass through transformer, get new
+        z_post = self.main_block(z_prior)
+        # pass through unembedding layer
+        logits = self.unembedding_layer(z_post)
+        # now we repeat in attribute dimension a times
+        logits = einops.repeat(logits, "b e v -> b e a v", a=len(self.tokenizer.note_attribute_order)).clone()
+        
+        zero = torch.zeros_like(x, device=x.device, dtype=x.dtype)
+        one = torch.ones_like(x, device=x.device, dtype=x.dtype)
+        
+        # apply syntax mask to logits with appropriate tolerance
+        logits[syntax_mask.isclose(zero, rtol=1e-5)] = torch.finfo(logits.dtype).min
+        
+        # enforce constraint with appropriate tolerances
+        if self.enforce_constraint_in_forward:
+            logits[x.isclose(zero, rtol=1e-5)] = torch.finfo(logits.dtype).min
+            logits[x.isclose(one, rtol=1e-5)] = torch.finfo(logits.dtype).max
+        return logits
+    
 
     def mlm_forward(self,x_masked):
         """
@@ -1098,26 +1084,6 @@ if __name__ == "__main__":
     USE_RANDOM_SHIFT = False
     tokenizer = Tokenizer(tokenizer_config)
 
-    model_config = {
-        "hidden_size": 768,
-        "n_heads":12,
-        "feed_forward_size": 4*768,
-        "n_layers": 12,
-        "tokenizer_config": tokenizer_config,
-        "norm_first": True,
-        "enforce_constraint_in_forward": True,
-        "activation":"gelu",
-        "dropout":0.1,
-        "use_mlm":False
-    }
-
-    training_wrapper = TrainingWrapper(
-        model_config=model_config,
-        learning_rate=1e-4,
-        learning_rate_gamma=0.99,
-        masking_scheme="variable_superposition",
-    )
-
     # model_config = {
     #     "hidden_size": 768,
     #     "n_heads":12,
@@ -1128,15 +1094,35 @@ if __name__ == "__main__":
     #     "enforce_constraint_in_forward": True,
     #     "activation":"gelu",
     #     "dropout":0.1,
-    #     "use_mlm":True
+    #     "use_mlm":False
     # }
 
     # training_wrapper = TrainingWrapper(
     #     model_config=model_config,
     #     learning_rate=1e-4,
     #     learning_rate_gamma=0.99,
-    #     masking_scheme="mlm",
+    #     masking_scheme="variable_superposition",
     # )
+
+    model_config = {
+        "hidden_size": 768,
+        "n_heads":12,
+        "feed_forward_size": 4*768,
+        "n_layers": 12,
+        "tokenizer_config": tokenizer_config,
+        "norm_first": True,
+        "enforce_constraint_in_forward": True,
+        "activation":"gelu",
+        "dropout":0.1,
+        "use_mlm":True
+    }
+
+    training_wrapper = TrainingWrapper(
+        model_config=model_config,
+        learning_rate=1e-4,
+        learning_rate_gamma=0.99,
+        masking_scheme="mlm",
+    )
 
     mmd_4bar_filter_fn = lambda x: f"n_bars={N_BARS}" in x
 
@@ -1205,7 +1191,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[4,7], 
+        devices=[2,3], 
         precision="16-mixed",
         max_epochs=10_000,
         log_every_n_steps=1,
@@ -1235,6 +1221,6 @@ if __name__ == "__main__":
         training_wrapper,
         trn_dl,
         val_dl,
-        # ckpt_path = "./checkpoints/misunderstood-monkey-520/last.ckpt"
-        ckpt_path = "./checkpoints/effortless-sound-516/last.ckpt"
+        ckpt_path = "./checkpoints/misunderstood-monkey-520/last.ckpt"
+        # ckpt_path = "./checkpoints/effortless-sound-516/last.ckpt"
     )
