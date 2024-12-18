@@ -131,3 +131,40 @@ def mlm_mask(x: torch.Tensor, mask_first = True) -> torch.Tensor:
     else:
         masked_x = torch.cat((masked_tokens, mask_channel.float()), dim=-1)
     return masked_x
+
+
+def attribute_masking(x, masking_prob):
+    '''
+    Applies attribute masking to input tensor x. For sample and attribute.
+    Meaning that 
+    with probability masking_prob, that attribute is set to all ones across the entire sequence.
+    Args:
+        x: Input tensor of shape (batch_size, n_events, n_attributes, vocab_size)
+        masking_prob: Probability of masking out an attribute
+    '''
+    # get dropout mask of shape (batch_size, n_attributes)
+    dropout_mask = torch.rand(x.shape[0], x.shape[2], device=x.device) < masking_prob
+    # expand the mask to the shape of x
+    dropout_mask = einops.rearrange(dropout_mask, 'b a -> b 1 a 1')
+    # where dropout mask is True, set x to ones, otherwise keep original values
+    x = torch.where(dropout_mask, torch.ones_like(x), x)
+    return x
+
+def event_masking(x, masking_prob):
+    '''
+    Applies event masking to input tensor x. For sample and event.
+    Meaning that 
+    with probability masking_prob, that event is set to all ones across the entire sequence.
+    Args:
+        x: Input tensor of shape (batch_size, n_events, n_attributes, vocab_size)
+        masking_prob: Probability of masking out an event
+    '''
+    # get dropout mask of shape (batch_size, n_attributes)
+    dropout_mask = torch.rand(x.shape[0], x.shape[1], device=x.device) < masking_prob
+    # expand the mask to the shape of x
+    dropout_mask = einops.rearrange(dropout_mask, 'b e -> b e 1 1')
+    # where dropout mask is True, set x to ones, otherwise keep original values
+    x = torch.where(dropout_mask, torch.ones_like(x), x)
+    return x
+    
+    

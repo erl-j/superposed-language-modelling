@@ -1,5 +1,5 @@
 #%%
-from train2 import SuperposedLanguageModel
+from slm.train2_old import SuperposedLanguageModel
 # from train import EncoderOnlyModel
 import numpy as np
 import matplotlib.pyplot as plt

@@ -1,469 +1,238 @@
-import datetime
 import logging
-
-import matplotlib.pyplot as plt
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
-import wandb
 from data import MidiDataset
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, RichProgressBar
 from pytorch_lightning.loggers import WandbLogger
-from slm.tokenizer import Tokenizer
-from torch import nn
-from augmentation import transpose_sm
+from tokenizer import Tokenizer
 import einops
-from tqdm import tqdm
-from util import top_k_top_p_filtering
-import line_profiler
+from fractions import Fraction
+from masking import (
+    mlm_mask,
+    random_add_masking_mml,
+    random_add_masking_variable_superposition,
+    attribute_masking,
+    event_masking,
+)
+from model import SuperposedLanguageModel
 
-class EncoderOnlyModel(pl.LightningModule):
+
+class TrainingWrapper(pl.LightningModule):
     def __init__(
         self,
-        hidden_size,
-        n_heads,
-        feed_forward_size,
-        n_layers,
-        vocab,
-        max_seq_len,
+        model_config,
         learning_rate,
-        tokenizer_config,
-        one_hot_input=False,
-        normalize_by_masking_ratio=False,
-        learning_rate_gamma=0.9,
-        norm_first=False,
-        x_bias = -1e5,
-        fix_x_bias = False,
-        embedding_bias = False,
-        standard_mlm_forward=False,
-        standard_mlm_masking=False,
-        avg_positional_encoding = False,
-        use_positional_encoding = False,
-        mlm_restricted_sampling = True,
-        enforce_constraint_in_forward = True,
-        neighbour_superposition = False
+        learning_rate_gamma,
+        masking_scheme,
+        use_weight_decay=False,
+        attribute_masking_prob=0.0,
+        event_masking_prob=0.0,
+        warmup_steps=0,
+        lr_steps_per_epoch=2836,
     ):
-        """
-        seq_len: length of chart sequence (equal or longer to audio sequence)
-        """
         super().__init__()
         self.save_hyperparameters()
-        vocab_size = len(vocab)
-        self.tokenizer = Tokenizer(tokenizer_config)
-        self.format_mask = torch.Tensor(self.tokenizer.get_format_mask())
-        self.vocab = vocab
-        # intialize positional encoding. one per step in sequence
-        self.positional_encoding  = nn.Parameter(torch.zeros(1, max_seq_len*2, hidden_size), requires_grad=True)
-        self.embedding_layer = nn.Linear(vocab_size, hidden_size, bias=embedding_bias)
-        self.one_hot_input = one_hot_input
-        self.transformer = torch.nn.TransformerEncoder(
-            encoder_layer=torch.nn.TransformerEncoderLayer(
-            d_model=hidden_size,
-            nhead=n_heads,
-            dim_feedforward=feed_forward_size,
-            norm_first= norm_first,
-            dropout=0.1,
-            batch_first=True,
-            ),
-            num_layers=n_layers,
-        )
-
-        self.x_bias = x_bias
-        self.fix_x_bias = fix_x_bias
-
-        self.decoder_output_layer = nn.Linear(hidden_size, vocab_size)
-        
-        self.seq_len = max_seq_len
-
-        self.n_attributes = len(self.tokenizer.note_attribute_order)
-
-        self.normalize_by_masking_ratio = normalize_by_masking_ratio
-
+        self.model = SuperposedLanguageModel(**model_config)
+        self.learning_rate = learning_rate
         self.learning_rate_gamma = learning_rate_gamma
+        self.lr_steps_per_epoch = lr_steps_per_epoch
+        self.use_mlm = self.model.use_mlm
+        self.masking_scheme = masking_scheme
+        self.tokenizer = self.model.tokenizer
+        self.syntax_mask = torch.Tensor(self.tokenizer.get_syntax_mask())
+        self.use_weight_decay = use_weight_decay
+        self.attribute_masking_prob = attribute_masking_prob
+        self.event_masking_prob = event_masking_prob
+        self.warmup_steps = warmup_steps
 
-        self.standard_mlm_forward = standard_mlm_forward
-        self.standard_mlm_masking = standard_mlm_masking
-
-        if self.standard_mlm_forward:
-            self.attribute_mask_tokens = nn.Parameter(torch.ones(1, self.n_attributes, hidden_size), requires_grad=True)
-
-        self.avg_positional_encoding = avg_positional_encoding
-        self.use_positional_encoding = use_positional_encoding
-        
-        self.mlm_restricted_sampling = mlm_restricted_sampling
-
-        self.enforce_constraint_in_forward = enforce_constraint_in_forward
-
-        self.neighbour_superposition = neighbour_superposition
-
-    def convert_to_half(self):
-        # set x bias to min inf
-        self.x_bias = torch.finfo(torch.float16).min
-        return self.half()
-
-    def mlm_forward(self, x):
-        format_mask = self.format_mask[None, ...].to(x.device).to(x.dtype)
-        xin = x
-
-        x = x * format_mask
-
-        # figure out if token is masked, i.e more than one token is masked
-
-        x = einops.rearrange(x, "b (t a) v -> b t a v", a=self.n_attributes)
-
-        is_masked = x.sum(-1) > 1
-
-        ze = self.embedding_layer(x)
-        
-        # replace masked attribute embeddings with attribute mask tokens
-        ze  = ~is_masked[...,None] * ze + is_masked[...,None] * self.attribute_mask_tokens[None, ...].to(self.device)
-
-        # sum across attributes
-        ze = ze.sum(dim=2)
-        if self.use_positional_encoding:
-            pos = self.positional_encoding[:, : self.tokenizer.config["max_notes"], :].to(self.device)
-            if self.avg_positional_encoding:
-                pos = pos.mean(dim=1, keepdim=True)
-            ze = ze + pos
-
-        # pass through transformer
-        zl = self.transformer(ze)
-        # get output part
-
-        # note embeddings
-        note_z = einops.rearrange(zl, "b t ft -> b t 1 ft")
-
-        note_z = note_z.repeat(1, 1, self.n_attributes, 1)
-
-        decoder_logits = self.decoder_output_layer(note_z)
-
-        decoder_logits = einops.rearrange(
-            decoder_logits, "b t a v -> b (t a) v"
-        )
-
-        format_mask_expanded = format_mask * torch.ones_like(xin, device=self.device)
-        decoder_logits[format_mask_expanded<0.5] = self.x_bias
-
-        # if not self.training and self.mlm_restricted_sampling:
-        #     decoder_logits[xin<0.5] = self.x_bias
-
-        # crop to decoder length
-        return decoder_logits
-
-
-    def forward(self, x):
-        if self.standard_mlm_forward:
-            return self.mlm_forward(x)
-
-        format_mask = self.format_mask[None, ...].to(x.device).to(x.dtype)
-        x = x * format_mask
-
-        x = einops.rearrange(x, "b (t a) v -> b t a v", a=self.n_attributes)
-
-        ze = self.embedding_layer(x)
-        ze = ze.sum(dim=2)
-        if self.use_positional_encoding:
-            pos = self.positional_encoding[:, : self.tokenizer.config["max_notes"], :].to(self.device)
-            if self.avg_positional_encoding:
-                pos = pos.mean(dim=1, keepdim=True)
-            ze = ze + pos
-        # pass through transformer
-        zl = self.transformer(ze)
-        # get output part
-
-        # note embeddings
-        note_z = einops.rearrange(zl, "b t ft -> b t 1 ft")
-
-        note_z = note_z.repeat(1, 1, self.n_attributes, 1)
-
-        decoder_logits = self.decoder_output_layer(note_z)
-
-        if self.enforce_constraint_in_forward:
-            # force logits to respect constraint
-            if self.fix_x_bias:
-                decoder_logits[x<0.5] = self.x_bias
-            else:
-                decoder_logits = decoder_logits + self.x_bias * (1-x)
-    
-            decoder_logits = einops.rearrange(decoder_logits, "b t a v -> b (t a) v", a=self.n_attributes)
-        
+        # assert that masking_scheme is compatible with use_mlm
+        if self.use_mlm:
+            assert self.masking_scheme == "mlm"
         else:
-            decoder_logits = einops.rearrange(
-                decoder_logits, "b t a v -> b (t a) v", a=self.n_attributes
+            assert (
+                self.masking_scheme == "variable_superposition"
+                or self.masking_scheme == "mml"
             )
-            decoder_logits[
-                (format_mask * torch.ones_like(decoder_logits, device=self.device)) < 0.5
-            ] = self.x_bias
+        pass
 
-        # crop to decoder length
-        return decoder_logits
+    def get_model_dtype(self):
+        return self.model.embedding_layer.weight.dtype
 
+    def get_model_device(self):
+        return next(self.model.parameters()).device
 
-    def generate_gibbs(self, x, temperature=1, top_p=1, top_k=0, steps = 100, pmax=None, pmin=None, alpha=None):
+    def step(self, batch, batch_idx):
+        """
+        Perform a single forward pass and calculate metrics
+        Input:
+            batch: dictionary containing batch data (token_ids (batch_size, events, attributes), n_loops_in_parent_song)
+            batch_idx: index of batch
+        """
+        token_ids = batch["token_ids"]
+        target_token_ids = batch["token_ids"]
+        # one hot encode token_ids with model dtype
+        x = torch.nn.functional.one_hot(
+            token_ids, num_classes=len(self.tokenizer.vocab)
+        ).to(self.get_model_dtype())
+        # apply masking scheme
+        if self.use_mlm:
+            x_ta = einops.rearrange(x, "b t a v -> b (t a) v")
+            x_masked_ta = mlm_mask(x_ta, mask_first=False)
+            x_input = einops.rearrange(
+                x_masked_ta,
+                "b (t a) vm -> b t a vm",
+                a=len(self.tokenizer.note_attribute_order),
+            )
+        else:
+            x_ta = einops.rearrange(x, "b t a v -> b (t a) v")
+            if self.masking_scheme == "mml":
+                x_masked_ta = random_add_masking_mml(x_ta)
+            elif self.masking_scheme == "variable_superposition":
+                x_masked_ta = random_add_masking_variable_superposition(x_ta)
+            x_masked = einops.rearrange(
+                x_masked_ta,
+                "b (t a) v -> b t a v",
+                a=len(self.tokenizer.note_attribute_order),
+            )
+            if self.attribute_masking_prob > 0:
+                x_masked = attribute_masking(x_masked, self.attribute_masking_prob)
+            if self.event_masking_prob > 0:
+                x_masked = event_masking(x_masked, self.event_masking_prob)
+            x_masked = x_masked * (
+                self.syntax_mask[None, None, ...].to(self.get_model_dtype())
+            ).to(self.get_model_device())
+            # renormalize
+            x_input = x_masked / x_masked.sum(dim=-1, keepdim=True)
+        logits = self.model(x_input)
+        # get metrics
+        metrics = self.compute_metrics(
+            target_token_ids, logits, batch["n_loops_in_parent_song"]
+        )
+        return metrics
 
-        self.eval()
+    def stage_step(self, batch, batch_idx, stage):
+        metrics = self.step(batch, batch_idx)
+        # log metrics
+        for metric in metrics:
+            self.log(
+                f"{stage}/{metric}",
+                metrics[metric],
+                on_step=True,
+                on_epoch=True,
+                prog_bar=True,
+            )
+        # calculate loss
+        loss = metrics["cross_entropy"]
+        # plot loss
+        self.log(f"{stage}/loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+        return loss
 
-        x = x * self.format_mask[None, ...].to(x.device)
+    def training_step(self, batch, batch_idx):
+        return self.stage_step(batch, batch_idx, "trn")
 
-        x = self.tokenizer.collapse_undefined_attributes(x)
+    def validation_step(self, batch, batch_idx):
+        return self.stage_step(batch, batch_idx, "val")
 
-        x_in = x.clone()
+    def compute_metrics(self, target_token_ids, logits, n_loops_in_parent_song):
+        """
+        Compute metrics for a given batch
+        Input:
+            target_token_ids: target token ids (batch_size, events, attributes)
+            logits: model logits (batch_size, events, attributes, vocab_size)
+            n_loops_in_parent_song: number of loops in parent song (batch_size)
+        Returns:
+            Dictionary containing metrics:
+            - Cross entropy (global and per attribute)
+            - Entropy (global and per attribute)
+            - Probability (global and per attribute)
+            - Accuracy @1, @2, @4 (global and per attribute)
+        """
+        batch_size, n_events, n_attributes = target_token_ids.shape
 
-        batch, time_attr, v = x.shape
+        # Calculate cross entropy
+        ce = F.cross_entropy(
+            logits.reshape(-1, logits.shape[-1]),
+            target_token_ids.reshape(-1),
+            reduction="none",
+        )
+        ce = ce.reshape(batch_size, n_events * n_attributes)
 
-        n_unkown_positions = (x.sum(-1) > 1).sum()
+        # Calculate probabilities and entropy
+        probs = F.softmax(logits, dim=-1)
+        log_probs = F.log_softmax(logits, dim=-1)
+        entropy = -(probs * (log_probs + 1e-8)).sum(
+            dim=-1
+        )  # (batch_size, events, attributes)
 
-        step = ((time_attr - n_unkown_positions )/time_attr * steps).int()
+        # Get probability of correct tokens
+        target_probs = torch.gather(
+            probs.reshape(-1, logits.shape[-1]),
+            dim=-1,
+            index=target_token_ids.reshape(-1).unsqueeze(-1),
+        ).reshape(batch_size, n_events, n_attributes)
 
-        def schedule_fn(t):
-            t_ratio = t/steps
-            return max(pmin,pmax-t_ratio*(pmax-pmin)/(alpha))
+        # Initialize metrics dictionary
+        metrics = {
+            "cross_entropy": ce.mean(),
+            "entropy": entropy.mean(),
+            "probability": target_probs.mean(),
+        }
 
-        # plot schedule
-        plt.plot([schedule_fn(t) for t in range(steps)])
-        plt.show()
-
-
-        for t in tqdm(range(step, steps)):
-
-            alpha = schedule_fn(t)
-            
-
-            position_mask = torch.rand((batch, time_attr), device=x.device) < alpha
-
-            # create masking ratios
-            x = torch.clamp(x+position_mask[...,None],0,1)
-
-            x = x*x_in
-
-            logits = self(x.float())
-
-            # sample all
-            logits = top_k_top_p_filtering(logits[0], top_k=top_k, top_p=top_p)
-
-            probs = F.softmax(logits / temperature, dim=-1)
-
-            probs = probs * x_in
-
-            # renormalize 
-            probs = probs / probs.sum(keepdim=True, dim=-1)
-
-            probs = probs[0]
-
-            sample = torch.multinomial(probs, 1).squeeze(-1)
-
-            new_x = torch.nn.functional.one_hot(
-                sample, num_classes=v
+        # Calculate accuracies for k=[1,2,4]
+        topk_values = [1, 2, 4]
+        for k in topk_values:
+            decoder_output_probs_sort = torch.argsort(
+                probs, dim=-1, descending=True
+            )  # (batch_size, events, attributes, vocab_size)
+            accuracy = (
+                (target_token_ids.unsqueeze(-1) == decoder_output_probs_sort[..., :k])
+                  # (batch_size, events, attributes, k)
+                .any(dim=-1)  # (batch_size, events, attributes)
+                .float()
             )
 
-            x = new_x[None,...]
-
-            x = self.tokenizer.collapse_undefined_attributes(x)
-
-        return x
-
-    def generate_mask_predict(self, x, temperature=1, top_p=1, top_k=0, steps = 100, temperature_decay=False):
-
-        self.eval()
-
-        schedule = 1-torch.linspace(0, 1, steps)
-
-
-        x = x * self.format_mask[None, ...].to(x.device)
-
-        x = x[0]
-
-        last_probs = torch.ones((x.shape[0]), device=x.device) * 1e9
-
-        # set probs to one for known tokens
-        last_probs[x.sum(-1) == 1] = 0
-
-        n_known_tokens = (x.sum(-1) == 1).sum()
-
-        x_in = x.clone()
-       
-        with torch.no_grad():
-
-
-            time_attr, ft = x.shape
-
-            for i in tqdm(range(steps)):
-
-                n_tokens_to_mask = int((1 - schedule[i].item()) * (time_attr-n_known_tokens))
-
-                # mask n_tokens_to_mask tokens with lowest probability
-                tokens_to_mask = torch.argsort(last_probs,descending=True)[:n_tokens_to_mask]
-
-                x[tokens_to_mask] = x_in[tokens_to_mask]
-
-                x_masked = x.clone()
-
-                logits = self(x_masked.float()[None,...])
-
-                logits = logits[0]
-
-                logits = top_k_top_p_filtering(logits, top_k=top_k, top_p=top_p)
-
-
-                curr_probs = F.softmax(logits / temperature, dim=-1)
-
-                curr_probs[x_in < 0.5] = 0
-
-                # renormalize
-                curr_probs = curr_probs / curr_probs.sum(dim=-1, keepdim=True)
-
-               
-
-                # # get probs and index of largest prob
-                # amax = curr_probs.max(dim=-1)
-                # amax_probs = amax.values
-                # amax_idx = amax.indices
-
-                sample = torch.multinomial(curr_probs, 1).squeeze(-1)
-                amax_probs = torch.gather(curr_probs, dim=-1, index=sample.unsqueeze(-1)).squeeze(-1)
-                amax_idx = sample
-
-                # convert to one hot
-                curr_one_hot = torch.nn.functional.one_hot(
-                    amax_idx, num_classes=logits.shape[-1]
-                ).float()
-
-
-                # update_probs
-                # last_probs[tokens_to_mask] = amax_probs[tokens_to_mask]
-
-                # get entropy of current probs
-                entropy = -torch.sum(curr_probs * torch.log(curr_probs+1e-9), dim=-1)
-
-                # get log likelihood of sample
-                sample_log_likelihood = -torch.log(amax_probs+1e-9)
-
-                adjusted_surprise = sample_log_likelihood/(entropy+1e-9)
-
-            
-
-                last_probs[tokens_to_mask] = adjusted_surprise[tokens_to_mask]
-
-                # update x
-                x[tokens_to_mask] = curr_one_hot[tokens_to_mask]
-
-
-                if i % 10 == 0:
-
-                    if False:
-
-                        print(sample)
-
-
-                        print(f"n tokens to mask: {n_tokens_to_mask}")
-
-                        # print max probs
-                        print(f"max probs: {curr_probs.max()}")
-                        print(f"min probs: {curr_probs.min()}")
-
-                        # max amax prob
-                        print(f"max amax prob: {amax_probs.max()}")
-                        print(f"min amax prob: {amax_probs.min()}")
-
-                        print(f"max surprise: {adjusted_surprise.max()}")
-                        print(f"min surprise: {adjusted_surprise.min()}")
-
-                        print(f"max entropy: {entropy.max()}")
-                        print(f"min entropy: {entropy.min()}")
-
-                        print(f"max sample log likelihood: {sample_log_likelihood.max()}")
-                        print(f"min sample log likelihood: {sample_log_likelihood.min()}")
-
-                        plt.plot(last_probs.cpu().numpy())
-                        plt.show()
-
-                        
-                        print(amax_probs.shape)
-
-                        plt.plot(torch.log(amax_probs).cpu().numpy())
-                        plt.show()
-
-                        # plot amax probs heatmap
-                        plt.plot(amax_probs.sort()[0].cpu().numpy())
-                        plt.show()
-
-                        # plot heatmap of curr_probs
-                        plt.imshow(curr_probs.cpu().numpy().T, aspect="auto",interpolation="none")
-                        plt.show()
-
-                        # plot x
-                        plt.imshow(x_masked.cpu().numpy().T, aspect="auto", interpolation="none")
-                        plt.show()
-
-                        # plot x
-                        plt.imshow(x.cpu().numpy().T, aspect="auto",interpolation="none")
-                        plt.show()
-
-                        plt.imshow(logits.cpu().numpy().T, aspect="auto",interpolation="none")
-                        plt.show()
-
-
-                # print unmasked tokens
-
-        x = x[None, ...]
-
-        return x
-
-
-
-    def generate_batch(self, x, temperature=1, top_p=1, top_k=0, fixed_order=False):
-
-        self.eval()
-
-        with torch.no_grad():
-
-            x = x * self.format_mask[None, ...].to(x.device)
-
-            x = self.tokenizer.collapse_undefined_attributes(x)
-
-            batch, time_attr, ft = x.shape
-
-            # sampling order
-            order = torch.randperm(time_attr)
-
-            for i in tqdm(order):
-
-                logits = self(x.float())
-
-                curr_logits = logits[:, i]
-
-                curr_x = x[:, i]
-
-
-                # invert probs
-                # flatten
-
-                curr_logits = top_k_top_p_filtering(curr_logits, top_k=top_k, top_p=top_p)
-
-                curr_probs = F.softmax(curr_logits / temperature, dim=-1)
-
-                curr_probs[curr_x < 0.5] = 0
-
-                # renormalize, eps for rare cases where probs are 0
-                curr_probs = curr_probs / (curr_probs.sum(dim=-1, keepdim=True)+1e-12)
-
-                # print probs
-
-
-                curr_sampled = torch.multinomial(curr_probs, 1).squeeze(-1)
-
-                # convert to one hot
-                curr_one_hot = torch.nn.functional.one_hot(
-                    curr_sampled, num_classes=curr_logits.shape[-1]
-                ).float()
-
-                x[:, i] = curr_one_hot
-
-                x = self.tokenizer.collapse_undefined_attributes(x)
-
-        return x
+            metrics[f"accuracy@{k}"] = accuracy.mean()
+
+            # Per-attribute accuracy metrics
+            for i, attr in enumerate(self.tokenizer.note_attribute_order):
+                metrics[f"accuracy@{k}/{attr}"] = accuracy[:, :, i].mean()
+
+        # Per-attribute metrics
+        for attr_idx, attribute in enumerate(self.tokenizer.note_attribute_order):
+            # Per-attribute entropy
+            metrics[f"entropy/{attribute}"] = entropy[:, :, attr_idx].mean()
+
+            # Per-attribute probability
+            metrics[f"probability/{attribute}"] = target_probs[:, :, attr_idx].mean()
+
+        return metrics
+
+    def configure_optimizers(self):
+        if self.use_weight_decay:
+            optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
+        else:
+            optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+
+        def lr_lambda(current_step):
+            # Warmup phase
+            if current_step < self.warmup_steps:
+                return float(current_step) / float(max(1, self.warmup_steps))
+
+            # Post-warmup phase: start decay from step 1 after warmup
+            decay_steps = current_step - self.warmup_steps
+            return self.learning_rate_gamma ** (decay_steps / self.lr_steps_per_epoch)
+
+        scheduler = {
+            "scheduler": torch.optim.lr_scheduler.LambdaLR(
+                optimizer, lr_lambda
+            ),
+            "interval": "step",  # Update at every step
+            "frequency": 1,
+        }
+
+        return [optimizer], [scheduler]
     
-    @torch.inference_mode()
     def generate(
         self,
         x,
@@ -475,476 +244,45 @@ class EncoderOnlyModel(pl.LightningModule):
         attribute_temperature=None,
         tokens_per_step=1,
     ):
-        if sampling_steps is None:
-            sampling_steps = self.tokenizer.config["max_notes"]*len(self.tokenizer.note_attribute_order)
-        self.eval()
-        dtype = self.embedding_layer.weight.dtype
-        # convert to model dtype, (fp32, fp16)
-        x = x.to(dtype)
-
-        with torch.no_grad():
-            x = x
-            # multiply by format mask
-            x = x * self.format_mask[None, ...].to(x.device).to(dtype)
-
-            x = self.tokenizer.collapse_undefined_attributes(x)
-
-            batch, time_attr, ft = x.shape
-
-            # count number of known tokens
-            masked_tokens = (x.sum(-1) > 1).sum().int().item()
-
-
-            with tqdm(total=masked_tokens) as pbar:
-                while True:
-
-                    masked_tokens_before = (x.sum(-1) > 1).sum().int().item()
-                    
-                    # take time of forward pass
-
-                    logits = self(x)
-
-                    # invert probs
-                    # flatten
-                    flat_logits = einops.rearrange(logits, "b ta v -> (b ta) v")
-
-                    flat_logits = top_k_top_p_filtering(flat_logits, top_k=top_k, top_p=top_p)
-
-          
-                    t = temperature
-                    
-                    if attribute_temperature is not None:
-                        # turn t into 1,1,a tensor
-                        attr_t = torch.ones(self.n_attributes, device=x.device) * temperature
-                        for k, v in attribute_temperature.items():
-                            # get attribute index
-                            attr_idx = self.tokenizer.note_attribute_order.index(k)
-                            attr_t[attr_idx] = v
-                        attr_t = einops.repeat(attr_t, "a -> (b e a) 1", e=self.tokenizer.config["max_notes"], b=batch)
-                        t = attr_t
-
-                    flat_probs = F.softmax(flat_logits / t, dim=-1)
-
-                    flat_x = einops.rearrange(x, "b ta v -> (b ta) v")
-
-                    if self.standard_mlm_forward:
-                        flat_probs[flat_x < 0.5] = 0
-
-                    # renormalize
-                    flat_probs = flat_probs / flat_probs.sum(dim=-1, keepdim=True)
-
-                    sampled = torch.multinomial(flat_probs, 1).squeeze(-1)
-
-
-                    flat_x = einops.rearrange(x, "b ta v -> (b ta) v")
-
-                    masked_indices = torch.where(flat_x.sum(-1) > 1)[0]
-                    #
-                    n_masked = masked_indices.shape[0]
-                
-
-                    # tokens to unmask
-
-                    n_tokens_to_unmask = tokens_per_step
-
-                    # get indices of tokens to unmask
-                    # get indices of masked tokens
-                    # shuffle masked indices
-                    if order == "random":
-                        masked_indices = masked_indices[torch.randperm(n_masked)]
-                        indices_to_unmask = masked_indices[:n_tokens_to_unmask]
-                    elif order == "attribute":
-                        indices_to_unmask = masked_indices[:n_tokens_to_unmask]
-                    elif order == "lowest_entropy":
-                        masked_probs = flat_probs[masked_indices]
-                        entropy = -torch.sum(masked_probs * torch.log(masked_probs), dim=-1)
-                        masked_indices = masked_indices[torch.argsort(entropy)]
-                        indices_to_unmask = masked_indices[:n_tokens_to_unmask]       
-                    elif order == "highest_entropy":
-                        masked_probs = flat_probs[masked_indices]
-                        entropy = -torch.sum(masked_probs * torch.log(masked_probs), dim=-1)
-                        masked_indices = masked_indices[torch.argsort(entropy, descending=True)]
-                        indices_to_unmask = masked_indices[:n_tokens_to_unmask] 
-
-                    # replace with sampled values
-                    flat_x[indices_to_unmask] = torch.nn.functional.one_hot(
-                        sampled[indices_to_unmask], num_classes=flat_x.shape[-1]
-                    ).to(dtype)
-                    # plot
-
-                    x = einops.rearrange(
-                        flat_x, "(b ta) v -> b ta v", b=batch, ta=time_attr
-                    )
-
-                    x = self.tokenizer.collapse_undefined_attributes(x)
-
-                    # masekd tokens after
-                    masked_tokens_after = (x.sum(-1) > 1).sum().int().item()
-
-                    pbar.update(masked_tokens_before - masked_tokens_after)
-                    if masked_tokens_after == 0:
-                        break
-        return x
-    
-    @torch.no_grad()
-    def sparsify(self, x, temperature=1, top_p=1, top_k=0):
-        self.eval()
-        dtype = self.embedding_layer.weight.dtype
-        x = x.to(dtype)
-        # multiply by format mask
-        x = x * self.format_mask[None, ...].to(x.device).to(dtype)
-
-        x = self.tokenizer.collapse_undefined_attributes(x).to(dtype)
-
-
-        batch, time_attr, ft = x.shape
-
-        total_tokens = time_attr
-        # count number of known tokens
-        masked_tokens = (x.sum(-1) > 1).sum().int().item()
-        # find masking ratio
-        masking_ratio = masked_tokens / total_tokens
-
-
-        # with tqdm(total=masked_tokens) as pbar:
-        #     while True:
-
-        logits = self(x.to(dtype)).detach()
-
-        # invert probs
-        # flatten
-        flat_logits = einops.rearrange(logits, "b ta v -> (b ta) v")
-
-        flat_logits = top_k_top_p_filtering(flat_logits, top_k=top_k, top_p=top_p)
-
-        t = temperature
-        flat_probs = F.softmax(flat_logits / t, dim=-1)
-
-        flat_x = einops.rearrange(x, "b ta v -> (b ta) v")
-
-        if self.standard_mlm_forward:
-            flat_probs[flat_x < 0.5] = 0
-
-        # renormalize
-        flat_probs = flat_probs / flat_probs.sum(dim=-1, keepdim=True)
-
-        probs = einops.rearrange(flat_probs, "(b e a) v -> b e a v", b=batch, e=self.tokenizer.config["max_notes"], a=self.n_attributes)
-
-        logits = einops.rearrange(flat_logits, "(b e a) v -> b e a v", b=batch, e=self.tokenizer.config["max_notes"], a=self.n_attributes)
-        # get indices of instrument "-" token
-        
-        undef_tokens = [self.tokenizer.token2idx[f"{attr}:-"] for attr in self.tokenizer.note_attribute_order]
-        
-        # get probabilities of undef tokens for each attribute
-        undef_probs = probs[torch.arange(batch)[:, None, None], torch.arange(self.tokenizer.config["max_notes"])[None, :, None], torch.arange(self.n_attributes)[None, None, :], undef_tokens]
-
-        # print(undef_probs[0,200])
-        # take mean prob per note
-        mean_undef_probs = undef_probs.mean(dim=-1) * 100
-        # probe_attribute_idx = self.tokenizer.note_attribute_order.index(probe_attribute)
-        # undef_token_idx = self.tokenizer.token2idx[f"{probe_attribute}:-"]
-        # undef_probs =  probs[:, :, probe_attribute_idx, undef_token_idx]
-        # # plot
-        # plt.plot(undef_probs[0].detach().cpu())
-        # plt.show()
-
-        return mean_undef_probs[0]
-
-    
-
-    def get_attention_pattern(self, x, sampling_steps=None, temperature=1, top_p=1, top_k=0, order="random", typical_sampling_t=-1, temperature_decay=False, min_temperature=0.8):
-        if sampling_steps is None:
-            sampling_steps = self.tokenizer.config["max_notes"]*len(self.tokenizer.note_attribute_order)
-        self.eval()
-
-        def patch_attention(m):
-            forward_orig = m.forward
-
-            def wrap(*args, **kwargs):
-                kwargs['need_weights'] = True
-                kwargs['average_attn_weights'] = False
-
-                return forward_orig(*args, **kwargs)
-
-            self.forward = wrap
-
-        class SaveOutput:
-            def __init__(self):
-                self.outputs = []
-
-            def __call__(self, module, module_in, module_out):
-                self.outputs.append(module_out[1])
-
-            def clear(self):
-                self.outputs = []
-
-        save_output = SaveOutput()
-
-        for module in self.transformer.modules():
-            if isinstance(module, nn.MultiheadAttention):
-                patch_attention(module)
-                module.register_forward_hook(save_output)
-                
-        with torch.no_grad():
-            x = x
-            # multiply by format mask
-            x = x * self.format_mask[None, ...].to(x.device)
-
-            x = self.tokenizer.collapse_undefined_attributes(x)
-
-
-            batch, time_attr, ft = x.shape
-
-            total_tokens = time_attr
-            # count number of known tokens
-            masked_tokens = (x.sum(-1) > 1).sum().int().item()
-            # find masking ratio
-            masking_ratio = masked_tokens / total_tokens
-
-
-            with tqdm(total=masked_tokens) as pbar:
-                while True:
-
-                    masked_tokens_before = (x.sum(-1) > 1).sum().int().item()
-
-                    # plot attention pattern
-                    # first get logits
-                    logits = self(x.float())
-                    # next we visualize the attention pattern
-                    # get attention pattern
-                  
-                    return save_output
-                    
-        return x
-    
-    def compute_perplexity(self, x, tgt):
-
-        # assert that x is not batched
-        self.eval()
-        x = x.clone()
-        tgt = tgt.clone()
-
-        # get unkown position indices
-        unkown_positions = torch.where(x[0].sum(-1) > 1)[0]
-        print(unkown_positions.shape)
-        
-        log_probabilities = []
-        with torch.no_grad():
-            for i in tqdm(unkown_positions):
-                logits = self(x)
-                logits[x<0.5] = self.x_bias
-                probs = F.softmax(logits, dim=-1)
-                probs = probs * x # set non possible tokens to 0
-                probs = probs * self.format_mask[None, ...].to(x.device)
-                # normalize
-                probs = probs / probs.sum(dim=-1, keepdim=True)
-                # get probabilities
-                current_prob = (probs[:, i] * tgt[:, i]).sum(dim=-1)
-                # replace with target
-                x[:, i ] = tgt[:, i]
-                log_probabilities.append(torch.log(current_prob))
-        log_probs = torch.stack(log_probabilities)
-        log_probs_sum = log_probs.mean(dim=0)
-        return log_probs_sum
-
-    def step(self, batch, batch_idx):
-        if self.one_hot_input:
-            x = batch
-        else:
-            x = torch.nn.functional.one_hot(batch, num_classes=len(self.vocab)).float()
-        
-        batch_size = x.shape[0]
-
-        if self.standard_mlm_forward:
-            
-            # create a binary mask of size (batch_size, (notes attributes))
-            masking_probs = torch.rand(batch_size, device=self.device)
-            mask = (
-                torch.rand((x.shape[0], x.shape[1]), device=self.device)
-                < masking_probs[:, None]
-            )
-            mask = mask[:,:,None] * torch.ones_like(x, device=self.device)
-
-        else:                
-
-            masking_probs = torch.rand(batch_size, device=self.device)
-            position_mask = (
-                torch.rand((x.shape[0], x.shape[1]), device=self.device)
-                < masking_probs[:, None]
-            )
-
-            # create masking ratios
-            superposition_probs = torch.rand(batch_size, device=self.device)
-            superposition = torch.rand_like(x, device=self.device)<superposition_probs[:,None,None]
-
-            mask = position_mask[:,:,None] * superposition
-
-
-            if self.neighbour_superposition:
-
-                neighbour_sum_superposition = x.sum(dim=1, keepdim=True) > 1
-
-                # get indices of tokens to apply neighbour sum mask
-
-                neighbour_mask_probs = torch.rand(batch_size, device=self.device)
-
-                neighbour_position_mask = (
-                    torch.rand((x.shape[0], x.shape[1]), device=self.device)
-                    < neighbour_mask_probs[...,None]
-                )
-
-                neighbour_superposition_mask = neighbour_position_mask[:,:,None] * neighbour_sum_superposition
-
-                # multiply by position mask
-                neighbour_sp = neighbour_superposition_mask * position_mask[:,:,None]
-
-                mask = mask + neighbour_sp
-
-                mask = torch.clamp(mask, 0, 1)
-
-    
-        masked_x = torch.clamp(x + mask, 0, 1)
-
-        # multiply by format mask
-        masked_x = masked_x * self.format_mask[None, ...].to(masked_x.device)
-
-        target = x
-        logits = self(masked_x)
-
-        target_idx = torch.argmax(target, dim=-1)
-
-        ce = F.cross_entropy(
-            logits.reshape(-1, logits.shape[-1]),
-            target_idx.reshape(-1),
-            reduction = "none",
+        return self.model.generate(
+            x,
+            sampling_steps,
+            temperature,
+            top_p,
+            top_k,
+            order,
+            attribute_temperature,
+            tokens_per_step,
         )
-
-        known_positions = (masked_x.sum(dim=-1) == 1).flatten()
-
-        ce[known_positions] = 0
-
-        # reshape to batch, loss
-        ce = ce.reshape(batch_size, -1)
-
-        norm_ce = (ce.mean(dim=-1) / masking_probs).mean()
-
-        metrics = {}
-        metrics["cross_entropy"] = ce.mean()
-        metrics["cross_entropy_normalized"] = norm_ce
-        # TODO: check that this code is correct
-        with torch.no_grad():
-            # get probability of the correct token
-            decoder_output_probs = F.softmax(logits, dim=-1)
-            probability = torch.gather(
-                decoder_output_probs, dim=-1, index=target_idx.unsqueeze(-1)
-            ).squeeze(-1)
-            metrics["probability"] = probability.mean()
-            # sort yhat by probability
-            decoder_output_probs_sort = torch.argsort(
-                decoder_output_probs, dim=-1, descending=True
-            )
-            for k in [1, 2, 4]:
-                metrics[f"accuracy@{k}"] = (
-                    (
-                        target_idx.unsqueeze(-1)
-                        == decoder_output_probs_sort[:, :, :k]
-                    )
-                    .any(dim=-1)
-                    .float()
-                    .mean()
-                )
-        return metrics
-
-    def training_step(self, batch, batch_idx):
-        metrics = self.step(batch, batch_idx)
-        for metric in metrics:
-            self.log(f"trn/{metric}", metrics[metric], on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
-        if self.normalize_by_masking_ratio:
-            loss = metrics["cross_entropy_normalized"]
-        else:
-            loss = metrics["cross_entropy"]
-        self.log("trn/loss", loss, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
-        # log wandb name
-        self.log("gpu", loss.device.index)
-        return loss
-
-    def validation_step(self, batch, batch_idx):
-        with torch.no_grad():
-            metrics = self.step(batch, batch_idx)
-        for metric in metrics:
-            self.log(f"val/{metric}", metrics[metric], prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
-        if self.normalize_by_masking_ratio:
-            loss = metrics["cross_entropy_normalized"]
-        else:
-            loss = metrics["cross_entropy"]
-        self.log("val/loss", loss, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
-        return loss
-    
-    # def on_before_optimizer_step(self, optimizer):
-    #     # Compute the 2-norm for each layer
-    #     # If using mixed precision, the gradients are already unscaled here
-    #     norms = pl.pytorch.utilities.grad_norm(self.layer, norm_type=2)
-    #     self.log_dict(norms)
-
-    def configure_optimizers(self):
-        # learning rate decay
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
-
-        # add 1 epoch linear warmup
-        # scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, 
-        #                                               lambda epoch: max(0.1, self.learning_rate_gamma ** epoch))
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, gamma=self.learning_rate_gamma, step_size=1)
-        # scheduler = pl_bolts.optimizers.lr_scheduler.LinearWarmupCosineAnnealingLR(
-        #     optimizer,
-        #     warmup_epochs=1,
-        #     max_epochs=100,
-        #     warmup_start_lr=0.0,
-        #     eta_min=1e-6,
-        #     last_epoch=-1,
-        # )
-        return [optimizer], [scheduler]
-
-    def initialize_from_different_model(self, src_model, skip_tokens=[]):
-        for token in self.vocab:
-            if token not in src_model.vocab:
-                print(f"Token {token} not found in source model")
-                continue
-            elif any([token.split(":")[0] in skip for skip in skip_tokens]):
-                print(f"Skipping token {token}")
-                continue
-            else:
-                print(f"Transplanting token {token}")
-                src_idx = src_model.vocab.index(token)
-                tgt_idx = self.vocab.index(token)
-                self.embedding_layer.weight.data[:, tgt_idx] = (
-                    src_model.embedding_layer.weight.data[:, src_idx]
-                )
-                self.decoder_output_layer.weight.data[tgt_idx, :] = (
-                    src_model.decoder_output_layer.weight.data[src_idx, :]
-                )
-        # now copy transformer
-        self.transformer.load_state_dict(src_model.transformer.state_dict())
-
 
 
 if __name__ == "__main__":
+    SEED = 0
 
-    DATASET = "clean_drums"
+    torch.manual_seed(SEED)
 
-    BATCH_SIZE = 100
+    DATASET = "mmd_loops"
+
+    # BATCH_SIZE = 60 12, 768
+    # BATCH_SIZE = 80
+
+    BATCH_SIZE = 80
 
     tag_list = open(f"./data/{DATASET}/tags.txt").read().splitlines()
 
     N_BARS = 4 if DATASET == "harmonic" else 4
 
     tokenizer_config = {
-        "ticks_per_beat": 24 if (DATASET == "mmd_loops" or DATASET ==  "harmonic") else 48,
+        "ticks_per_beat": 24
+        if (DATASET == "mmd_loops" or DATASET == "harmonic")
+        else 48,
+        "time_hierarchy": "tick",
         "pitch_range": [0, 128],
         "max_beats": 4 * N_BARS,
         "max_notes": 75 * N_BARS if DATASET == "mmd_loops" else 20 * N_BARS,
-        "min_tempo": 50,
-        "max_tempo": 200,
-        "n_tempo_bins": 16,
+        "min_tempo": 40,
+        "max_tempo": 300,
+        "n_tempo_bins": 32,
         "n_velocity_bins": 32,
         "time_signatures": None,
         "tags": tag_list,
@@ -956,75 +294,78 @@ if __name__ == "__main__":
         "ignored_track_names": [f"Layers{i}" for i in range(0, 8)],
         "separate_drum_pitch": True,
         "use_drum_duration": False,
+        # "use_durations": True,
+        # "durations": [Fraction(1, 32), Fraction(1, 16), Fraction(1, 8), Fraction(1, 4), Fraction(1, 2), Fraction(1, 1), Fraction(2, 1), Fraction(4, 1)],
+        "fold_event_attributes": False,
     }
 
-    tokenizer = MergedTokenizer(tokenizer_config)
+    USE_RANDOM_SHIFT = False
+    tokenizer = Tokenizer(tokenizer_config)
 
-    src_model = EncoderOnlyModel.load_from_checkpoint(
-        checkpoint_path="./paper_assets/slm_.ckpt",
-        map_location="cpu"
+    model_config = {
+        "hidden_size": 768,
+        "n_heads": 12,
+        "feed_forward_size": 4 * 768,
+        "n_layers": 12,
+        "tokenizer_config": tokenizer_config,
+        "norm_first": True,
+        "enforce_constraint_in_forward": True,
+        "activation": "gelu",
+        "dropout": 0.1,
+        "use_mlm": False,
+    }
+
+    training_wrapper = TrainingWrapper(
+        model_config=model_config,
+        learning_rate=1e-4,
+        learning_rate_gamma=0.99,
+        masking_scheme="variable_superposition",
+        use_weight_decay=True,
+        warmup_steps=1000,
+        lr_steps_per_epoch=2836,
     )
 
-    model= EncoderOnlyModel(
-        hidden_size=src_model.hparams.hidden_size,
-        n_heads=src_model.hparams.n_heads,
-        feed_forward_size=src_model.hparams.feed_forward_size,
-        n_layers=src_model.hparams.n_layers,
-        vocab=tokenizer.vocab,
-        max_seq_len=src_model.hparams.max_seq_len,
-        learning_rate=src_model.hparams.learning_rate*0.1,
-        tokenizer_config=tokenizer_config,
-        one_hot_input=src_model.hparams.one_hot_input,
-        normalize_by_masking_ratio=src_model.hparams.normalize_by_masking_ratio,
-        learning_rate_gamma=0.9999,
-        norm_first= src_model.hparams.norm_first,
-        x_bias = src_model.hparams.x_bias,
-        fix_x_bias = src_model.hparams.fix_x_bias,
-        embedding_bias = src_model.hparams.embedding_bias,
-        standard_mlm_forward=src_model.hparams.standard_mlm_forward,
-        standard_mlm_masking=src_model.hparams.standard_mlm_masking,
-        avg_positional_encoding = src_model.hparams.avg_positional_encoding,
-        use_positional_encoding = src_model.hparams.use_positional_encoding,
-        mlm_restricted_sampling = src_model.hparams.mlm_restricted_sampling,
-        enforce_constraint_in_forward = src_model.hparams.enforce_constraint_in_forward,
-        neighbour_superposition = src_model.hparams.neighbour_superposition
-    )
+    # model_config = {
+    #     "hidden_size": 768,
+    #     "n_heads": 12,
+    #     "feed_forward_size": 4 * 768,
+    #     "n_layers": 12,
+    #     "tokenizer_config": tokenizer_config,
+    #     "norm_first": True,
+    #     "enforce_constraint_in_forward": True,
+    #     "activation": "gelu",
+    #     "dropout": 0.1,
+    #     "use_mlm": True,
+    # }
 
-    model.initialize_from_different_model(src_model, 
-                                          skip_tokens=["onset/tick", "offset/tick"]
-                                          )
+    # training_wrapper = TrainingWrapper(
+    #     model_config=model_config,
+    #     learning_rate=1e-4,
+    #     learning_rate_gamma=0.99,
+    #     lr_steps_per_epoch=2836,
+    #     masking_scheme="mlm",
+    #     use_weight_decay=True,
+    #     warmup_steps=1000,
+    # )
 
     mmd_4bar_filter_fn = lambda x: f"n_bars={N_BARS}" in x
 
-    trn_ds = MidiDataset(
-        cache_path=f"./data/{DATASET}/trn_midi_records_unique_pr.pt",
-        path_filter_fn=mmd_4bar_filter_fn if DATASET == "mmd_loops" else None,
-        genre_list=tag_list,
-        tokenizer=tokenizer,
-        transposition_range=[-4, 4] if DATASET == "mmd_loops" or DATASET == "harmonic" else None,
-        min_notes=8 * N_BARS if DATASET == "mmd_loops" else 4 * N_BARS,
-        max_notes=tokenizer_config["max_notes"],
+    # if a track has program 0 and is not a drum track and does not contain the word "piano" in the name, filter out the whole midi
+    # we can't risk having mislabelled tracks in the dataset
+    sm_filter_fn = lambda sm: not any(
+        track.program == 0 and not track.is_drum and "piano" not in track.name.lower()
+        for track in sm.tracks
     )
-    # print len of dataset
-    print(f"Loaded {len(trn_ds)} training records")
 
     val_ds = MidiDataset(
         cache_path=f"./data/{DATASET}/val_midi_records_unique_pr.pt",
         path_filter_fn=mmd_4bar_filter_fn if DATASET == "mmd_loops" else None,
         genre_list=tag_list,
         tokenizer=tokenizer,
-        min_notes=8 * N_BARS if DATASET == "mmd_loops" else 4 * N_BARS,
+        min_notes=4 * N_BARS if DATASET == "mmd_loops" else 4 * N_BARS,
         max_notes=tokenizer_config["max_notes"],
-    )
-    print(f"Loaded {len(val_ds)} validation records")
-
-    # desert capy uses batch size 80
-    trn_dl = torch.utils.data.DataLoader(
-        trn_ds,
-        batch_size=BATCH_SIZE,
-        shuffle=True,
-        num_workers=4,
-        pin_memory=True,
+        use_random_shift=USE_RANDOM_SHIFT,
+        sm_filter_fn=sm_filter_fn,
     )
 
     val_dl = torch.utils.data.DataLoader(
@@ -1035,11 +376,36 @@ if __name__ == "__main__":
         pin_memory=True,
     )
 
-    USE_MLM_BASELINE = False
-    
+    print(f"Loaded {len(val_ds)} validation records")
+
+    trn_ds = MidiDataset(
+        cache_path=f"./data/{DATASET}/trn_midi_records_unique_pr.pt",
+        path_filter_fn=mmd_4bar_filter_fn if DATASET == "mmd_loops" else None,
+        genre_list=tag_list,
+        tokenizer=tokenizer,
+        transposition_range=[-6, 6]
+        if DATASET == "mmd_loops" or DATASET == "harmonic"
+        else None,
+        min_notes=4 * N_BARS if DATASET == "mmd_loops" else 4 * N_BARS,
+        max_notes=tokenizer_config["max_notes"],
+        use_random_shift=USE_RANDOM_SHIFT,
+        sm_filter_fn=sm_filter_fn,
+    )
+    # print len of dataset
+    print(f"Loaded {len(trn_ds)} training records")
+
+    # desert capy uses batch size 80
+    trn_dl = torch.utils.data.DataLoader(
+        trn_ds,
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=True,
+    )
 
     wandb_logger = WandbLogger(
-        log_model=False, project="slm",
+        log_model=False,
+        project="slm",
     )
     # get name
     name = wandb_logger.experiment.name
@@ -1052,8 +418,8 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[6],
-        # precision="16-mixed",
+        devices=[0,1],
+        precision="16-mixed",
         max_epochs=10_000,
         log_every_n_steps=1,
         # val_check_interval=10,
@@ -1075,16 +441,11 @@ if __name__ == "__main__":
         logger=wandb_logger,
         gradient_clip_val=1.0,
         # accumulate_grad_batches=4,
-        check_val_every_n_epoch=10,
+        check_val_every_n_epoch=1 if DATASET == "mmd_loops" else 10,
     )
 
     trainer.fit(
-        model,
+        training_wrapper,
         trn_dl,
         val_dl,
-        # ckpt_path="checkpoints/easy-night-320/epoch=102-step=334029-val/loss_epoch=0.12267.ckpt"
-        # ckpt_path="checkpoints/trim-water-280/epoch=132-step=191919-val/loss_epoch=0.14.ckpt",
-        # ckpt_path="checkpoints/trim-water-280/epoch=132-step=191919-val/loss_epoch=0.14.ckpt",
-        # ckpt_path="checkpoints/trim-water-280/epoch=132-step=191919-val/loss_epoch=0.14.ckpt"
-        # ckpt_path="checkpoints/clear-terrain-265/epoch=111-step=161616-val/loss_epoch=0.14.ckpt"
     )

@@ -8,9 +8,9 @@ from flask_cors import CORS
 import symusic
 
 sys.path.append("slm/")
-from train import EncoderOnlyModel
-from train2 import SuperposedLanguageModel
-from train3 import TrainingWrapper
+from slm.train_old import EncoderOnlyModel
+from slm.train2_old import SuperposedLanguageModel
+from slm.train import TrainingWrapper
 from util import preview_sm, sm_fix_overlap_notes, loop_sm
 from slm.tokenizer import instrument_class_to_selected_program_nr
 import util
@@ -106,8 +106,9 @@ def seq2events(seq):
 
 model = TrainingWrapper.load_from_checkpoint(
     # "./checkpoints/effortless-sound-516/last.ckpt",
-    # "./checkpoints/misunderstood-plasma-522/last.ckpt",
-    "./checkpoints/misunderstood-monkey-520/last.ckpt",
+    "./checkpoints/misunderstood-plasma-522/last.ckpt",
+    # "./checkpoints/misunderstood-monkey-520/last.ckpt",
+    # "./checkpoints/absurd-oath-525/last.ckpt",
     map_location=device,
 )
 

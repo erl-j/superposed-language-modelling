@@ -18,7 +18,7 @@ from util import top_k_top_p_filtering, top_p_probs
 import numpy as np
 from lightning.pytorch.utilities import grad_norm
 import warnings
-from train import EncoderOnlyModel
+from slm.train_old import EncoderOnlyModel
 
 # def _cleanup_handler():
 #     for f in _cleanups:

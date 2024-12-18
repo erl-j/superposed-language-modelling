@@ -18,7 +18,7 @@ from util import top_k_top_p_filtering, top_p_probs
 import numpy as np
 from lightning.pytorch.utilities import grad_norm
 import warnings
-from train import EncoderOnlyModel
+from slm.train_old import EncoderOnlyModel
 from slm.dirichlet_flow.flow_utils import DirichletConditionalFlow, sample_cond_prob_path, expand_simplex, simplex_proj, GaussianFourierProjection
 import time
 from types import SimpleNamespace

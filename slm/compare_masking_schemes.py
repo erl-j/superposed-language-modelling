@@ -6,7 +6,7 @@ from fractions import Fraction
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
 import numpy as np
-from train2 import (
+from slm.train2_old import (
     random_add_masking_mml,
     random_add_masking_variable_superposition,
     random_add_masking_variable_superposition_ratio,

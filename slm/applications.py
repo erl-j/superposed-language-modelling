@@ -6,8 +6,8 @@ import torch
 import symusic
 
 sys.path.append("slm/")
-from train import EncoderOnlyModel
-from train2 import SuperposedLanguageModel
+from slm.train_old import EncoderOnlyModel
+from slm.train2_old import SuperposedLanguageModel
 from util import preview_sm, sm_fix_overlap_notes, loop_sm
 from slm.tokenizer import instrument_class_to_selected_program_nr
 import util

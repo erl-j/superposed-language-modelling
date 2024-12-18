@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 from data import MidiDataset
-from train import EncoderOnlyModel
+from slm.train_old import EncoderOnlyModel
 from util import preview_sm, sm_fix_overlap_notes, get_scale, loop_sm
 import os
 import IPython.display as ipd
