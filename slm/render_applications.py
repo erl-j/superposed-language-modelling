@@ -19,15 +19,22 @@ CHECKPOINTS = {
     "mlm": "./checkpoints/toasty-bush-529/last.ckpt",
 }
 
+# if dir already exists, asks for confirmation to delete
+if OUTPUT_DIR.exists():
+    if input(f"Output directory {OUTPUT_DIR} already exists. Delete? (y/n) ") == "y":
+        os.system(f"rm -r {OUTPUT_DIR}")
+    else:
+        exit()
+
 # Number of examples to generate per task
-N_EXAMPLES = 5
+N_EXAMPLES = 100
 
 
 def replace_bass_notes(
     e,
     ec,
     n_events,
-    beat_range,
+    tick_range,
     pitch_range,
     drums,
     tag,
@@ -57,6 +64,104 @@ def replace_bass_notes(
 
         return e
 
+
+def replace_notes_in_box(
+    e,
+    ec,
+    n_events,
+    tick_range,
+    pitch_range,
+    drums,
+    tag,
+    tempo,
+):
+    # remove empty events
+    e = [ev for ev in e if not ev.is_inactive()]
+
+    # find instruments that are present
+    instruments = set()
+    for i in range(len(e)):
+        instruments = instruments.union(e[i].a["instrument"])
+    # if empty every instrument is present
+    instruments = ec().a["instrument"]
+    if len(instruments) == 0:
+        instruments = ec().a["instrument"]
+
+    # non drum events
+    non_drum_events = [ev for ev in e if "Drums" not in ev.a["instrument"]]
+
+    # # set all tags to tag and all tempos to tempo
+    # for i in range(len(e)):
+    #     e[i].a["tag"] = {tag}
+    #     e[i].a["tempo"] = {str(ec().quantize_tempo(tempo))}
+
+    ticks = set([str(r) for r in range(tick_range[0], tick_range[1])])
+    pitches = set(
+        [
+            f"{r} (Drums)" if drums else f"{r}"
+            for r in range(pitch_range[0], pitch_range[1])
+        ]
+    )
+
+    notes_before_removal = len(e)
+
+    infill_region_pitches = pitch_range[1] - pitch_range[0]
+
+    # remove if in beat range and pitch range
+    e = [
+        ev
+        for ev in e
+        if not (
+            ev.a["onset/global_tick"].issubset(ticks)
+            and ev.a["pitch"].issubset(pitches)
+        )
+    ]
+    notes_after_removal = len(e)
+    notes_removed = notes_before_removal - notes_after_removal
+
+    infill_region_ticks = tick_range[1] - tick_range[0]
+    infill_region_bars = (
+        infill_region_ticks / 4 * ec().tokenizer.config["ticks_per_beat"]
+    )
+    # get valid durations
+    valid_durations = set()
+    for d in ec().tokenizer.config["durations"]:
+        if d <= infill_region_bars:
+            valid_durations.add(str(d))
+
+    valid_onsets = {str(r) for r in range(tick_range[0], tick_range[1])}
+    valid_offsets = (
+        {"none (Drums)"}
+        if drums
+        else {str(r) for r in range(tick_range[0] + 4, tick_range[1] + 1)}
+    )
+    valid_pitches = pitches
+    valid_durations = {"none (Drums)"} if drums else valid_durations
+
+    infill_constraint = {
+        "pitch": valid_pitches | {"-"},
+        "onset/global_tick": valid_onsets | {"-"},
+        "offset/global_tick": valid_offsets | {"-"},
+        "instrument": ({"Drums"} if drums else instruments - {"Drums"}) | {"-"},
+        # "duration": valid_durations  | {"-"},
+    }
+
+    e += [
+        ec().intersect(infill_constraint).force_active() for _ in range(notes_removed)
+    ]
+
+    # # pad with empty notes
+    e += [ec().force_inactive() for e in range(n_events - len(e))]
+
+    # # set tag
+    # e = [ev.intersect({"tag": {f"{tag}", "-"}}) for ev in e]
+
+    # # set tempo
+
+    # e = [e.intersect(ec().tempo_constraint(tempo)) for e in e]
+
+    return e
+
 # Define tasks with their parameters
 TASKS = {
     "replace_bass_notes": {
@@ -67,12 +172,27 @@ TASKS = {
             "tokens_per_step": 1,
         },
         "fn": replace_bass_notes,
-        "beat_range": None,
+        "tick_range": None,
         "pitch_range": None,
         "drums": None,
         "tag": None,
         "tempo": None,
     },
+    "infill_time_middle": {
+         "sampling_settings": {
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "top_k": 0,
+            "tokens_per_step": 1,
+        },
+        "fn": replace_notes_in_box,
+        "tick_range": [4*24,8*24],
+        "pitch_range": [20,100],
+        "drums": False,
+        "tag": "pop",
+        "tempo": None,
+    },
+         
 }
 
 def setup_model(checkpoint_path):
@@ -165,7 +285,7 @@ def main():
                     test_events,
                     lambda : MusicalEventConstraint(model.tokenizer),
                     model.tokenizer.config["max_notes"],
-                    task_config["beat_range"],
+                    task_config["tick_range"],
                     task_config["pitch_range"],
                     task_config["drums"],
                     task_config["tag"],
