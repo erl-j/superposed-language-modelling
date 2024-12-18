@@ -720,12 +720,15 @@ def band_beat(
     # add
     e = []
     # add 20 bass
-    e += [ec().intersect({"instrument": {"Bass"}}) for _ in range(20)]
+    e += [ec().intersect({"instrument": {"Bass"}}).force_active()
+           for _ in range(20)]
     # add 40 piano
-    e += [ec().intersect({"instrument": {"Piano"}}) for _ in range(70)]
+    e += [ec().intersect({"instrument": {"Piano"}}).force_active()
+           for _ in range(40)]
 
     # add 70 drums
-    e += [ec().intersect({"instrument": {"Drums"}}) for _ in range(60)]
+    e += [ec().intersect({"instrument": {"Drums"}}).force_active()
+           for _ in range(60)]
 
     # # add 40 optional notes
     # e += [
@@ -737,7 +740,7 @@ def band_beat(
     e += [ec().force_inactive() for _ in range(n_events - len(e))]
 
     # set to 125
-    e = [ev.intersect(ec().tempo_constraint(130)) for ev in e]
+    e = [ev.intersect(ec().tempo_constraint(110)) for ev in e]
 
     # set tag to pop
     e = [ev.intersect({"tag": {"pop", "-"}}) for ev in e]
