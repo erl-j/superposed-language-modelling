@@ -50,19 +50,6 @@ TMP_DIR = ROOT_DIR + "artefacts/tmp"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
-
-def seq2events(seq):
-    # take list of dictionnaries with string items to instead be musical event constraints
-
-    events = []
-    for s in seq:
-        event = MusicalEventConstraint(
-            {key: {value} for key, value in s.items()},
-            model.tokenizer,
-        )
-        events.append(event)
-    return events
-
 # model = (
 #     EncoderOnlyModel.load_from_checkpoint(
 #         ROOT_DIR + checkpoints[MODEL],
@@ -122,10 +109,6 @@ def generate(
     attribute_temperature=None,
     order=None,
 ):
-    # hack to see if we are using latest version
-    if model.model is not None:
-        import einops
-        mask = einops.rearrange(mask, "batch (event attribute) v -> batch event attribute v", attribute = len(model.tokenizer.note_attribute_order))
 
     out = model.generate(
         mask,
@@ -137,14 +120,6 @@ def generate(
         attribute_temperature=attribute_temperature,
     )[0].argmax(-1)
     
-    # print(out.shape)
-    # if model.model is not None:
-    #     import einops
-
-    #     out = einops.rearrange(
-    #         out, "event attribute -> (event attribute)"
-    #     )
-
     return out
 
 
@@ -160,14 +135,6 @@ if USE_FP16:
 # create 128 bpm rock loop with drums, bass, guitar with max 280 notes
 N_EVENTS = model.tokenizer.config["max_notes"]
 
-blank_event_dict = {
-    attr: {
-        token.split(":")[-1]
-        for token in model.tokenizer.vocab
-        if token.startswith(f"{attr}:")
-    }
-    for attr in model.tokenizer.note_attribute_order
-}
 ec = lambda: MusicalEventConstraint(model.tokenizer)
 
 def get_external_ip():

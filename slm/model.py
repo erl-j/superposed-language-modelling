@@ -69,6 +69,9 @@ class SuperposedLanguageModel(torch.nn.Module):
         # pass through transformer
         logits = self(x_masked)
         return logits
+    
+    def get_device(self):
+        return next(self.parameters()).device
 
     def generate(
         self,
@@ -93,6 +96,8 @@ class SuperposedLanguageModel(torch.nn.Module):
                 self.tokenizer.note_attribute_order
             )
         dtype = self.embedding_layer.weight.dtype
+        # move x to device
+        x = x.to(self.get_device())
         # convert to model dtype, (fp32, fp16)
         syntax_mask = self.syntax_mask[None, None, ...].to(x.device).to(dtype)
         x = x.to(dtype)
@@ -194,7 +199,6 @@ class SuperposedLanguageModel(torch.nn.Module):
                     pbar.update(masked_tokens_before - masked_tokens_after)
                     if masked_tokens_after == 0:
                         break
-        print(f"output shape {x.shape}")
         return x
 
     def slm_forward(self, x):

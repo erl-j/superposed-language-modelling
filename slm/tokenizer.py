@@ -251,7 +251,8 @@ class Tokenizer():
         event_masks = [self.event_constraint_to_mask(ec) for ec in ecs]
         mask = torch.stack(event_masks, dim=0)[None, ...]
         # reshape 
-        mask = einops.rearrange(mask, "b n a v -> b (n a) v")
+        if self.config["fold_event_attributes"]:
+            mask = einops.rearrange(mask, "b n a v -> b (n a) v")
         return mask
             
     def encode(self, sm, tag):
