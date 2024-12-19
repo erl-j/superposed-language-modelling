@@ -7,9 +7,16 @@ from train import TrainingWrapper
 from data import MidiDataset
 from conversion_utils import looprep_to_sm, sm_to_events, sm_to_looprep
 from constraints.core import MusicalEventConstraint
-
+import numpy as np
+import math
+import time
 # Configuration
 SEED = 42
+
+torch.manual_seed(SEED)
+random.seed(SEED)
+np.random.seed(SEED)
+# 
 DEVICE = "cuda:6" if torch.cuda.is_available() else "cpu"
 OUTPUT_DIR = Path("./artefacts/applications")
 
@@ -27,7 +34,7 @@ if OUTPUT_DIR.exists():
         exit()
 
 # Number of examples to generate per task
-N_EXAMPLES = 100
+N_EXAMPLES = 10
 
 
 def replace_bass_notes(
@@ -40,21 +47,9 @@ def replace_bass_notes(
     tag,
     tempo,
     ):
-        # count n bass notes
-        n_bass_notes = len([ev for ev in e if ev.a["instrument"] == {"Bass"}])
-        # remove all bass
-        e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Bass"})]
-
-        # add back bass notes
-        e += [
-            ec()
-            .intersect({"instrument": {"Bass"}})
-            .force_active()
-            for _ in range(n_bass_notes)
-        ]
-
-        # pad with empty notes
-        e += [ec().force_inactive() for _ in range(n_events - len(e))]
+      
+        # replace bass notes with blank bass notes
+        e = [ ec().intersect({"instrument": {"Bass"}}).force_active() if ev.a["instrument"] == {"Bass"} else ev for ev in e]
 
         # # add tag constraint
         # e = [ev.intersect({"tag": {tag, "-"}}) for ev in e]
@@ -75,25 +70,6 @@ def replace_notes_in_box(
     tag,
     tempo,
 ):
-    # remove empty events
-    e = [ev for ev in e if not ev.is_inactive()]
-
-    # find instruments that are present
-    instruments = set()
-    for i in range(len(e)):
-        instruments = instruments.union(e[i].a["instrument"])
-    # if empty every instrument is present
-    instruments = ec().a["instrument"]
-    if len(instruments) == 0:
-        instruments = ec().a["instrument"]
-
-    # non drum events
-    non_drum_events = [ev for ev in e if "Drums" not in ev.a["instrument"]]
-
-    # # set all tags to tag and all tempos to tempo
-    # for i in range(len(e)):
-    #     e[i].a["tag"] = {tag}
-    #     e[i].a["tempo"] = {str(ec().quantize_tempo(tempo))}
 
     ticks = set([str(r) for r in range(tick_range[0], tick_range[1])])
     pitches = set(
@@ -103,32 +79,6 @@ def replace_notes_in_box(
         ]
     )
 
-    notes_before_removal = len(e)
-
-    infill_region_pitches = pitch_range[1] - pitch_range[0]
-
-    # remove if in beat range and pitch range
-    e = [
-        ev
-        for ev in e
-        if not (
-            ev.a["onset/global_tick"].issubset(ticks)
-            and ev.a["pitch"].issubset(pitches)
-        )
-    ]
-    notes_after_removal = len(e)
-    notes_removed = notes_before_removal - notes_after_removal
-
-    infill_region_ticks = tick_range[1] - tick_range[0]
-    infill_region_bars = (
-        infill_region_ticks / 4 * ec().tokenizer.config["ticks_per_beat"]
-    )
-    # get valid durations
-    valid_durations = set()
-    for d in ec().tokenizer.config["durations"]:
-        if d <= infill_region_bars:
-            valid_durations.add(str(d))
-
     valid_onsets = {str(r) for r in range(tick_range[0], tick_range[1])}
     valid_offsets = (
         {"none (Drums)"}
@@ -136,31 +86,64 @@ def replace_notes_in_box(
         else {str(r) for r in range(tick_range[0] + 4, tick_range[1] + 1)}
     )
     valid_pitches = pitches
-    valid_durations = {"none (Drums)"} if drums else valid_durations
 
     infill_constraint = {
         "pitch": valid_pitches | {"-"},
-        "onset/global_tick": valid_onsets | {"-"},
-        "offset/global_tick": valid_offsets | {"-"},
-        "instrument": ({"Drums"} if drums else instruments - {"Drums"}) | {"-"},
+        "onset/global_tick": ticks | {"-"},
+        "offset/global_tick": ticks | {"-"},
         # "duration": valid_durations  | {"-"},
     }
 
-    e += [
-        ec().intersect(infill_constraint).force_active() for _ in range(notes_removed)
-    ]
-
-    # # pad with empty notes
-    e += [ec().force_inactive() for e in range(n_events - len(e))]
-
-    # # set tag
-    # e = [ev.intersect({"tag": {f"{tag}", "-"}}) for ev in e]
-
-    # # set tempo
-
-    # e = [e.intersect(ec().tempo_constraint(tempo)) for e in e]
+    # replace notes in the middle of the loop
+    e = [ec().intersect(infill_constraint).force_active() if (len(ev.a["onset/global_tick"].intersection(ticks)) > 0 and len(ev.a["pitch"].intersection(valid_pitches)) > 0) else ev for ev in e]
 
     return e
+
+
+def replace_pitches_given_pitch_set(e,
+    ec,
+    n_events,
+    tick_range,
+    pitch_range,
+    drums,
+    tag,
+    tempo,
+):
+    # get union of pitches of all notes
+    current_pitches = set()
+    for ev in e:
+        current_pitches.update(ev.a["pitch"])
+
+    # for current active pitches. replace pitch
+    for event_idx in range(n_events):
+        if e[event_idx].is_active():
+            e[event_idx].a["pitch"] = current_pitches
+            e[event_idx] = e[event_idx].force_active()
+
+    return e
+
+def replace_pitches(e,
+        ec,
+        n_events,
+        tick_range,
+        pitch_range,
+        drums,
+        tag,
+        tempo,
+    ):
+
+    # set pitch set to all pitches
+    for event_idx in range(n_events):
+        if e[event_idx].is_active():
+            e[event_idx].a["pitch"] = ec().a["pitch"]
+            e[event_idx] = e[event_idx].force_active()
+    
+    return e
+
+
+def unconditional(e, ec, n_events, tick_range, pitch_range, drums, tag, tempo):
+    return [ec() for _ in range(n_events)]
+
 
 # Define tasks with their parameters
 TASKS = {
@@ -178,21 +161,49 @@ TASKS = {
         "tag": None,
         "tempo": None,
     },
-    "infill_time_middle": {
+    "replace_pitches" : {
          "sampling_settings": {
             "temperature": 1.0,
             "top_p": 1.0,
             "top_k": 0,
             "tokens_per_step": 1,
         },
-        "fn": replace_notes_in_box,
-        "tick_range": [4*24,8*24],
-        "pitch_range": [20,100],
-        "drums": False,
-        "tag": "pop",
+        "fn": replace_pitches,
+        "tick_range": None,
+        "pitch_range": None,
+        "drums": None,
+        "tag": None,
         "tempo": None,
     },
-         
+    "replace_pitches_given_pitch_set" : {
+            "sampling_settings": {
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "top_k": 0,
+            "tokens_per_step": 1,
+        },
+        "fn": replace_pitches_given_pitch_set,
+        "tick_range": None,
+        "pitch_range": None,
+        "drums": None,
+        "tag": None,
+        "tempo": None
+        },
+    "unconditional": {
+        "sampling_settings": {
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "top_k": 0,
+            "tokens_per_step": 1,
+        },
+        "fn": unconditional,
+        "tick_range": None,
+        "pitch_range": None,
+        "drums": None,
+        "tag": None,
+        "tempo": None,
+    },
+        
 }
 
 def setup_model(checkpoint_path):
@@ -228,6 +239,9 @@ def load_test_dataset(tokenizer):
     )
 
     return test_ds   
+
+
+records = []
 
 def main():
     # Set random seed for reproducibility
@@ -279,7 +293,11 @@ def main():
                 # Convert to events
                 test_events = sm_to_events(test_sm, "pop", model.tokenizer)
 
+                print(f"Test events: {len(test_events)}")
 
+                test_mask = model.tokenizer.event_constraints_to_mask(test_events)
+
+                tic = time.time()
                 # apply task function
                 task_events = task_config["fn"](
                     test_events,
@@ -291,21 +309,43 @@ def main():
                     task_config["tag"],
                     task_config["tempo"],
                 )
+                toc = time.time()
+                print(f"Time taken to apply task function: {toc-tic}")
+
+                print(f"Task events: {len(task_events)}")
 
                 # convert to mask
                 task_mask = model.tokenizer.event_constraints_to_mask(task_events)
 
-                # Generate from mask
-                output_mask = model.generate(
-                    task_mask,
-                    **task_config["sampling_settings"],
-                )[0].argmax(dim=-1)
+                # get conditional likelihood
+                with torch.no_grad():
+                    model.eval()
+                    log_probs = model.model.conditional_log_likelihood(
+                        test_mask.to(DEVICE),
+                        task_mask.to(DEVICE)
+                    )
+                    print(log_probs)
+                records.append({"model": checkpoint_name, "task": task_name, "log_probs": log_probs.item(), "example": i})
+                
+                with torch.no_grad():
+                    # Generate from mask
+                    output_mask = model.generate(
+                        task_mask,
+                        **task_config["sampling_settings"],
+                    )[0].argmax(dim=-1)
 
                 # Convert to midi
                 output_sm = model.tokenizer.decode(output_mask)
 
                 # write
                 output_sm.dump_midi(task_dir / f"generated_{i}.mid")
+
+    print(records)
+    # save records as csv
+    import pandas as pd
+    df = pd.DataFrame(records)
+    df.to_csv(OUTPUT_DIR / "records.csv")
+
 
 if __name__ == "__main__":
     main()

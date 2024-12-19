@@ -235,14 +235,14 @@ class TrainingWrapper(pl.LightningModule):
     
     def generate(
         self,
-        x,
+        x=None,
         sampling_steps=None,
-        temperature=1,
-        top_p=1,
-        top_k=0,
+        temperature=None,
+        top_p=None,
+        top_k=None,
         order="random",
         attribute_temperature=None,
-        tokens_per_step=1,
+        tokens_per_step=None,
     ):
         return self.model.generate(
             x,
@@ -311,7 +311,7 @@ if __name__ == "__main__":
         "norm_first": True,
         "enforce_constraint_in_forward": True,
         "activation": "gelu",
-        "dropout": 0.1,
+        "dropout": 0.0,
         "use_mlm": False,
     }
 
@@ -418,7 +418,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[0,1],
+        devices=[4,7],
         precision="16-mixed",
         max_epochs=10_000,
         log_every_n_steps=1,

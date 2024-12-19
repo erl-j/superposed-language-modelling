@@ -52,7 +52,7 @@ class SuperposedLanguageModel(torch.nn.Module):
         else:
             return self.slm_forward(x)
 
-    def mlm_forward_w_constraint(self, x):
+    def mlm_forward_from_constraint(self, x):
         """
         Forward pass for Masked Language Model (MLM) with constraint.
         Input:
@@ -72,7 +72,51 @@ class SuperposedLanguageModel(torch.nn.Module):
     
     def get_device(self):
         return next(self.parameters()).device
+    
+    @torch.no_grad()
+    @torch.inference_mode()
+    def conditional_log_likelihood(self, target, constraint):
+        """
+        Compute conditional likelihood of a sequence given a constraint.
+        Input:
+            target: Input tensor of shape (batch_size, events, attributes, vocab_size)
+            constraint: Input tensor of shape (batch_size, events, attributes, vocab_size)
+        """
+        self.eval()
+        target = target.to(self.get_device())
+        constraint = constraint.to(self.get_device())
+        with torch.no_grad():
+            if self.use_mlm:
+                logits = self.mlm_forward_from_constraint(constraint)
+            else:
+                logits = self.slm_forward(constraint)
+        # target logits
+        target_logits = (target * logits).sum(dim=-1)
 
+        print(f"Min logits: {logits.min()}, Max logits: {logits.max()}, Mean logits: {logits.mean()}, Median logits: {logits.median()}")
+
+        # print min max mean median
+        print(f"Min target logits: {target_logits.min()}, Max target logits: {target_logits.max()}, Mean target logits: {target_logits.mean()}, Median target logits: {target_logits.median()}")
+
+        probs = F.softmax(logits, dim=-1)
+        # add epsilon to avoid log(0)
+
+        probs = probs * constraint
+        probs = probs / probs.sum(dim=-1, keepdim=True)
+        # get log likelihood
+        target_probs = (target * probs).sum(dim=-1)
+        # assert that target probs sums to one 
+        print(target_probs.shape)
+        # count zeros in target probs
+        n_zeros = torch.sum(target_probs == 0)
+        print(f"Number of zeros in target probs: {n_zeros}")
+        # mean prob
+        print(target_probs.mean())
+        log_likelihood = torch.log(target_probs).mean()
+        return log_likelihood
+
+    @torch.no_grad()
+    @torch.inference_mode()
     def generate(
         self,
         x,
@@ -95,6 +139,7 @@ class SuperposedLanguageModel(torch.nn.Module):
             sampling_steps = self.tokenizer.config["max_notes"] * len(
                 self.tokenizer.note_attribute_order
             )
+        constraint = x
         dtype = self.embedding_layer.weight.dtype
         # move x to device
         x = x.to(self.get_device())
@@ -113,7 +158,7 @@ class SuperposedLanguageModel(torch.nn.Module):
                 while True:
                     masked_tokens_before = (x.sum(-1) > 1).sum().int().item()
                     if self.use_mlm:
-                        logits = self.mlm_forward_w_constraint(x)
+                        logits = self.mlm_forward_from_constraint(x)
                     else:
                         logits = self(x)
                     flat_logits = einops.rearrange(logits, "b t a v -> (b t a) v")
@@ -199,6 +244,7 @@ class SuperposedLanguageModel(torch.nn.Module):
                     pbar.update(masked_tokens_before - masked_tokens_after)
                     if masked_tokens_after == 0:
                         break
+        # assert that x respects constraints
         return x
 
     def slm_forward(self, x):

@@ -6,9 +6,29 @@ import symusic
 from util import piano_roll
 import muspy
 import tqdm
+import pandas as pd
+
+# TODO: remove layers from structural analysis
+
+# load csv
 
 # Load ground truth examples
 base_path = Path("../artefacts/applications")
+
+csv_path = base_path / "records.csv"
+
+# Load records from CSV
+records = pd.read_csv(csv_path)
+
+# plot mean log likelhood for each model and task
+models = records.model.unique()
+tasks = records.task.unique()
+
+for task in tasks:
+    for model in models:
+        mean_ll = records[(records.model == model) & (records.task == task)].log_probs.mean()
+        print(f"Task: {task}, Model: {model}, Mean Log Likelihood: {mean_ll}")
+
 ground_truth_path = base_path / "ground_truth"
 ground_truth_files = list(ground_truth_path.glob("*.mid"))
 
@@ -35,6 +55,7 @@ records = [
         "path": path,
         "task": "ground_truth",
         "model": "ground_truth",
+        "sample_index" : int(path.split(".mid")[0].split("_")[-1])
     }
     for midi, path in zip(ground_truth_midis, ground_truth_files)
 ]
@@ -72,14 +93,95 @@ records = [
         "metric/polyphony": muspy.metrics.polyphony(
             muspy.read_midi(record["path"])
         ),
-    }
+        "metric/n_pitches_used": muspy.metrics.n_pitches_used(
+            muspy.read_midi(record["path"])
+        ),
+        "metric/n_pitch_classes_used": muspy.metrics.n_pitch_classes_used(
+            muspy.read_midi(record["path"])
+        ),
+        "metric/pitch_entropy": muspy.metrics.pitch_entropy(
+            muspy.read_midi(record["path"])
+        )}
     for record in records
 ]
 
 print(f"Processed {len(records)} records")
+
+#%%
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+import pandas as pd
+
+# Convert records to DataFrame for easier plotting
+df = pd.DataFrame(records)
+
+# Get all metrics columns
+metric_cols = [col for col in df.columns if col.startswith("metric/")]
+
+# Create violin plots for each task
+for task in tasks:
+    # Filter data for current task
+    task_df = df[df["task"] == task]
+
+    # Calculate number of metrics and set up subplot grid
+    n_metrics = len(metric_cols)
+    n_rows = (n_metrics + 2) // 3  # 3 plots per row, round up
+    n_cols = min(3, n_metrics)
+
+    # Create figure with subplots
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(15, 5 * n_rows))
+    fig.suptitle(f"Metric Distributions for Task: {task}", size=16, y=1.02)
+
+    # Flatten axes array for easier iteration
+    if n_rows > 1:
+        axes = axes.flatten()
+    elif n_rows == 1 and n_cols == 1:
+        axes = [axes]
+
+    # Create violin plot for each metric
+    for idx, metric in enumerate(metric_cols):
+        if idx < len(axes):  # Ensure we don't exceed number of subplots
+            sns.violinplot(data=task_df, x="model", y=metric, ax=axes[idx])
+            # Rotate x-axis labels for better readability
+            axes[idx].set_xticklabels(axes[idx].get_xticklabels(), rotation=45)
+            # Clean up metric name for title
+            metric_name = metric.replace("metric/", "").replace("_", " ").title()
+            axes[idx].set_title(metric_name)
+            axes[idx].set_xlabel("")
+
+    # Remove any empty subplots
+    for idx in range(len(metric_cols), len(axes)):
+        fig.delaxes(axes[idx])
+
+    # Adjust layout to prevent overlap
+    plt.tight_layout()
+
+    # Save the plot
+    plt.show()
+# Calculate summary statistics for each metric by task and model
+summary_stats = []
+for task in tasks:
+    task_df = df[df["task"] == task]
+    for model in models + ["ground_truth"]:
+        model_df = task_df[task_df["model"] == model]
+        stats = {"task": task, "model": model}
+        for metric in metric_cols:
+            stats[f"{metric}_mean"] = model_df[metric].mean()
+            stats[f"{metric}_std"] = model_df[metric].std()
+        summary_stats.append(stats)
+
+# Convert summary statistics to DataFrame
+summary_df = pd.DataFrame(summary_stats)
+
+# Print summary table
+print("\nSummary Statistics:")
+print(summary_df.to_string())
+
+# Optionally save summary statistics to CSV
+# summary_df.to_csv("metric_summary.csv", index=False)
     
 #%%
-import pandas as pd
 
 df = pd.DataFrame(records)
 
@@ -129,6 +231,17 @@ except ImportError:
     print("=" * 80)
     print(results)
 
+#%%
+# take mean piano roll for each model and task and show
+# crop piano rolls to min length
+for model in models:
+    for task in tasks:
+        piano_rolls = df[(df.model == model) & (df.task == task)].piano_roll
+        min_length = min([pr.shape[1] for pr in piano_rolls])
+        mean_piano_roll = np.mean([pr[:, :min_length] for pr in piano_rolls], axis=0)
+        plt.imshow(mean_piano_roll, aspect="auto", origin="lower", cmap="Blues")
+        plt.title(f"{model} {task}")
+        plt.show()
 #%%
 
 # n_cols = 1 + len(models)  # ground truth + each model

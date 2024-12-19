@@ -93,9 +93,12 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 model = TrainingWrapper.load_from_checkpoint(
     # "./checkpoints/effortless-sound-516/last.ckpt",
-    "./checkpoints/misunderstood-plasma-522/last.ckpt",
+    # "./checkpoints/misunderstood-plasma-522/last.ckpt",
+    "./checkpoints/mild-snowball-531/last.ckpt",
     # "./checkpoints/misunderstood-monkey-520/last.ckpt",
     # "./checkpoints/absurd-oath-525/last.ckpt",
+    # "./checkpoints/toasty-bush-529/last.ckpt",
+    # "./checkpoints/usual-fire-530/last.ckpt",
     map_location=device,
 )
 

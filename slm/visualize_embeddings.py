@@ -1,47 +1,60 @@
 #%%
-from slm.train2_old import SuperposedLanguageModel
 # from train import EncoderOnlyModel
 import numpy as np
 import matplotlib.pyplot as plt
+from train import TrainingWrapper
 #%%
-import paper_checkpoints
 
-model = SuperposedLanguageModel.load_from_checkpoint(
-    # "../checkpoints/faithful-wave-417/last.ckpt",
-    # "../checkpoints/smart-wood-419/last.ckpt",
-    # "../checkpoints/zesty-dawn-376/last.ckpt",
-    # "../checkpoints/cerulean-dragon-425/last.ckpt",
-    # "../checkpoints/unique-tree-426/last.ckpt",
-    # "../checkpoints/bumbling-dream-427/last.ckpt",
-    # "../checkpoints/lively-flower-428/last.ckpt",
-    # "../checkpoints/sparkling-dust-435/last.ckpt",
-    # "../checkpoints/misunderstood-eon-449/last.ckpt",
-    # "../checkpoints/chocolate-river-450/last.ckpt",
-    # "../checkpoints/fragrant-dew-452/last.ckpt",
-    # "../checkpoints/lilac-feather-455/last.ckpt",
-    # "../checkpoints/copper-monkey-456/last.ckpt",
-    # "../checkpoints/ruby-glade-461/last.ckpt",
-    # "../checkpoints/drawn-universe-463/last.ckpt",
-    # "../checkpoints/dulcet-jazz-464/last.ckpt",
-    "../checkpoints/stoic-capybara-480/last.ckpt",
-    map_location="cpu",
-)
+# model = SuperposedLanguageModel.load_from_checkpoint(
+#     # "../checkpoints/faithful-wave-417/last.ckpt",
+#     # "../checkpoints/smart-wood-419/last.ckpt",
+#     # "../checkpoints/zesty-dawn-376/last.ckpt",
+#     # "../checkpoints/cerulean-dragon-425/last.ckpt",
+#     # "../checkpoints/unique-tree-426/last.ckpt",
+#     # "../checkpoints/bumbling-dream-427/last.ckpt",
+#     # "../checkpoints/lively-flower-428/last.ckpt",
+#     # "../checkpoints/sparkling-dust-435/last.ckpt",
+#     # "../checkpoints/misunderstood-eon-449/last.ckpt",
+#     # "../checkpoints/chocolate-river-450/last.ckpt",
+#     # "../checkpoints/fragrant-dew-452/last.ckpt",
+#     # "../checkpoints/lilac-feather-455/last.ckpt",
+#     # "../checkpoints/copper-monkey-456/last.ckpt",
+#     # "../checkpoints/ruby-glade-461/last.ckpt",
+#     # "../checkpoints/drawn-universe-463/last.ckpt",
+#     # "../checkpoints/dulcet-jazz-464/last.ckpt",
+#     "../checkpoints/stoic-capybara-480/last.ckpt",
+#     map_location="cpu",
+# )
 
-print(model.tokenizer.note_attribute_order)
+# print(model.tokenizer.note_attribute_order)
 
 # ckpt = paper_checkpoints.checkpoints["slm"]
 # model = EncoderOnlyModel.load_from_checkpoint(
 #     "../"+ckpt,
 #     map_location="cpu",
 # )
+
+CHECKPOINTS = {
+    "slm": "../checkpoints/usual-fire-530/last.ckpt",
+    "mlm": "../checkpoints/toasty-bush-529/last.ckpt",
+}
+
+model = TrainingWrapper.load_from_checkpoint(
+    CHECKPOINTS["slm"],
+    map_location="cpu",
+)
+
+
+
+
 # %%
 
 # set cmap to spectral everywhere
 plt.rcParams["image.cmap"] = "Spectral"
 
-vocab = model.vocab
+vocab = model.tokenizer.vocab
 
-embedding = model.embedding_layer.weight.detach().numpy().T
+embedding = model.model.embedding_layer.weight.detach().numpy().T
 
 # imshow embeddings
 plt.figure()
@@ -52,7 +65,7 @@ plt.show()
 
 print(embedding.shape)
 
-unembedding = model.decoder_output_layer.weight.detach().numpy()
+unembedding = model.model.unembedding_layer.weight.detach().numpy()
 
 print(unembedding.shape)
 
@@ -115,7 +128,7 @@ plt.show()
 
 # now only plot the embeddings for tokens that start with "onset/global_tick"
 
-vocab = model.vocab
+vocab = model.tokenizer.vocab
 print(vocab)
 onset_vocab = [v for v in vocab if v.startswith("onset/global_tick")]
 
@@ -141,7 +154,7 @@ plt.show()
 
 
 #%% now show pitch embeddings
-vocab = model.vocab
+vocab = model.tokenizer.vocab
 print(vocab)
 pitch_vocab = [v for v in vocab if v.startswith("pitch")]
 
@@ -163,7 +176,7 @@ plt.show()
 
 # %%
 
-vocab = model.vocab
+vocab = model.tokenizer.vocab
 print(vocab)
 duration_vocab = [v for v in vocab if v.startswith("duration")]
 
@@ -190,7 +203,7 @@ plt.show()
 # %%
 
 # plot velocity embeddings
-vocab = model.vocab
+vocab = model.tokenizer.vocab
 velocity_vocab = [v for v in vocab if v.startswith("velocity")]
 
 # take first 25
@@ -206,7 +219,7 @@ plt.yticks(range(len(velocity_vocab)), velocity_vocab)
 
 #%%
 # plot tempo embeddings
-vocab = model.vocab
+vocab = model.tokenizer.vocab
 print(vocab)
 tempo_vocab = [v for v in vocab if v.startswith("tempo")]
 tempo_embeddings = embedding[[i for i, v in enumerate(vocab) if v in tempo_vocab]]
@@ -219,7 +232,7 @@ plt.show()
 
 #%% plot tag embeddings
 
-vocab = model.vocab
+vocab = model.tokenizer.vocab
 print(vocab)
 
 tag_vocab = [v for v in vocab if v.startswith("tag")]
