@@ -29,6 +29,8 @@ for task in tasks:
         mean_ll = records[(records.model == model) & (records.task == task)].log_probs.mean()
         print(f"Task: {task}, Model: {model}, Mean Log Likelihood: {mean_ll}")
 
+#%%
+
 ground_truth_path = base_path / "ground_truth"
 ground_truth_files = list(ground_truth_path.glob("*.mid"))
 

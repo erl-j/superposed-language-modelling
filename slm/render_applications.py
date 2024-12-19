@@ -10,13 +10,14 @@ from constraints.core import MusicalEventConstraint
 import numpy as np
 import math
 import time
+
 # Configuration
 SEED = 42
 
 torch.manual_seed(SEED)
 random.seed(SEED)
 np.random.seed(SEED)
-# 
+#
 DEVICE = "cuda:6" if torch.cuda.is_available() else "cpu"
 OUTPUT_DIR = Path("./artefacts/applications")
 
@@ -34,7 +35,9 @@ if OUTPUT_DIR.exists():
         exit()
 
 # Number of examples to generate per task
-N_EXAMPLES = 10
+N_EXAMPLES = 100
+
+GENERATE = False
 
 
 def replace_bass_notes(
@@ -46,18 +49,22 @@ def replace_bass_notes(
     drums,
     tag,
     tempo,
-    ):
-      
-        # replace bass notes with blank bass notes
-        e = [ ec().intersect({"instrument": {"Bass"}}).force_active() if ev.a["instrument"] == {"Bass"} else ev for ev in e]
+):
+    # replace bass notes with blank bass notes
+    e = [
+        ec().intersect({"instrument": {"Bass"}}).force_active()
+        if ev.a["instrument"] == {"Bass"}
+        else ev
+        for ev in e
+    ]
 
-        # # add tag constraint
-        # e = [ev.intersect({"tag": {tag, "-"}}) for ev in e]
+    # # add tag constraint
+    # e = [ev.intersect({"tag": {tag, "-"}}) for ev in e]
 
-        # # add tempo constraint
-        # e = [ev.intersect({"tempo": {tempo, "-"}}) for ev in e]
+    # # add tempo constraint
+    # e = [ev.intersect({"tempo": {tempo, "-"}}) for ev in e]
 
-        return e
+    return e
 
 
 def replace_notes_in_box(
@@ -70,7 +77,6 @@ def replace_notes_in_box(
     tag,
     tempo,
 ):
-
     ticks = set([str(r) for r in range(tick_range[0], tick_range[1])])
     pitches = set(
         [
@@ -95,12 +101,21 @@ def replace_notes_in_box(
     }
 
     # replace notes in the middle of the loop
-    e = [ec().intersect(infill_constraint).force_active() if (len(ev.a["onset/global_tick"].intersection(ticks)) > 0 and len(ev.a["pitch"].intersection(valid_pitches)) > 0) else ev for ev in e]
+    e = [
+        ec().intersect(infill_constraint).force_active()
+        if (
+            len(ev.a["onset/global_tick"].intersection(ticks)) > 0
+            and len(ev.a["pitch"].intersection(valid_pitches)) > 0
+        )
+        else ev
+        for ev in e
+    ]
 
     return e
 
 
-def replace_pitches_given_pitch_set(e,
+def replace_pitches_given_pitch_set(
+    e,
     ec,
     n_events,
     tick_range,
@@ -122,22 +137,70 @@ def replace_pitches_given_pitch_set(e,
 
     return e
 
-def replace_pitches(e,
-        ec,
-        n_events,
-        tick_range,
-        pitch_range,
-        drums,
-        tag,
-        tempo,
-    ):
 
+def replace_pitches(
+    e,
+    ec,
+    n_events,
+    tick_range,
+    pitch_range,
+    drums,
+    tag,
+    tempo,
+):
     # set pitch set to all pitches
     for event_idx in range(n_events):
         if e[event_idx].is_active():
             e[event_idx].a["pitch"] = ec().a["pitch"]
             e[event_idx] = e[event_idx].force_active()
-    
+
+    return e
+
+
+def replace_onset_offsets(
+    e,
+    ec,
+    n_events,
+    tick_range,
+    pitch_range,
+    drums,
+    tag,
+    tempo,
+):
+    # set pitch set to all pitches
+    for event_idx in range(n_events):
+        if e[event_idx].is_active():
+            e[event_idx].a["onset/global_tick"] = ec().a["onset/global_tick"]
+            e[event_idx].a["offset/global_tick"] = ec().a["offset/global_tick"]
+            e[event_idx] = e[event_idx].force_active()
+
+    return e
+
+
+def replace_onsets_offsets_given_onset_offset_set(
+    e,
+    ec,
+    n_events,
+    tick_range,
+    pitch_range,
+    drums,
+    tag,
+    tempo,
+):
+    # get union of pitches of all notes
+    current_onsets = set()
+    current_offsets = set()
+    for ev in e:
+        current_onsets.update(ev.a["onset/global_tick"])
+        current_offsets.update(ev.a["offset/global_tick"])
+
+    # for current active pitches. replace pitch
+    for event_idx in range(n_events):
+        if e[event_idx].is_active():
+            e[event_idx].a["onset/global_tick"] = current_onsets
+            e[event_idx].a["offset/global_tick"] = current_offsets
+            e[event_idx] = e[event_idx].force_active()
+
     return e
 
 
@@ -161,8 +224,8 @@ TASKS = {
         "tag": None,
         "tempo": None,
     },
-    "replace_pitches" : {
-         "sampling_settings": {
+    "replace_pitches": {
+        "sampling_settings": {
             "temperature": 1.0,
             "top_p": 1.0,
             "top_k": 0,
@@ -175,8 +238,8 @@ TASKS = {
         "tag": None,
         "tempo": None,
     },
-    "replace_pitches_given_pitch_set" : {
-            "sampling_settings": {
+    "replace_pitches_given_pitch_set": {
+        "sampling_settings": {
             "temperature": 1.0,
             "top_p": 1.0,
             "top_k": 0,
@@ -187,8 +250,8 @@ TASKS = {
         "pitch_range": None,
         "drums": None,
         "tag": None,
-        "tempo": None
-        },
+        "tempo": None,
+    },
     "unconditional": {
         "sampling_settings": {
             "temperature": 1.0,
@@ -203,8 +266,8 @@ TASKS = {
         "tag": None,
         "tempo": None,
     },
-        
 }
+
 
 def setup_model(checkpoint_path):
     """Load and set up the model."""
@@ -238,10 +301,11 @@ def load_test_dataset(tokenizer):
         sm_filter_fn=sm_filter_fn,
     )
 
-    return test_ds   
+    return test_ds
 
 
 records = []
+
 
 def main():
     # Set random seed for reproducibility
@@ -262,9 +326,9 @@ def main():
     ground_truth_examples = [test_dataset[idx] for idx in ground_truth_indices]
 
     for i, example in enumerate(ground_truth_examples):
-        example_sm =  first_model.tokenizer.decode(ground_truth_examples[i]["token_ids"])
+        example_sm = first_model.tokenizer.decode(ground_truth_examples[i]["token_ids"])
         example_sm.dump_midi(ground_truth_dir / f"example_{i}.mid")
-            
+
     # Process each checkpoint
     for checkpoint_name, checkpoint_path in CHECKPOINTS.items():
         print(f"\nProcessing checkpoint: {checkpoint_name}")
@@ -287,7 +351,7 @@ def main():
                 test_example = ground_truth_examples[i]["token_ids"]
 
                 # convert to midi and save
-                test_sm = first_model.tokenizer.decode(test_example)              
+                test_sm = first_model.tokenizer.decode(test_example)
 
                 # warning: read tempo from example instead
                 # Convert to events
@@ -301,7 +365,7 @@ def main():
                 # apply task function
                 task_events = task_config["fn"](
                     test_events,
-                    lambda : MusicalEventConstraint(model.tokenizer),
+                    lambda: MusicalEventConstraint(model.tokenizer),
                     model.tokenizer.config["max_notes"],
                     task_config["tick_range"],
                     task_config["pitch_range"],
@@ -321,28 +385,36 @@ def main():
                 with torch.no_grad():
                     model.eval()
                     log_probs = model.model.conditional_log_likelihood(
-                        test_mask.to(DEVICE),
-                        task_mask.to(DEVICE)
+                        test_mask.to(DEVICE), task_mask.to(DEVICE)
                     )
                     print(log_probs)
-                records.append({"model": checkpoint_name, "task": task_name, "log_probs": log_probs.item(), "example": i})
-                
-                with torch.no_grad():
-                    # Generate from mask
-                    output_mask = model.generate(
-                        task_mask,
-                        **task_config["sampling_settings"],
-                    )[0].argmax(dim=-1)
+                records.append(
+                    {
+                        "model": checkpoint_name,
+                        "task": task_name,
+                        "log_probs": log_probs.item(),
+                        "example": i,
+                    }
+                )
 
-                # Convert to midi
-                output_sm = model.tokenizer.decode(output_mask)
+                if GENERATE:
+                    with torch.no_grad():
+                        # Generate from mask
+                        output_mask = model.generate(
+                            task_mask,
+                            **task_config["sampling_settings"],
+                        )[0].argmax(dim=-1)
 
-                # write
-                output_sm.dump_midi(task_dir / f"generated_{i}.mid")
+                    # Convert to midi
+                    output_sm = model.tokenizer.decode(output_mask)
+
+                    # write
+                    output_sm.dump_midi(task_dir / f"generated_{i}.mid")
 
     print(records)
     # save records as csv
     import pandas as pd
+
     df = pd.DataFrame(records)
     df.to_csv(OUTPUT_DIR / "records.csv")
 

@@ -309,9 +309,9 @@ if __name__ == "__main__":
         "n_layers": 12,
         "tokenizer_config": tokenizer_config,
         "norm_first": True,
-        "enforce_constraint_in_forward": True,
+        "enforce_constraint_in_forward": False,
         "activation": "gelu",
-        "dropout": 0.0,
+        "dropout": 0.1,
         "use_mlm": False,
     }
 

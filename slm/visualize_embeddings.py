@@ -37,10 +37,11 @@ from train import TrainingWrapper
 CHECKPOINTS = {
     "slm": "../checkpoints/usual-fire-530/last.ckpt",
     "mlm": "../checkpoints/toasty-bush-529/last.ckpt",
+    "slm_wo_enforce_constraint_in_fwd": "../checkpoints/balmy-deluge-532/last.ckpt",
 }
 
 model = TrainingWrapper.load_from_checkpoint(
-    CHECKPOINTS["slm"],
+    CHECKPOINTS["slm_wo_enforce_constraint_in_fwd"],
     map_location="cpu",
 )
 
