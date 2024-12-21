@@ -24,11 +24,20 @@ records = pd.read_csv(csv_path)
 models = records.model.unique()
 tasks = records.task.unique()
 
-for task in tasks:
-    for model in models:
-        mean_ll = records[(records.model == model) & (records.task == task)].log_probs.mean()
-        print(f"Task: {task}, Model: {model}, Mean Log Likelihood: {mean_ll}")
+# for task in tasks:
+#     for model in models:
+#         mean_ll = records[(records.model == model) & (records.task == task)].log_probs.mean()
+#         print(f"Task: {task}, Model: {model}, Mean Log Likelihood: {mean_ll}")
 
+# plot distirbution of log likelihoods for each task
+for task in tasks:
+    # plot one histogram per model, shared x axis and y axis
+    fig, axes = plt.subplots(len(models), 1, sharex=True, sharey=True)
+    fig.suptitle(f"Log Likelihood Distribution for Task: {task}", size=16, y=1.02)
+    for i, model in enumerate(models):
+        model_ll = records[(records.model == model) & (records.task == task)].log_probs
+        axes[i].hist(model_ll, bins=20, alpha=0.5, label=model)
+        axes[i].legend()
 #%%
 
 ground_truth_path = base_path / "ground_truth"

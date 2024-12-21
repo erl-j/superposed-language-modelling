@@ -105,10 +105,26 @@ class TrainingWrapper(pl.LightningModule):
             # renormalize
             x_input = x_masked / x_masked.sum(dim=-1, keepdim=True)
         logits = self.model(x_input)
+        
         # get metrics
         metrics = self.compute_metrics(
             target_token_ids, logits, batch["n_loops_in_parent_song"]
         )
+
+        if not self.use_mlm and not self.model.enforce_constraint_in_forward:
+            # apply constraint to logits
+            with torch.no_grad():
+                filtered_logits = logits.clone().detach()
+                zero = torch.zeros_like(x_input, dtype=x_input.dtype, device=x_input.device)
+                filtered_logits[x_input.isclose(zero, rtol=1e-5)] = torch.finfo(
+                    logits.dtype
+                ).min
+                filtered_logits_metrics = self.compute_metrics(
+                    target_token_ids, filtered_logits, batch["n_loops_in_parent_song"]
+                )
+                # add filtered logits metrics to metrics
+                for key in filtered_logits_metrics:
+                    metrics[f"filtered_logits/{key}"] = filtered_logits_metrics[key]
         return metrics
 
     def stage_step(self, batch, batch_idx, stage):
@@ -158,53 +174,57 @@ class TrainingWrapper(pl.LightningModule):
         )
         ce = ce.reshape(batch_size, n_events * n_attributes)
 
-        # Calculate probabilities and entropy
-        probs = F.softmax(logits, dim=-1)
-        log_probs = F.log_softmax(logits, dim=-1)
-        entropy = -(probs * (log_probs + 1e-8)).sum(
-            dim=-1
-        )  # (batch_size, events, attributes)
+        metrics = {}
+        metrics["cross_entropy"] = ce.mean()
 
-        # Get probability of correct tokens
-        target_probs = torch.gather(
-            probs.reshape(-1, logits.shape[-1]),
-            dim=-1,
-            index=target_token_ids.reshape(-1).unsqueeze(-1),
-        ).reshape(batch_size, n_events, n_attributes)
+        with torch.no_grad():
 
-        # Initialize metrics dictionary
-        metrics = {
-            "cross_entropy": ce.mean(),
-            "entropy": entropy.mean(),
-            "probability": target_probs.mean(),
-        }
+            # Calculate probabilities and entropy
+            probs = F.softmax(logits, dim=-1)
+            log_probs = F.log_softmax(logits, dim=-1)
+            entropy = -(probs * (log_probs + 1e-8)).sum(
+                dim=-1
+            )  # (batch_size, events, attributes)
 
-        # Calculate accuracies for k=[1,2,4]
-        topk_values = [1, 2, 4]
-        for k in topk_values:
-            decoder_output_probs_sort = torch.argsort(
-                probs, dim=-1, descending=True
-            )  # (batch_size, events, attributes, vocab_size)
-            accuracy = (
-                (target_token_ids.unsqueeze(-1) == decoder_output_probs_sort[..., :k])
-                  # (batch_size, events, attributes, k)
-                .any(dim=-1)  # (batch_size, events, attributes)
-                .float()
+            # Get probability of correct tokens
+            target_probs = torch.gather(
+                probs.reshape(-1, logits.shape[-1]),
+                dim=-1,
+                index=target_token_ids.reshape(-1).unsqueeze(-1),
+            ).reshape(batch_size, n_events, n_attributes)
+
+            # Initialize metrics dictionary
+            metrics.update(
+                {"entropy": entropy.mean(),
+                "probability": target_probs.mean(),}
             )
 
-            metrics[f"accuracy@{k}"] = accuracy.mean()
+            # Calculate accuracies for k=[1,2,4]
+            topk_values = [1, 2, 4]
+            for k in topk_values:
+                decoder_output_probs_sort = torch.argsort(
+                    probs, dim=-1, descending=True
+                )  # (batch_size, events, attributes, vocab_size)
+                accuracy = (
+                    (target_token_ids.unsqueeze(-1) == decoder_output_probs_sort[..., :k])
+                    # (batch_size, events, attributes, k)
+                    .any(dim=-1)  # (batch_size, events, attributes)
+                    .float()
+                )
 
-            # Per-attribute accuracy metrics
-            for i, attr in enumerate(self.tokenizer.note_attribute_order):
-                metrics[f"accuracy@{k}/{attr}"] = accuracy[:, :, i].mean()
+                metrics[f"accuracy@{k}"] = accuracy.mean()
 
-        # Per-attribute metrics
-        for attr_idx, attribute in enumerate(self.tokenizer.note_attribute_order):
-            # Per-attribute entropy
-            metrics[f"entropy/{attribute}"] = entropy[:, :, attr_idx].mean()
+                # Per-attribute accuracy metrics
+                for i, attr in enumerate(self.tokenizer.note_attribute_order):
+                    metrics[f"accuracy@{k}/{attr}"] = accuracy[:, :, i].mean()
 
-            # Per-attribute probability
-            metrics[f"probability/{attribute}"] = target_probs[:, :, attr_idx].mean()
+            # Per-attribute metrics
+            for attr_idx, attribute in enumerate(self.tokenizer.note_attribute_order):
+                # Per-attribute entropy
+                metrics[f"entropy/{attribute}"] = entropy[:, :, attr_idx].mean()
+
+                # Per-attribute probability
+                metrics[f"probability/{attribute}"] = target_probs[:, :, attr_idx].mean()
 
         return metrics
 
@@ -254,6 +274,50 @@ class TrainingWrapper(pl.LightningModule):
             attribute_temperature,
             tokens_per_step,
         )
+    
+    def convert_mlm_to_slm(self):
+        """
+        Converts the model from MLM to SLM architecture. This involves:
+        1. Removing the mask token dimension from embedding layer
+        2. Updating the model configuration 
+        3. Preserving compatible weights
+        """
+        if not self.use_mlm:
+            print("Model is already an SLM, no conversion needed")
+            return
+
+        print("Converting MLM to SLM...")
+        
+        # Store original embedding weights without mask token dimension
+        orig_embedding = self.model.embedding_layer.weight[:, :-1].clone()
+        orig_unembedding = self.model.unembedding_layer.weight.clone()
+        
+        # Store transformer weights
+        transformer_state = self.model.main_block.state_dict()
+        
+        # Update model config
+        self.model.use_mlm = False
+        
+        # Create new embedding layer without mask token dimension
+        self.model.embedding_layer = torch.nn.Linear(
+            len(self.tokenizer.vocab),
+            self.model.embedding_layer.weight.size(0),
+            bias=False
+        )
+        
+        # Initialize with stored weights
+        with torch.no_grad():
+            self.model.embedding_layer.weight.copy_(orig_embedding)
+            self.model.unembedding_layer.weight.copy_(orig_unembedding)
+        
+        # Restore transformer weights
+        self.model.main_block.load_state_dict(transformer_state)
+        
+        # Update training wrapper attributes
+        self.use_mlm = False
+        self.masking_scheme = "variable_superposition"
+        
+        print("Successfully converted MLM to SLM architecture")
 
 
 if __name__ == "__main__":
@@ -302,28 +366,29 @@ if __name__ == "__main__":
     USE_RANDOM_SHIFT = False
     tokenizer = Tokenizer(tokenizer_config)
 
-    model_config = {
-        "hidden_size": 768,
-        "n_heads": 12,
-        "feed_forward_size": 4 * 768,
-        "n_layers": 12,
-        "tokenizer_config": tokenizer_config,
-        "norm_first": True,
-        "enforce_constraint_in_forward": False,
-        "activation": "gelu",
-        "dropout": 0.1,
-        "use_mlm": False,
-    }
+    # model_config = {
+    #     "hidden_size": 768,
+    #     "n_heads": 12,
+    #     "feed_forward_size": 4 * 768,
+    #     "n_layers": 12,
+    #     "tokenizer_config": tokenizer_config,
+    #     "norm_first": True,
+    #     "enforce_constraint_in_forward": False,
+    #     "activation": "gelu",
+    #     "dropout": 0.1,
+    #     "use_mlm": False,
+    # }
 
-    training_wrapper = TrainingWrapper(
-        model_config=model_config,
-        learning_rate=1e-4,
-        learning_rate_gamma=0.99,
-        masking_scheme="variable_superposition",
-        use_weight_decay=True,
-        warmup_steps=1000,
-        lr_steps_per_epoch=2836,
-    )
+    # training_wrapper = TrainingWrapper(
+    #     model_config=model_config,
+    #     learning_rate=1e-4,
+    #     learning_rate_gamma=0.99,
+    #     masking_scheme="variable_superposition",
+    #     use_weight_decay=True,
+    #     warmup_steps=1000,
+    #     lr_steps_per_epoch=2836,
+    # )
+
 
     # model_config = {
     #     "hidden_size": 768,
@@ -347,6 +412,16 @@ if __name__ == "__main__":
     #     use_weight_decay=True,
     #     warmup_steps=1000,
     # )
+
+    training_wrapper = TrainingWrapper.load_from_checkpoint(
+        "./checkpoints/toasty-bush-529/last.ckpt",
+        map_location="cpu",
+    )
+
+    training_wrapper.convert_mlm_to_slm()
+    training_wrapper.enforce_constraint_in_forward = False
+    training_wrapper.model.embedding_layer.weight.requires_grad = False
+    training_wrapper.model.unembedding_layer.weight.requires_grad = False
 
     mmd_4bar_filter_fn = lambda x: f"n_bars={N_BARS}" in x
 
@@ -418,7 +493,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[4,7],
+        devices=[7],
         precision="16-mixed",
         max_epochs=10_000,
         log_every_n_steps=1,

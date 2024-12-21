@@ -37,16 +37,14 @@ from train import TrainingWrapper
 CHECKPOINTS = {
     "slm": "../checkpoints/usual-fire-530/last.ckpt",
     "mlm": "../checkpoints/toasty-bush-529/last.ckpt",
-    "slm_wo_enforce_constraint_in_fwd": "../checkpoints/balmy-deluge-532/last.ckpt",
+    # "slm_wo_enforce_constraint_in_fwd": "../checkpoints/balmy-deluge-532/last.ckpt",
+    "slm_wo_enforce_constraint_in_fwd": "../checkpoints/pretty-armadillo-542/last.ckpt",
 }
 
 model = TrainingWrapper.load_from_checkpoint(
     CHECKPOINTS["slm_wo_enforce_constraint_in_fwd"],
     map_location="cpu",
 )
-
-
-
 
 # %%
 
@@ -250,6 +248,50 @@ plt.colorbar()
 plt.show()
 
 
+
+
+# %%
+
+
+# apply tsne to pitch embeddings
+
+from sklearn.manifold import TSNE
+# use PCA
+from sklearn.decomposition import PCA
+
+pitch_vocab = [v for v in vocab if ("pitch" in v) and "Drums" not in v]
+
+pitch_embeddings = embedding[[i for i, v in enumerate(vocab) if v in pitch_vocab]]
+
+reducer = TSNE(n_components=2, perplexity=30, n_iter=1000)
+# reducer = PCA(n_components=2)
+
+pitch_reduced = reducer.fit_transform(pitch_embeddings)
+
+pitch_values = [v.split(":")[-1] for v in pitch_vocab]
+
+# plot with pitch names
+plt.figure()
+plt.scatter(pitch_reduced[:, 1], pitch_reduced[:, 0], c=range(len(pitch_vocab)))
+
+for i, txt in enumerate(pitch_vocab):
+    plt.annotate(txt.split(":")[-1], (pitch_reduced[i, 1], pitch_reduced[i, 0]))
+
+# same for onset
+
+onset_vocab = [v for v in vocab if ("onset" in v) and "Drums" not in v]
+
+onset_embeddings = embedding[[i for i, v in enumerate(vocab) if v in onset_vocab]]
+
+onset_reduced = reducer.fit_transform(onset_embeddings)
+
+onset_values = [v.split(":")[-1] for v in onset_vocab]
+
+plt.figure()
+plt.scatter(onset_reduced[:, 1], onset_reduced[:, 0], c=range(len(onset_vocab)))
+
+for i, txt in enumerate(onset_vocab):
+    plt.annotate(txt.split(":")[-1], (onset_reduced[i, 1], onset_reduced[i, 0]))
 
 
 # %%

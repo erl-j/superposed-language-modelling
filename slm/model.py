@@ -185,7 +185,7 @@ class SuperposedLanguageModel(torch.nn.Module):
                     flat_probs = F.softmax(flat_logits / t, dim=-1)
                     # print min max mean
                     flat_x = einops.rearrange(x, "b e a v -> (b e a) v")
-                    flat_probs = flat_probs * flat_x
+                    flat_probs = (flat_probs+1e-6) * flat_x
                     flat_probs = flat_probs / (flat_probs.sum(dim=-1, keepdim=True))
                     sampled = torch.multinomial(flat_probs, 1).squeeze(-1)
                     masked_indices = torch.where(flat_x.sum(-1) > 1)[0]
@@ -333,3 +333,4 @@ class SuperposedLanguageModel(torch.nn.Module):
         )
 
         return logits
+

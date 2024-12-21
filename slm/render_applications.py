@@ -1,3 +1,4 @@
+#%%
 import os
 import torch
 import random
@@ -18,13 +19,14 @@ torch.manual_seed(SEED)
 random.seed(SEED)
 np.random.seed(SEED)
 #
-DEVICE = "cuda:6" if torch.cuda.is_available() else "cpu"
+DEVICE = "cuda:5" if torch.cuda.is_available() else "cpu"
 OUTPUT_DIR = Path("./artefacts/applications")
 
 # Model checkpoints to test
 CHECKPOINTS = {
     "slm": "./checkpoints/usual-fire-530/last.ckpt",
     "mlm": "./checkpoints/toasty-bush-529/last.ckpt",
+    "slm_wo_enforce_constraint_in_fwd": "./checkpoints/pretty-armadillo-542/last.ckpt",
 }
 
 # if dir already exists, asks for confirmation to delete
@@ -35,7 +37,7 @@ if OUTPUT_DIR.exists():
         exit()
 
 # Number of examples to generate per task
-N_EXAMPLES = 100
+N_EXAMPLES = 50
 
 GENERATE = False
 
@@ -421,3 +423,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# %%
