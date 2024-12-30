@@ -3,7 +3,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from train import TrainingWrapper
-#%%
 
 # model = SuperposedLanguageModel.load_from_checkpoint(
 #     # "../checkpoints/faithful-wave-417/last.ckpt",
@@ -38,11 +37,14 @@ CHECKPOINTS = {
     "slm": "../checkpoints/usual-fire-530/last.ckpt",
     "mlm": "../checkpoints/toasty-bush-529/last.ckpt",
     # "slm_wo_enforce_constraint_in_fwd": "../checkpoints/balmy-deluge-532/last.ckpt",
-    "slm_wo_enforce_constraint_in_fwd": "../checkpoints/pretty-armadillo-542/last.ckpt",
+    # "slm_wo_enforce_constraint_in_fwd": "../checkpoints/pretty-armadillo-542/last.ckpt",
+    "slm_wo_enforce_constraint_in_fwd": "../checkpoints/colorful-sun-548/last.ckpt",
+    "slm_not_norm_first": "../checkpoints/rural-oath-549/last.ckpt",
 }
 
 model = TrainingWrapper.load_from_checkpoint(
-    CHECKPOINTS["slm_wo_enforce_constraint_in_fwd"],
+    # CHECKPOINTS["slm_not_norm_first"],
+    CHECKPOINTS["slm"],
     map_location="cpu",
 )
 
@@ -258,13 +260,16 @@ plt.show()
 from sklearn.manifold import TSNE
 # use PCA
 from sklearn.decomposition import PCA
+#reducer = TSNE(n_components=2, perplexity=30, n_iter=1000)
+reducer = PCA(n_components=2)
+reducer_3d = PCA(n_components=3)
+
+#%%
 
 pitch_vocab = [v for v in vocab if ("pitch" in v) and "Drums" not in v]
 
 pitch_embeddings = embedding[[i for i, v in enumerate(vocab) if v in pitch_vocab]]
 
-reducer = TSNE(n_components=2, perplexity=30, n_iter=1000)
-# reducer = PCA(n_components=2)
 
 pitch_reduced = reducer.fit_transform(pitch_embeddings)
 
@@ -275,7 +280,25 @@ plt.figure()
 plt.scatter(pitch_reduced[:, 1], pitch_reduced[:, 0], c=range(len(pitch_vocab)))
 
 for i, txt in enumerate(pitch_vocab):
-    plt.annotate(txt.split(":")[-1], (pitch_reduced[i, 1], pitch_reduced[i, 0]))
+    plt.annotate(txt.split(":")[-1], (pitch_reduced[i, 1], pitch_reduced[i, 0]),size=6)
+
+#%%
+# now plot in 3d
+
+pitch_reduced_3d = reducer_3d.fit_transform(pitch_embeddings)
+
+from mpl_toolkits.mplot3d import Axes3D
+
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+ax.scatter(pitch_reduced_3d[:, 0], pitch_reduced_3d[:, 1], pitch_reduced_3d[:, 2], c=range(len(pitch_vocab)))
+
+for i, txt in enumerate(pitch_vocab):
+    ax.text(pitch_reduced_3d[i, 0], pitch_reduced_3d[i, 1], pitch_reduced_3d[i, 2], txt.split(":")[-1],size=6)
+
+plt.show()
+
+#%%
 
 # same for onset
 
@@ -291,7 +314,26 @@ plt.figure()
 plt.scatter(onset_reduced[:, 1], onset_reduced[:, 0], c=range(len(onset_vocab)))
 
 for i, txt in enumerate(onset_vocab):
-    plt.annotate(txt.split(":")[-1], (onset_reduced[i, 1], onset_reduced[i, 0]))
+    plt.annotate(txt.split(":")[-1], (onset_reduced[i, 1], onset_reduced[i, 0]), size=6)
 
+
+# %%
+
+# do same for tags
+
+tag_vocab = [v for v in vocab if ("tag" in v) and "Drums" not in v]
+
+tag_embeddings = embedding[[i for i, v in enumerate(vocab) if v in tag_vocab]]
+
+tag_reduced = reducer.fit_transform(tag_embeddings)
+
+tag_values = [v.split(":")[-1] for v in tag_vocab]
+
+plt.figure()
+
+plt.scatter(tag_reduced[:, 1], tag_reduced[:, 0], c=range(len(tag_vocab)))
+
+for i, txt in enumerate(tag_vocab):
+    plt.annotate(txt.split(":")[-1], (tag_reduced[i, 1], tag_reduced[i, 0]))
 
 # %%

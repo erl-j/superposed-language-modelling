@@ -24,10 +24,10 @@ records = pd.read_csv(csv_path)
 models = records.model.unique()
 tasks = records.task.unique()
 
-# for task in tasks:
-#     for model in models:
-#         mean_ll = records[(records.model == model) & (records.task == task)].log_probs.mean()
-#         print(f"Task: {task}, Model: {model}, Mean Log Likelihood: {mean_ll}")
+for task in tasks:
+    for model in models:
+        mean_ll = records[(records.model == model) & (records.task == task)].log_probs.mean()
+        print(f"Task: {task}, Model: {model}, Mean Log Likelihood: {mean_ll}")
 
 # plot distirbution of log likelihoods for each task
 for task in tasks:
@@ -66,7 +66,7 @@ records = [
         "path": path,
         "task": "ground_truth",
         "model": "ground_truth",
-        "sample_index" : int(path.split(".mid")[0].split("_")[-1])
+        "sample_index" : int(str(path).split(".mid")[0].split("_")[-1])
     }
     for midi, path in zip(ground_truth_midis, ground_truth_files)
 ]
@@ -119,7 +119,6 @@ records = [
 print(f"Processed {len(records)} records")
 
 #%%
-
 import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -127,13 +126,19 @@ import pandas as pd
 # Convert records to DataFrame for easier plotting
 df = pd.DataFrame(records)
 
+# Truncate model names to first 6 characters
+df["model"] = df["model"].str[:6]
+
 # Get all metrics columns
 metric_cols = [col for col in df.columns if col.startswith("metric/")]
 
-# Create violin plots for each task
-for task in tasks:
-    # Filter data for current task
-    task_df = df[df["task"] == task]
+# Create violin plots for each task (excluding ground_truth task)
+for task in [t for t in tasks if t != "ground_truth"]:
+    # Filter data for current task and add ground truth data
+    task_df = df[df["task"] == task].copy()
+    ground_truth_df = df[df["task"] == "ground_truth"].copy()
+    ground_truth_df["task"] = task  # Set task to match for plotting
+    combined_df = pd.concat([task_df, ground_truth_df])
 
     # Calculate number of metrics and set up subplot grid
     n_metrics = len(metric_cols)
@@ -153,9 +158,12 @@ for task in tasks:
     # Create violin plot for each metric
     for idx, metric in enumerate(metric_cols):
         if idx < len(axes):  # Ensure we don't exceed number of subplots
-            sns.violinplot(data=task_df, x="model", y=metric, ax=axes[idx])
+            # Create violin plot
+            sns.violinplot(data=combined_df, x="model", y=metric, ax=axes[idx])
+
             # Rotate x-axis labels for better readability
             axes[idx].set_xticklabels(axes[idx].get_xticklabels(), rotation=45)
+
             # Clean up metric name for title
             metric_name = metric.replace("metric/", "").replace("_", " ").title()
             axes[idx].set_title(metric_name)
@@ -170,11 +178,15 @@ for task in tasks:
 
     # Save the plot
     plt.show()
-# Calculate summary statistics for each metric by task and model
+
+# Calculate summary statistics (including ground truth)
 summary_stats = []
-for task in tasks:
+for task in [t for t in tasks if t != "ground_truth"]:
     task_df = df[df["task"] == task]
-    for model in models + ["ground_truth"]:
+    ground_truth_df = df[df["task"] == "ground_truth"]
+
+    # Regular models
+    for model in task_df["model"].unique():
         model_df = task_df[task_df["model"] == model]
         stats = {"task": task, "model": model}
         for metric in metric_cols:
@@ -182,16 +194,19 @@ for task in tasks:
             stats[f"{metric}_std"] = model_df[metric].std()
         summary_stats.append(stats)
 
+    # Ground truth
+    stats = {"task": task, "model": "ground"}
+    for metric in metric_cols:
+        stats[f"{metric}_mean"] = ground_truth_df[metric].mean()
+        stats[f"{metric}_std"] = ground_truth_df[metric].std()
+    summary_stats.append(stats)
+
 # Convert summary statistics to DataFrame
 summary_df = pd.DataFrame(summary_stats)
 
 # Print summary table
 print("\nSummary Statistics:")
 print(summary_df.to_string())
-
-# Optionally save summary statistics to CSV
-# summary_df.to_csv("metric_summary.csv", index=False)
-    
 #%%
 
 df = pd.DataFrame(records)
@@ -255,49 +270,49 @@ for model in models:
         plt.show()
 #%%
 
-# n_cols = 1 + len(models)  # ground truth + each model
-# n_rows = n_examples
-# figsize = (20, 4 * n_examples)  # Adjust height based on number of examples
-# tpq = 96
+n_cols = 1 + len(models)  # ground truth + each model
+n_rows = 5
+figsize = (20, 4 * n_examples)  # Adjust height based on number of examples
+tpq = 96
 
-# # Create visualization for each task
-# for task in tasks:
-#     print(f"\nViewing task: {task}")
+# Create visualization for each task
+for task in tasks:
+    print(f"\nViewing task: {task}")
 
-#     # Create figure
-#     fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
-#     if n_rows == 1:
-#         axes = axes.reshape(1, -1)
+    # Create figure
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
+    if n_rows == 1:
+        axes = axes.reshape(1, -1)
 
-#     # Plot ground truth in first column
-#     for row, sm in enumerate(ground_truth_midis):
-#         ax = axes[row, 0]
-#         roll = piano_roll(sm, tpq)
-#         im = ax.imshow(roll, aspect="auto", origin="lower", cmap="Blues")
-#         if row == 0:  # Add column title for ground truth
-#             ax.set_title("Ground Truth", pad=10)
-#         ax.set_xlabel("Time (ticks)")
-#         ax.set_ylabel("MIDI Note")
+    # Plot ground truth in first column
+    for row, sm in enumerate(ground_truth_midis):
+        ax = axes[row, 0]
+        roll = piano_roll(sm, tpq)
+        im = ax.imshow(roll, aspect="auto", origin="lower", cmap="Blues")
+        if row == 0:  # Add column title for ground truth
+            ax.set_title("Ground Truth", pad=10)
+        ax.set_xlabel("Time (ticks)")
+        ax.set_ylabel("MIDI Note")
 
-#     # Plot each model's output in subsequent columns
-#     for col, model in enumerate(models, start=1):
-#         model_path = base_path / model / task
-#         model_files = list(model_path.glob("*.mid"))
-#         model_midis = [symusic.Score(f) for f in model_files]
+    # Plot each model's output in subsequent columns
+    for col, model in enumerate(models, start=1):
+        model_path = base_path / model / task
+        model_files = list(model_path.glob("*.mid"))
+        model_midis = [symusic.Score(f) for f in model_files]
 
-#         for row, sm in enumerate(model_midis):
-#             ax = axes[row, col]
-#             roll = piano_roll(sm, tpq)
-#             im = ax.imshow(roll, aspect="auto", origin="lower", cmap="Blues")
-#             if row == 0:  # Add column title for each model
-#                 ax.set_title(model, pad=10)
-#             ax.set_xlabel("Time (ticks)")
-#             if col > 0:  # Remove redundant y-labels
-#                 ax.set_ylabel("")
-#                 ax.set_yticks([])
+        for row, sm in enumerate(model_midis):
+            ax = axes[row, col]
+            roll = piano_roll(sm, tpq)
+            im = ax.imshow(roll, aspect="auto", origin="lower", cmap="Blues")
+            if row == 0:  # Add column title for each model
+                ax.set_title(model, pad=10)
+            ax.set_xlabel("Time (ticks)")
+            if col > 0:  # Remove redundant y-labels
+                ax.set_ylabel("")
+                ax.set_yticks([])
 
-#     plt.suptitle(f"Task: {task}", size=16, y=1.02)
-#     plt.tight_layout()
-#     plt.show()
+    plt.suptitle(f"Task: {task}", size=16, y=1.02)
+    plt.tight_layout()
+    plt.show()
 
 # %%

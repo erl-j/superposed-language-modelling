@@ -8,13 +8,13 @@ from flask_cors import CORS
 import symusic
 
 sys.path.append("slm/")
-from slm.train_old import EncoderOnlyModel
-from slm.train2_old import SuperposedLanguageModel
+# from slm.train_old import EncoderOnlyModel
+# from slm.train2_old import SuperposedLanguageModel
 from slm.train import TrainingWrapper
 from util import preview_sm, sm_fix_overlap_notes, loop_sm
 from slm.tokenizer import instrument_class_to_selected_program_nr
 import util
-from paper_checkpoints import checkpoints
+from paper_checkpoints import CHECKPOINTS
 from constraints.addx import *
 from constraints.re import *
 from constraints.templates import *
@@ -100,7 +100,14 @@ model = TrainingWrapper.load_from_checkpoint(
     # "./checkpoints/absurd-oath-525/last.ckpt",
     # "./checkpoints/toasty-bush-529/last.ckpt",
     # "./checkpoints/usual-fire-530/last.ckpt",
-    "./checkpoints/pretty-armadillo-542/last.ckpt",
+    # "./checkpoints/pretty-armadillo-542/last.ckpt",
+    # "./checkpoints/rural-oath-549/last.ckpt",
+    # "./checkpoints/rural-oath-549/epoch=425-step=1208136-val/loss_epoch=0.14559.ckpt",
+    # "./checkpoints/colorful-sun-548/last.ckpt",
+    # "./checkpoints/lucky-puddle-550/last.ckpt",
+    # "./checkpoints/crimson-night-547/last.ckpt",
+    # "./checkpoints/smart-brook-552/last.ckpt",
+    "./checkpoints/glad-surf-562/last.ckpt",
     map_location=device,
 )
 

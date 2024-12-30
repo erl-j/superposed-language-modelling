@@ -185,7 +185,8 @@ class SuperposedLanguageModel(torch.nn.Module):
                     flat_probs = F.softmax(flat_logits / t, dim=-1)
                     # print min max mean
                     flat_x = einops.rearrange(x, "b e a v -> (b e a) v")
-                    flat_probs = (flat_probs+1e-6) * flat_x
+                    flat_probs += 1e-6
+                    flat_probs = (flat_probs) * flat_x
                     flat_probs = flat_probs / (flat_probs.sum(dim=-1, keepdim=True))
                     sampled = torch.multinomial(flat_probs, 1).squeeze(-1)
                     masked_indices = torch.where(flat_x.sum(-1) > 1)[0]
@@ -247,12 +248,55 @@ class SuperposedLanguageModel(torch.nn.Module):
         # assert that x respects constraints
         return x
 
+    def slm_forward_alternating_attention(self, x):
+        """
+        Forward pass for Superposed Language Model (SLM).
+        Input:
+            x: Input tensor of shape (batch_size, events, attributes, vocab_size)
+        """
+        b, e, a, v = x.shape
+        syntax_mask = self.syntax_mask[None, None, ...].to(x.device).to(x.dtype)
+        syntax_mask = einops.repeat(syntax_mask, "1 1 a v -> b e a v", b=b, e=e)
+        # apply syntax mask
+        x = x * syntax_mask
+        # renormalize
+        x = x / x.sum(dim=-1, keepdim=True)
+        # embed attributes
+        z_prior = self.embedding_layer(x)
+        z = z_prior
+        for layer_idx, layer in enumerate(self.main_block.layers):
+            if layer_idx % 2 == 0:
+                z = einops.rearrange(z, "b e a h -> (b a) e h")
+                z = layer(z)
+                z = einops.rearrange(z, "(b a) e h -> b e a h", b=b, a=a)
+            else:
+                z = einops.rearrange(z, "b e a h -> (b e) a h")
+                z = layer(z)
+                z = einops.rearrange(z, "(b e) a h -> b e a h", b=b, e=e)
+        z_post = z
+
+        # pass through unembedding layer
+        logits = self.unembedding_layer(z_post)
+   
+        zero = torch.zeros_like(x, device=x.device, dtype=x.dtype)
+
+        # apply syntax mask to logits with appropriate tolerance
+        logits[syntax_mask.isclose(zero, rtol=1e-5)] = torch.finfo(logits.dtype).min
+
+        # enforce constraint with appropriate tolerances
+        if self.enforce_constraint_in_forward:
+            logits[x.isclose(zero, rtol=1e-5)] = torch.finfo(logits.dtype).min
+
+        return logits
+
     def slm_forward(self, x):
         """
         Forward pass for Superposed Language Model (SLM).
         Input:
             x: Input tensor of shape (batch_size, events, attributes, vocab_size)
         """
+        # if self.use_alternating_attention:
+        #     return self.slm_forward_alternating_attention(x)
         b, e, a, v = x.shape
         syntax_mask = self.syntax_mask[None, None, ...].to(x.device).to(x.dtype)
         syntax_mask = einops.repeat(syntax_mask, "1 1 a v -> b e a v", b=b, e=e)

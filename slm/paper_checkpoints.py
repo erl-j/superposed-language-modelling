@@ -1,41 +1,16 @@
-checkpoints = {
-    "mlm": "paper_assets/mlm_.ckpt",
-    "slm": "paper_assets/slm_.ckpt",
-    "drums": "paper_assets/slm_clean_drums.ckpt",
-    "harmonic": "paper_assets/slm_harmonic.ckpt",
-    "harmonic2": "paper_assets/slm_harmonic2.ckpt",
+import os
+import sys
+
+CHECKPOINTS = {
+    # "slm": "../checkpoints/usual-fire-530/last.ckpt",
+    "slm": "checkpoints/smart-brook-552/last.ckpt",
+    "mlm": "checkpoints/toasty-bush-529/last.ckpt",
+    # "slm_wo_enforce_constraint_in_fwd": "checkpoints/balmy-deluge-532/last.ckpt",
+    # "slm_wo_enforce_constraint_in_fwd": "checkpoints/pretty-armadillo-542/last.ckpt",
+    "slm_wo_enforce_constraint_in_fwd": "checkpoints/colorful-sun-548/last.ckpt",
+    "slm_not_norm_first": "checkpoints/rural-oath-549/last.ckpt",
 }
-
-MLM_CKPT_PTH = (
-    "checkpoints/noble-sea-291/epoch=65-step=95238-val/loss_epoch=0.36076.ckpt"
-)
-# SLM_CKPT_PTH = (
-#     "checkpoints/trim-water-280/epoch=132-step=191919-val/loss_epoch=0.14.ckpt"
-# )
-
-SLM_CKPT_PTH = (
-"checkpoints/noble-plasma-309/epoch=144-step=209235-val/loss_epoch=0.13589.ckpt"
-)
-
-M_SLM_CKPT_PTH = (
-    "checkpoints/avid-fog-315/epoch=40-step=29602-val/loss_epoch=0.16085.ckpt"
-)
-# SLM_CKPT_PTH = (
-#     "checkpoints/frosty-galaxy-297/epoch=29-step=43290-val/loss_epoch=0.15267.ckpt"
-# )
-
-# SS_SLM_CKPT_PTH = (
-#     "checkpoints/denim-paper-306/epoch=39-step=72150-val/loss_epoch=0.36424.ckpt"
-# )
-
-# SS_SLM_CKPT_PTH = (
-#     "checkpoints/fast-paper-307/epoch=32-step=51948-val/loss_epoch=0.35981.ckpt"
-# )
-
-# SS_SLM_CKPT_PTH = (
-#     "checkpoints/honest-snow-308/epoch=32-step=95238-val/loss_epoch=0.35076.ckpt"
-# )
-
-SS_SLM_CKPT_PTH = (
-    "checkpoints/distinctive-moon-314/epoch=162-step=235209-val/loss_epoch=0.20269.ckpt"
-)
+# if checkpoints is in parent directory, change checkpoints to ../checkpoints
+for k, v in CHECKPOINTS.items():
+    if not os.path.exists(v):
+        CHECKPOINTS[k] = "../" + v

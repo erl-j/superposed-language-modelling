@@ -331,6 +331,7 @@ if __name__ == "__main__":
     # BATCH_SIZE = 80
 
     BATCH_SIZE = 80
+    # BATCH_SIZE = 40
 
     tag_list = open(f"./data/{DATASET}/tags.txt").read().splitlines()
 
@@ -372,8 +373,8 @@ if __name__ == "__main__":
     #     "feed_forward_size": 4 * 768,
     #     "n_layers": 12,
     #     "tokenizer_config": tokenizer_config,
-    #     "norm_first": True,
-    #     "enforce_constraint_in_forward": False,
+    #     "norm_first": False,
+    #     "enforce_constraint_in_forward": True,
     #     "activation": "gelu",
     #     "dropout": 0.1,
     #     "use_mlm": False,
@@ -390,38 +391,38 @@ if __name__ == "__main__":
     # )
 
 
-    # model_config = {
-    #     "hidden_size": 768,
-    #     "n_heads": 12,
-    #     "feed_forward_size": 4 * 768,
-    #     "n_layers": 12,
-    #     "tokenizer_config": tokenizer_config,
-    #     "norm_first": True,
-    #     "enforce_constraint_in_forward": True,
-    #     "activation": "gelu",
-    #     "dropout": 0.1,
-    #     "use_mlm": True,
-    # }
+    model_config = {
+        "hidden_size": 768,
+        "n_heads": 12,
+        "feed_forward_size": 4 * 768,
+        "n_layers": 12,
+        "tokenizer_config": tokenizer_config,
+        "norm_first": True,
+        "enforce_constraint_in_forward": True,
+        "activation": "gelu",
+        "dropout": 0.0,
+        "use_mlm": False,
+    }
 
-    # training_wrapper = TrainingWrapper(
-    #     model_config=model_config,
-    #     learning_rate=1e-4,
-    #     learning_rate_gamma=0.99,
-    #     lr_steps_per_epoch=2836,
-    #     masking_scheme="mlm",
-    #     use_weight_decay=True,
-    #     warmup_steps=1000,
-    # )
-
-    training_wrapper = TrainingWrapper.load_from_checkpoint(
-        "./checkpoints/toasty-bush-529/last.ckpt",
-        map_location="cpu",
+    training_wrapper = TrainingWrapper(
+        model_config=model_config,
+        learning_rate=1e-4,
+        learning_rate_gamma=0.99,
+        lr_steps_per_epoch=2836,
+        masking_scheme="variable_superposition",
+        use_weight_decay=True,
+        warmup_steps=1000,
     )
 
-    training_wrapper.convert_mlm_to_slm()
-    training_wrapper.enforce_constraint_in_forward = False
-    training_wrapper.model.embedding_layer.weight.requires_grad = False
-    training_wrapper.model.unembedding_layer.weight.requires_grad = False
+    # training_wrapper = TrainingWrapper.load_from_checkpoint(
+    #     "./checkpoints/toasty-bush-529/last.ckpt",
+    #     map_location="cpu",
+    # )
+
+    # training_wrapper.convert_mlm_to_slm()
+    # training_wrapper.enforce_constraint_in_forward = False
+    # training_wrapper.model.embedding_layer.weight.requires_grad = False
+    # training_wrapper.model.unembedding_layer.weight.requires_grad = False
 
     mmd_4bar_filter_fn = lambda x: f"n_bars={N_BARS}" in x
 
@@ -493,7 +494,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[7],
+        devices=[0,7],
         precision="16-mixed",
         max_epochs=10_000,
         log_every_n_steps=1,
