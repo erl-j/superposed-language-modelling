@@ -44,7 +44,7 @@ def random_add_masking_mml(x):
     return masked_x
 
 
-def random_add_masking_variable_superposition(x):
+def random_add_masking_variable_superposition(x, superposition_prob_function=lambda x:x):
     batch_size = x.shape[0]
     position_masking_probs = torch.rand(batch_size, device=x.device)
     position_mask = (
@@ -52,7 +52,7 @@ def random_add_masking_variable_superposition(x):
         < position_masking_probs[:, None]
     )
     # Instead of per-sample superposition probs, use per-position probs
-    superposition_probs = torch.rand((x.shape[0], x.shape[1]), device=x.device)
+    superposition_probs = superposition_prob_function(torch.rand((x.shape[0], x.shape[1]), device=x.device))
     superposition = (
         torch.rand_like(x, device=x.device) < superposition_probs[:, :, None]
     )

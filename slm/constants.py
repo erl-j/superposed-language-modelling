@@ -1,0 +1,18 @@
+instrument_class_to_selected_program_nr = {
+    "Piano": 1,
+    "Chromatic Percussion": 12,
+    "Organ": 21,
+    "Guitar": 25,
+    "Bass": 36,
+    "Strings": 43,
+    "Ensemble": 54,
+    "Brass": 61,
+    "Reed": 72,
+    "Pipe": 80,
+    "Synth Lead": 83,
+    "Synth Pad": 90,
+    "Synth Effects": 103,
+    "Ethnic": 108,
+    "Percussive": 115,
+    "Sound Effects": 112,
+}

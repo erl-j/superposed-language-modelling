@@ -1,0 +1,5102 @@
+[
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 0,
+        "file": "ground_truth/example_0.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 1,
+        "file": "ground_truth/example_1.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 2,
+        "file": "ground_truth/example_2.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 3,
+        "file": "ground_truth/example_3.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 4,
+        "file": "ground_truth/example_4.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 5,
+        "file": "ground_truth/example_5.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 6,
+        "file": "ground_truth/example_6.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 7,
+        "file": "ground_truth/example_7.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 8,
+        "file": "ground_truth/example_8.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 9,
+        "file": "ground_truth/example_9.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 10,
+        "file": "ground_truth/example_10.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 11,
+        "file": "ground_truth/example_11.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 12,
+        "file": "ground_truth/example_12.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 13,
+        "file": "ground_truth/example_13.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 14,
+        "file": "ground_truth/example_14.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 15,
+        "file": "ground_truth/example_15.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 16,
+        "file": "ground_truth/example_16.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 17,
+        "file": "ground_truth/example_17.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 18,
+        "file": "ground_truth/example_18.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 19,
+        "file": "ground_truth/example_19.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 20,
+        "file": "ground_truth/example_20.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 21,
+        "file": "ground_truth/example_21.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 22,
+        "file": "ground_truth/example_22.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 23,
+        "file": "ground_truth/example_23.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 24,
+        "file": "ground_truth/example_24.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 25,
+        "file": "ground_truth/example_25.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 26,
+        "file": "ground_truth/example_26.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 27,
+        "file": "ground_truth/example_27.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 28,
+        "file": "ground_truth/example_28.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 29,
+        "file": "ground_truth/example_29.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 30,
+        "file": "ground_truth/example_30.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 31,
+        "file": "ground_truth/example_31.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 32,
+        "file": "ground_truth/example_32.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 33,
+        "file": "ground_truth/example_33.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 34,
+        "file": "ground_truth/example_34.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 35,
+        "file": "ground_truth/example_35.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 36,
+        "file": "ground_truth/example_36.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 37,
+        "file": "ground_truth/example_37.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 38,
+        "file": "ground_truth/example_38.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 39,
+        "file": "ground_truth/example_39.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 40,
+        "file": "ground_truth/example_40.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 41,
+        "file": "ground_truth/example_41.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 42,
+        "file": "ground_truth/example_42.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 43,
+        "file": "ground_truth/example_43.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 44,
+        "file": "ground_truth/example_44.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 45,
+        "file": "ground_truth/example_45.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 46,
+        "file": "ground_truth/example_46.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 47,
+        "file": "ground_truth/example_47.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 48,
+        "file": "ground_truth/example_48.mid"
+    },
+    {
+        "model": "ground_truth",
+        "task": null,
+        "example_number": 49,
+        "file": "ground_truth/example_49.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 0,
+        "file": "slm/replace_bass_notes/generated_0.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 1,
+        "file": "slm/replace_bass_notes/generated_1.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 2,
+        "file": "slm/replace_bass_notes/generated_2.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 3,
+        "file": "slm/replace_bass_notes/generated_3.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 4,
+        "file": "slm/replace_bass_notes/generated_4.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 5,
+        "file": "slm/replace_bass_notes/generated_5.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 6,
+        "file": "slm/replace_bass_notes/generated_6.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 7,
+        "file": "slm/replace_bass_notes/generated_7.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 8,
+        "file": "slm/replace_bass_notes/generated_8.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 9,
+        "file": "slm/replace_bass_notes/generated_9.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 10,
+        "file": "slm/replace_bass_notes/generated_10.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 11,
+        "file": "slm/replace_bass_notes/generated_11.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 12,
+        "file": "slm/replace_bass_notes/generated_12.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 13,
+        "file": "slm/replace_bass_notes/generated_13.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 14,
+        "file": "slm/replace_bass_notes/generated_14.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 15,
+        "file": "slm/replace_bass_notes/generated_15.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 16,
+        "file": "slm/replace_bass_notes/generated_16.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 17,
+        "file": "slm/replace_bass_notes/generated_17.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 18,
+        "file": "slm/replace_bass_notes/generated_18.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 19,
+        "file": "slm/replace_bass_notes/generated_19.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 20,
+        "file": "slm/replace_bass_notes/generated_20.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 21,
+        "file": "slm/replace_bass_notes/generated_21.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 22,
+        "file": "slm/replace_bass_notes/generated_22.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 23,
+        "file": "slm/replace_bass_notes/generated_23.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 24,
+        "file": "slm/replace_bass_notes/generated_24.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 25,
+        "file": "slm/replace_bass_notes/generated_25.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 26,
+        "file": "slm/replace_bass_notes/generated_26.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 27,
+        "file": "slm/replace_bass_notes/generated_27.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 28,
+        "file": "slm/replace_bass_notes/generated_28.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 29,
+        "file": "slm/replace_bass_notes/generated_29.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 30,
+        "file": "slm/replace_bass_notes/generated_30.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 31,
+        "file": "slm/replace_bass_notes/generated_31.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 32,
+        "file": "slm/replace_bass_notes/generated_32.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 33,
+        "file": "slm/replace_bass_notes/generated_33.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 34,
+        "file": "slm/replace_bass_notes/generated_34.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 35,
+        "file": "slm/replace_bass_notes/generated_35.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 36,
+        "file": "slm/replace_bass_notes/generated_36.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 37,
+        "file": "slm/replace_bass_notes/generated_37.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 38,
+        "file": "slm/replace_bass_notes/generated_38.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 39,
+        "file": "slm/replace_bass_notes/generated_39.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 40,
+        "file": "slm/replace_bass_notes/generated_40.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 41,
+        "file": "slm/replace_bass_notes/generated_41.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 42,
+        "file": "slm/replace_bass_notes/generated_42.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 43,
+        "file": "slm/replace_bass_notes/generated_43.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 44,
+        "file": "slm/replace_bass_notes/generated_44.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 45,
+        "file": "slm/replace_bass_notes/generated_45.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 46,
+        "file": "slm/replace_bass_notes/generated_46.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 47,
+        "file": "slm/replace_bass_notes/generated_47.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 48,
+        "file": "slm/replace_bass_notes/generated_48.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_bass_notes",
+        "example_number": 49,
+        "file": "slm/replace_bass_notes/generated_49.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 0,
+        "file": "slm/replace_pitches/generated_0.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 1,
+        "file": "slm/replace_pitches/generated_1.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 2,
+        "file": "slm/replace_pitches/generated_2.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 3,
+        "file": "slm/replace_pitches/generated_3.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 4,
+        "file": "slm/replace_pitches/generated_4.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 5,
+        "file": "slm/replace_pitches/generated_5.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 6,
+        "file": "slm/replace_pitches/generated_6.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 7,
+        "file": "slm/replace_pitches/generated_7.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 8,
+        "file": "slm/replace_pitches/generated_8.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 9,
+        "file": "slm/replace_pitches/generated_9.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 10,
+        "file": "slm/replace_pitches/generated_10.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 11,
+        "file": "slm/replace_pitches/generated_11.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 12,
+        "file": "slm/replace_pitches/generated_12.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 13,
+        "file": "slm/replace_pitches/generated_13.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 14,
+        "file": "slm/replace_pitches/generated_14.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 15,
+        "file": "slm/replace_pitches/generated_15.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 16,
+        "file": "slm/replace_pitches/generated_16.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 17,
+        "file": "slm/replace_pitches/generated_17.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 18,
+        "file": "slm/replace_pitches/generated_18.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 19,
+        "file": "slm/replace_pitches/generated_19.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 20,
+        "file": "slm/replace_pitches/generated_20.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 21,
+        "file": "slm/replace_pitches/generated_21.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 22,
+        "file": "slm/replace_pitches/generated_22.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 23,
+        "file": "slm/replace_pitches/generated_23.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 24,
+        "file": "slm/replace_pitches/generated_24.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 25,
+        "file": "slm/replace_pitches/generated_25.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 26,
+        "file": "slm/replace_pitches/generated_26.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 27,
+        "file": "slm/replace_pitches/generated_27.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 28,
+        "file": "slm/replace_pitches/generated_28.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 29,
+        "file": "slm/replace_pitches/generated_29.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 30,
+        "file": "slm/replace_pitches/generated_30.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 31,
+        "file": "slm/replace_pitches/generated_31.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 32,
+        "file": "slm/replace_pitches/generated_32.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 33,
+        "file": "slm/replace_pitches/generated_33.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 34,
+        "file": "slm/replace_pitches/generated_34.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 35,
+        "file": "slm/replace_pitches/generated_35.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 36,
+        "file": "slm/replace_pitches/generated_36.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 37,
+        "file": "slm/replace_pitches/generated_37.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 38,
+        "file": "slm/replace_pitches/generated_38.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 39,
+        "file": "slm/replace_pitches/generated_39.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 40,
+        "file": "slm/replace_pitches/generated_40.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 41,
+        "file": "slm/replace_pitches/generated_41.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 42,
+        "file": "slm/replace_pitches/generated_42.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 43,
+        "file": "slm/replace_pitches/generated_43.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 44,
+        "file": "slm/replace_pitches/generated_44.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 45,
+        "file": "slm/replace_pitches/generated_45.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 46,
+        "file": "slm/replace_pitches/generated_46.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 47,
+        "file": "slm/replace_pitches/generated_47.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 48,
+        "file": "slm/replace_pitches/generated_48.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches",
+        "example_number": 49,
+        "file": "slm/replace_pitches/generated_49.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 0,
+        "file": "slm/replace_pitches_given_pitch_set/generated_0.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 1,
+        "file": "slm/replace_pitches_given_pitch_set/generated_1.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 2,
+        "file": "slm/replace_pitches_given_pitch_set/generated_2.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 3,
+        "file": "slm/replace_pitches_given_pitch_set/generated_3.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 4,
+        "file": "slm/replace_pitches_given_pitch_set/generated_4.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 5,
+        "file": "slm/replace_pitches_given_pitch_set/generated_5.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 6,
+        "file": "slm/replace_pitches_given_pitch_set/generated_6.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 7,
+        "file": "slm/replace_pitches_given_pitch_set/generated_7.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 8,
+        "file": "slm/replace_pitches_given_pitch_set/generated_8.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 9,
+        "file": "slm/replace_pitches_given_pitch_set/generated_9.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 10,
+        "file": "slm/replace_pitches_given_pitch_set/generated_10.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 11,
+        "file": "slm/replace_pitches_given_pitch_set/generated_11.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 12,
+        "file": "slm/replace_pitches_given_pitch_set/generated_12.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 13,
+        "file": "slm/replace_pitches_given_pitch_set/generated_13.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 14,
+        "file": "slm/replace_pitches_given_pitch_set/generated_14.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 15,
+        "file": "slm/replace_pitches_given_pitch_set/generated_15.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 16,
+        "file": "slm/replace_pitches_given_pitch_set/generated_16.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 17,
+        "file": "slm/replace_pitches_given_pitch_set/generated_17.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 18,
+        "file": "slm/replace_pitches_given_pitch_set/generated_18.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 19,
+        "file": "slm/replace_pitches_given_pitch_set/generated_19.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 20,
+        "file": "slm/replace_pitches_given_pitch_set/generated_20.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 21,
+        "file": "slm/replace_pitches_given_pitch_set/generated_21.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 22,
+        "file": "slm/replace_pitches_given_pitch_set/generated_22.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 23,
+        "file": "slm/replace_pitches_given_pitch_set/generated_23.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 24,
+        "file": "slm/replace_pitches_given_pitch_set/generated_24.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 25,
+        "file": "slm/replace_pitches_given_pitch_set/generated_25.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 26,
+        "file": "slm/replace_pitches_given_pitch_set/generated_26.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 27,
+        "file": "slm/replace_pitches_given_pitch_set/generated_27.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 28,
+        "file": "slm/replace_pitches_given_pitch_set/generated_28.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 29,
+        "file": "slm/replace_pitches_given_pitch_set/generated_29.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 30,
+        "file": "slm/replace_pitches_given_pitch_set/generated_30.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 31,
+        "file": "slm/replace_pitches_given_pitch_set/generated_31.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 32,
+        "file": "slm/replace_pitches_given_pitch_set/generated_32.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 33,
+        "file": "slm/replace_pitches_given_pitch_set/generated_33.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 34,
+        "file": "slm/replace_pitches_given_pitch_set/generated_34.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 35,
+        "file": "slm/replace_pitches_given_pitch_set/generated_35.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 36,
+        "file": "slm/replace_pitches_given_pitch_set/generated_36.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 37,
+        "file": "slm/replace_pitches_given_pitch_set/generated_37.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 38,
+        "file": "slm/replace_pitches_given_pitch_set/generated_38.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 39,
+        "file": "slm/replace_pitches_given_pitch_set/generated_39.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 40,
+        "file": "slm/replace_pitches_given_pitch_set/generated_40.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 41,
+        "file": "slm/replace_pitches_given_pitch_set/generated_41.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 42,
+        "file": "slm/replace_pitches_given_pitch_set/generated_42.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 43,
+        "file": "slm/replace_pitches_given_pitch_set/generated_43.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 44,
+        "file": "slm/replace_pitches_given_pitch_set/generated_44.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 45,
+        "file": "slm/replace_pitches_given_pitch_set/generated_45.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 46,
+        "file": "slm/replace_pitches_given_pitch_set/generated_46.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 47,
+        "file": "slm/replace_pitches_given_pitch_set/generated_47.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 48,
+        "file": "slm/replace_pitches_given_pitch_set/generated_48.mid"
+    },
+    {
+        "model": "slm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 49,
+        "file": "slm/replace_pitches_given_pitch_set/generated_49.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 0,
+        "file": "slm/unconditional/generated_0.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 1,
+        "file": "slm/unconditional/generated_1.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 2,
+        "file": "slm/unconditional/generated_2.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 3,
+        "file": "slm/unconditional/generated_3.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 4,
+        "file": "slm/unconditional/generated_4.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 5,
+        "file": "slm/unconditional/generated_5.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 6,
+        "file": "slm/unconditional/generated_6.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 7,
+        "file": "slm/unconditional/generated_7.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 8,
+        "file": "slm/unconditional/generated_8.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 9,
+        "file": "slm/unconditional/generated_9.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 10,
+        "file": "slm/unconditional/generated_10.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 11,
+        "file": "slm/unconditional/generated_11.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 12,
+        "file": "slm/unconditional/generated_12.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 13,
+        "file": "slm/unconditional/generated_13.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 14,
+        "file": "slm/unconditional/generated_14.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 15,
+        "file": "slm/unconditional/generated_15.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 16,
+        "file": "slm/unconditional/generated_16.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 17,
+        "file": "slm/unconditional/generated_17.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 18,
+        "file": "slm/unconditional/generated_18.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 19,
+        "file": "slm/unconditional/generated_19.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 20,
+        "file": "slm/unconditional/generated_20.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 21,
+        "file": "slm/unconditional/generated_21.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 22,
+        "file": "slm/unconditional/generated_22.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 23,
+        "file": "slm/unconditional/generated_23.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 24,
+        "file": "slm/unconditional/generated_24.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 25,
+        "file": "slm/unconditional/generated_25.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 26,
+        "file": "slm/unconditional/generated_26.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 27,
+        "file": "slm/unconditional/generated_27.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 28,
+        "file": "slm/unconditional/generated_28.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 29,
+        "file": "slm/unconditional/generated_29.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 30,
+        "file": "slm/unconditional/generated_30.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 31,
+        "file": "slm/unconditional/generated_31.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 32,
+        "file": "slm/unconditional/generated_32.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 33,
+        "file": "slm/unconditional/generated_33.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 34,
+        "file": "slm/unconditional/generated_34.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 35,
+        "file": "slm/unconditional/generated_35.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 36,
+        "file": "slm/unconditional/generated_36.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 37,
+        "file": "slm/unconditional/generated_37.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 38,
+        "file": "slm/unconditional/generated_38.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 39,
+        "file": "slm/unconditional/generated_39.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 40,
+        "file": "slm/unconditional/generated_40.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 41,
+        "file": "slm/unconditional/generated_41.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 42,
+        "file": "slm/unconditional/generated_42.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 43,
+        "file": "slm/unconditional/generated_43.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 44,
+        "file": "slm/unconditional/generated_44.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 45,
+        "file": "slm/unconditional/generated_45.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 46,
+        "file": "slm/unconditional/generated_46.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 47,
+        "file": "slm/unconditional/generated_47.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 48,
+        "file": "slm/unconditional/generated_48.mid"
+    },
+    {
+        "model": "slm",
+        "task": "unconditional",
+        "example_number": 49,
+        "file": "slm/unconditional/generated_49.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 0,
+        "file": "mlm/replace_bass_notes/generated_0.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 1,
+        "file": "mlm/replace_bass_notes/generated_1.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 2,
+        "file": "mlm/replace_bass_notes/generated_2.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 3,
+        "file": "mlm/replace_bass_notes/generated_3.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 4,
+        "file": "mlm/replace_bass_notes/generated_4.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 5,
+        "file": "mlm/replace_bass_notes/generated_5.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 6,
+        "file": "mlm/replace_bass_notes/generated_6.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 7,
+        "file": "mlm/replace_bass_notes/generated_7.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 8,
+        "file": "mlm/replace_bass_notes/generated_8.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 9,
+        "file": "mlm/replace_bass_notes/generated_9.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 10,
+        "file": "mlm/replace_bass_notes/generated_10.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 11,
+        "file": "mlm/replace_bass_notes/generated_11.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 12,
+        "file": "mlm/replace_bass_notes/generated_12.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 13,
+        "file": "mlm/replace_bass_notes/generated_13.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 14,
+        "file": "mlm/replace_bass_notes/generated_14.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 15,
+        "file": "mlm/replace_bass_notes/generated_15.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 16,
+        "file": "mlm/replace_bass_notes/generated_16.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 17,
+        "file": "mlm/replace_bass_notes/generated_17.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 18,
+        "file": "mlm/replace_bass_notes/generated_18.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 19,
+        "file": "mlm/replace_bass_notes/generated_19.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 20,
+        "file": "mlm/replace_bass_notes/generated_20.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 21,
+        "file": "mlm/replace_bass_notes/generated_21.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 22,
+        "file": "mlm/replace_bass_notes/generated_22.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 23,
+        "file": "mlm/replace_bass_notes/generated_23.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 24,
+        "file": "mlm/replace_bass_notes/generated_24.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 25,
+        "file": "mlm/replace_bass_notes/generated_25.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 26,
+        "file": "mlm/replace_bass_notes/generated_26.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 27,
+        "file": "mlm/replace_bass_notes/generated_27.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 28,
+        "file": "mlm/replace_bass_notes/generated_28.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 29,
+        "file": "mlm/replace_bass_notes/generated_29.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 30,
+        "file": "mlm/replace_bass_notes/generated_30.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 31,
+        "file": "mlm/replace_bass_notes/generated_31.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 32,
+        "file": "mlm/replace_bass_notes/generated_32.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 33,
+        "file": "mlm/replace_bass_notes/generated_33.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 34,
+        "file": "mlm/replace_bass_notes/generated_34.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 35,
+        "file": "mlm/replace_bass_notes/generated_35.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 36,
+        "file": "mlm/replace_bass_notes/generated_36.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 37,
+        "file": "mlm/replace_bass_notes/generated_37.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 38,
+        "file": "mlm/replace_bass_notes/generated_38.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 39,
+        "file": "mlm/replace_bass_notes/generated_39.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 40,
+        "file": "mlm/replace_bass_notes/generated_40.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 41,
+        "file": "mlm/replace_bass_notes/generated_41.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 42,
+        "file": "mlm/replace_bass_notes/generated_42.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 43,
+        "file": "mlm/replace_bass_notes/generated_43.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 44,
+        "file": "mlm/replace_bass_notes/generated_44.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 45,
+        "file": "mlm/replace_bass_notes/generated_45.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 46,
+        "file": "mlm/replace_bass_notes/generated_46.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 47,
+        "file": "mlm/replace_bass_notes/generated_47.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 48,
+        "file": "mlm/replace_bass_notes/generated_48.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_bass_notes",
+        "example_number": 49,
+        "file": "mlm/replace_bass_notes/generated_49.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 0,
+        "file": "mlm/replace_pitches/generated_0.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 1,
+        "file": "mlm/replace_pitches/generated_1.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 2,
+        "file": "mlm/replace_pitches/generated_2.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 3,
+        "file": "mlm/replace_pitches/generated_3.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 4,
+        "file": "mlm/replace_pitches/generated_4.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 5,
+        "file": "mlm/replace_pitches/generated_5.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 6,
+        "file": "mlm/replace_pitches/generated_6.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 7,
+        "file": "mlm/replace_pitches/generated_7.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 8,
+        "file": "mlm/replace_pitches/generated_8.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 9,
+        "file": "mlm/replace_pitches/generated_9.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 10,
+        "file": "mlm/replace_pitches/generated_10.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 11,
+        "file": "mlm/replace_pitches/generated_11.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 12,
+        "file": "mlm/replace_pitches/generated_12.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 13,
+        "file": "mlm/replace_pitches/generated_13.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 14,
+        "file": "mlm/replace_pitches/generated_14.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 15,
+        "file": "mlm/replace_pitches/generated_15.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 16,
+        "file": "mlm/replace_pitches/generated_16.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 17,
+        "file": "mlm/replace_pitches/generated_17.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 18,
+        "file": "mlm/replace_pitches/generated_18.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 19,
+        "file": "mlm/replace_pitches/generated_19.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 20,
+        "file": "mlm/replace_pitches/generated_20.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 21,
+        "file": "mlm/replace_pitches/generated_21.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 22,
+        "file": "mlm/replace_pitches/generated_22.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 23,
+        "file": "mlm/replace_pitches/generated_23.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 24,
+        "file": "mlm/replace_pitches/generated_24.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 25,
+        "file": "mlm/replace_pitches/generated_25.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 26,
+        "file": "mlm/replace_pitches/generated_26.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 27,
+        "file": "mlm/replace_pitches/generated_27.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 28,
+        "file": "mlm/replace_pitches/generated_28.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 29,
+        "file": "mlm/replace_pitches/generated_29.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 30,
+        "file": "mlm/replace_pitches/generated_30.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 31,
+        "file": "mlm/replace_pitches/generated_31.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 32,
+        "file": "mlm/replace_pitches/generated_32.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 33,
+        "file": "mlm/replace_pitches/generated_33.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 34,
+        "file": "mlm/replace_pitches/generated_34.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 35,
+        "file": "mlm/replace_pitches/generated_35.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 36,
+        "file": "mlm/replace_pitches/generated_36.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 37,
+        "file": "mlm/replace_pitches/generated_37.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 38,
+        "file": "mlm/replace_pitches/generated_38.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 39,
+        "file": "mlm/replace_pitches/generated_39.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 40,
+        "file": "mlm/replace_pitches/generated_40.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 41,
+        "file": "mlm/replace_pitches/generated_41.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 42,
+        "file": "mlm/replace_pitches/generated_42.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 43,
+        "file": "mlm/replace_pitches/generated_43.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 44,
+        "file": "mlm/replace_pitches/generated_44.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 45,
+        "file": "mlm/replace_pitches/generated_45.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 46,
+        "file": "mlm/replace_pitches/generated_46.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 47,
+        "file": "mlm/replace_pitches/generated_47.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 48,
+        "file": "mlm/replace_pitches/generated_48.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches",
+        "example_number": 49,
+        "file": "mlm/replace_pitches/generated_49.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 0,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_0.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 1,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_1.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 2,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_2.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 3,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_3.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 4,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_4.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 5,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_5.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 6,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_6.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 7,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_7.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 8,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_8.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 9,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_9.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 10,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_10.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 11,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_11.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 12,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_12.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 13,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_13.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 14,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_14.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 15,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_15.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 16,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_16.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 17,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_17.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 18,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_18.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 19,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_19.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 20,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_20.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 21,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_21.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 22,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_22.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 23,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_23.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 24,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_24.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 25,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_25.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 26,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_26.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 27,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_27.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 28,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_28.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 29,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_29.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 30,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_30.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 31,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_31.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 32,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_32.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 33,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_33.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 34,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_34.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 35,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_35.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 36,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_36.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 37,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_37.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 38,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_38.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 39,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_39.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 40,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_40.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 41,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_41.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 42,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_42.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 43,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_43.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 44,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_44.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 45,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_45.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 46,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_46.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 47,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_47.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 48,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_48.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 49,
+        "file": "mlm/replace_pitches_given_pitch_set/generated_49.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 0,
+        "file": "mlm/unconditional/generated_0.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 1,
+        "file": "mlm/unconditional/generated_1.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 2,
+        "file": "mlm/unconditional/generated_2.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 3,
+        "file": "mlm/unconditional/generated_3.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 4,
+        "file": "mlm/unconditional/generated_4.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 5,
+        "file": "mlm/unconditional/generated_5.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 6,
+        "file": "mlm/unconditional/generated_6.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 7,
+        "file": "mlm/unconditional/generated_7.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 8,
+        "file": "mlm/unconditional/generated_8.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 9,
+        "file": "mlm/unconditional/generated_9.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 10,
+        "file": "mlm/unconditional/generated_10.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 11,
+        "file": "mlm/unconditional/generated_11.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 12,
+        "file": "mlm/unconditional/generated_12.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 13,
+        "file": "mlm/unconditional/generated_13.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 14,
+        "file": "mlm/unconditional/generated_14.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 15,
+        "file": "mlm/unconditional/generated_15.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 16,
+        "file": "mlm/unconditional/generated_16.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 17,
+        "file": "mlm/unconditional/generated_17.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 18,
+        "file": "mlm/unconditional/generated_18.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 19,
+        "file": "mlm/unconditional/generated_19.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 20,
+        "file": "mlm/unconditional/generated_20.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 21,
+        "file": "mlm/unconditional/generated_21.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 22,
+        "file": "mlm/unconditional/generated_22.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 23,
+        "file": "mlm/unconditional/generated_23.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 24,
+        "file": "mlm/unconditional/generated_24.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 25,
+        "file": "mlm/unconditional/generated_25.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 26,
+        "file": "mlm/unconditional/generated_26.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 27,
+        "file": "mlm/unconditional/generated_27.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 28,
+        "file": "mlm/unconditional/generated_28.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 29,
+        "file": "mlm/unconditional/generated_29.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 30,
+        "file": "mlm/unconditional/generated_30.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 31,
+        "file": "mlm/unconditional/generated_31.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 32,
+        "file": "mlm/unconditional/generated_32.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 33,
+        "file": "mlm/unconditional/generated_33.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 34,
+        "file": "mlm/unconditional/generated_34.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 35,
+        "file": "mlm/unconditional/generated_35.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 36,
+        "file": "mlm/unconditional/generated_36.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 37,
+        "file": "mlm/unconditional/generated_37.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 38,
+        "file": "mlm/unconditional/generated_38.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 39,
+        "file": "mlm/unconditional/generated_39.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 40,
+        "file": "mlm/unconditional/generated_40.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 41,
+        "file": "mlm/unconditional/generated_41.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 42,
+        "file": "mlm/unconditional/generated_42.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 43,
+        "file": "mlm/unconditional/generated_43.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 44,
+        "file": "mlm/unconditional/generated_44.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 45,
+        "file": "mlm/unconditional/generated_45.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 46,
+        "file": "mlm/unconditional/generated_46.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 47,
+        "file": "mlm/unconditional/generated_47.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 48,
+        "file": "mlm/unconditional/generated_48.mid"
+    },
+    {
+        "model": "mlm",
+        "task": "unconditional",
+        "example_number": 49,
+        "file": "mlm/unconditional/generated_49.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 0,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_0.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 1,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_1.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 2,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_2.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 3,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_3.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 4,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_4.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 5,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_5.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 6,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_6.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 7,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_7.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 8,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_8.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 9,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_9.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 10,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_10.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 11,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_11.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 12,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_12.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 13,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_13.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 14,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_14.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 15,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_15.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 16,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_16.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 17,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_17.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 18,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_18.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 19,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_19.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 20,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_20.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 21,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_21.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 22,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_22.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 23,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_23.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 24,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_24.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 25,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_25.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 26,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_26.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 27,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_27.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 28,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_28.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 29,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_29.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 30,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_30.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 31,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_31.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 32,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_32.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 33,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_33.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 34,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_34.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 35,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_35.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 36,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_36.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 37,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_37.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 38,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_38.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 39,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_39.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 40,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_40.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 41,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_41.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 42,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_42.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 43,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_43.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 44,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_44.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 45,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_45.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 46,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_46.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 47,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_47.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 48,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_48.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_bass_notes",
+        "example_number": 49,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_bass_notes/generated_49.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 0,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_0.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 1,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_1.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 2,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_2.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 3,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_3.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 4,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_4.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 5,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_5.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 6,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_6.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 7,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_7.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 8,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_8.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 9,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_9.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 10,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_10.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 11,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_11.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 12,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_12.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 13,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_13.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 14,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_14.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 15,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_15.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 16,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_16.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 17,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_17.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 18,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_18.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 19,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_19.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 20,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_20.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 21,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_21.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 22,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_22.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 23,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_23.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 24,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_24.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 25,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_25.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 26,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_26.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 27,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_27.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 28,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_28.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 29,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_29.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 30,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_30.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 31,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_31.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 32,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_32.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 33,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_33.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 34,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_34.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 35,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_35.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 36,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_36.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 37,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_37.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 38,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_38.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 39,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_39.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 40,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_40.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 41,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_41.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 42,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_42.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 43,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_43.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 44,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_44.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 45,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_45.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 46,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_46.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 47,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_47.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 48,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_48.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches",
+        "example_number": 49,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches/generated_49.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 0,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_0.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 1,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_1.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 2,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_2.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 3,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_3.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 4,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_4.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 5,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_5.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 6,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_6.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 7,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_7.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 8,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_8.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 9,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_9.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 10,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_10.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 11,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_11.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 12,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_12.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 13,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_13.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 14,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_14.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 15,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_15.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 16,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_16.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 17,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_17.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 18,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_18.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 19,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_19.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 20,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_20.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 21,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_21.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 22,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_22.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 23,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_23.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 24,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_24.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 25,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_25.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 26,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_26.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 27,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_27.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 28,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_28.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 29,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_29.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 30,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_30.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 31,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_31.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 32,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_32.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 33,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_33.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 34,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_34.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 35,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_35.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 36,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_36.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 37,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_37.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 38,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_38.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 39,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_39.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 40,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_40.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 41,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_41.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 42,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_42.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 43,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_43.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 44,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_44.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 45,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_45.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 46,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_46.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 47,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_47.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 48,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_48.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 49,
+        "file": "slm_wo_enforce_constraint_in_fwd/replace_pitches_given_pitch_set/generated_49.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 0,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_0.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 1,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_1.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 2,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_2.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 3,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_3.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 4,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_4.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 5,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_5.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 6,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_6.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 7,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_7.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 8,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_8.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 9,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_9.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 10,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_10.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 11,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_11.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 12,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_12.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 13,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_13.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 14,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_14.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 15,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_15.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 16,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_16.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 17,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_17.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 18,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_18.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 19,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_19.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 20,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_20.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 21,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_21.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 22,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_22.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 23,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_23.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 24,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_24.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 25,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_25.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 26,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_26.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 27,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_27.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 28,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_28.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 29,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_29.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 30,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_30.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 31,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_31.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 32,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_32.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 33,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_33.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 34,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_34.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 35,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_35.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 36,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_36.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 37,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_37.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 38,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_38.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 39,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_39.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 40,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_40.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 41,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_41.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 42,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_42.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 43,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_43.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 44,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_44.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 45,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_45.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 46,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_46.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 47,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_47.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 48,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_48.mid"
+    },
+    {
+        "model": "slm_wo_enforce_constraint_in_fwd",
+        "task": "unconditional",
+        "example_number": 49,
+        "file": "slm_wo_enforce_constraint_in_fwd/unconditional/generated_49.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 0,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_0.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 1,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_1.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 2,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_2.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 3,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_3.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 4,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_4.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 5,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_5.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 6,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_6.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 7,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_7.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 8,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_8.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 9,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_9.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 10,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_10.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 11,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_11.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 12,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_12.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 13,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_13.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 14,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_14.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 15,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_15.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 16,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_16.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 17,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_17.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 18,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_18.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 19,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_19.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 20,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_20.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 21,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_21.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 22,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_22.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 23,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_23.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 24,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_24.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 25,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_25.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 26,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_26.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 27,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_27.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 28,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_28.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 29,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_29.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 30,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_30.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 31,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_31.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 32,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_32.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 33,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_33.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 34,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_34.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 35,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_35.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 36,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_36.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 37,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_37.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 38,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_38.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 39,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_39.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 40,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_40.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 41,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_41.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 42,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_42.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 43,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_43.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 44,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_44.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 45,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_45.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 46,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_46.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 47,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_47.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 48,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_48.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_bass_notes",
+        "example_number": 49,
+        "file": "slm_not_norm_first/replace_bass_notes/generated_49.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 0,
+        "file": "slm_not_norm_first/replace_pitches/generated_0.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 1,
+        "file": "slm_not_norm_first/replace_pitches/generated_1.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 2,
+        "file": "slm_not_norm_first/replace_pitches/generated_2.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 3,
+        "file": "slm_not_norm_first/replace_pitches/generated_3.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 4,
+        "file": "slm_not_norm_first/replace_pitches/generated_4.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 5,
+        "file": "slm_not_norm_first/replace_pitches/generated_5.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 6,
+        "file": "slm_not_norm_first/replace_pitches/generated_6.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 7,
+        "file": "slm_not_norm_first/replace_pitches/generated_7.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 8,
+        "file": "slm_not_norm_first/replace_pitches/generated_8.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 9,
+        "file": "slm_not_norm_first/replace_pitches/generated_9.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 10,
+        "file": "slm_not_norm_first/replace_pitches/generated_10.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 11,
+        "file": "slm_not_norm_first/replace_pitches/generated_11.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 12,
+        "file": "slm_not_norm_first/replace_pitches/generated_12.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 13,
+        "file": "slm_not_norm_first/replace_pitches/generated_13.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 14,
+        "file": "slm_not_norm_first/replace_pitches/generated_14.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 15,
+        "file": "slm_not_norm_first/replace_pitches/generated_15.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 16,
+        "file": "slm_not_norm_first/replace_pitches/generated_16.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 17,
+        "file": "slm_not_norm_first/replace_pitches/generated_17.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 18,
+        "file": "slm_not_norm_first/replace_pitches/generated_18.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 19,
+        "file": "slm_not_norm_first/replace_pitches/generated_19.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 20,
+        "file": "slm_not_norm_first/replace_pitches/generated_20.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 21,
+        "file": "slm_not_norm_first/replace_pitches/generated_21.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 22,
+        "file": "slm_not_norm_first/replace_pitches/generated_22.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 23,
+        "file": "slm_not_norm_first/replace_pitches/generated_23.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 24,
+        "file": "slm_not_norm_first/replace_pitches/generated_24.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 25,
+        "file": "slm_not_norm_first/replace_pitches/generated_25.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 26,
+        "file": "slm_not_norm_first/replace_pitches/generated_26.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 27,
+        "file": "slm_not_norm_first/replace_pitches/generated_27.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 28,
+        "file": "slm_not_norm_first/replace_pitches/generated_28.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 29,
+        "file": "slm_not_norm_first/replace_pitches/generated_29.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 30,
+        "file": "slm_not_norm_first/replace_pitches/generated_30.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 31,
+        "file": "slm_not_norm_first/replace_pitches/generated_31.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 32,
+        "file": "slm_not_norm_first/replace_pitches/generated_32.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 33,
+        "file": "slm_not_norm_first/replace_pitches/generated_33.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 34,
+        "file": "slm_not_norm_first/replace_pitches/generated_34.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 35,
+        "file": "slm_not_norm_first/replace_pitches/generated_35.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 36,
+        "file": "slm_not_norm_first/replace_pitches/generated_36.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 37,
+        "file": "slm_not_norm_first/replace_pitches/generated_37.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 38,
+        "file": "slm_not_norm_first/replace_pitches/generated_38.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 39,
+        "file": "slm_not_norm_first/replace_pitches/generated_39.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 40,
+        "file": "slm_not_norm_first/replace_pitches/generated_40.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 41,
+        "file": "slm_not_norm_first/replace_pitches/generated_41.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 42,
+        "file": "slm_not_norm_first/replace_pitches/generated_42.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 43,
+        "file": "slm_not_norm_first/replace_pitches/generated_43.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 44,
+        "file": "slm_not_norm_first/replace_pitches/generated_44.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 45,
+        "file": "slm_not_norm_first/replace_pitches/generated_45.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 46,
+        "file": "slm_not_norm_first/replace_pitches/generated_46.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 47,
+        "file": "slm_not_norm_first/replace_pitches/generated_47.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 48,
+        "file": "slm_not_norm_first/replace_pitches/generated_48.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches",
+        "example_number": 49,
+        "file": "slm_not_norm_first/replace_pitches/generated_49.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 0,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_0.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 1,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_1.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 2,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_2.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 3,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_3.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 4,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_4.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 5,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_5.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 6,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_6.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 7,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_7.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 8,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_8.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 9,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_9.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 10,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_10.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 11,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_11.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 12,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_12.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 13,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_13.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 14,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_14.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 15,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_15.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 16,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_16.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 17,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_17.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 18,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_18.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 19,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_19.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 20,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_20.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 21,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_21.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 22,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_22.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 23,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_23.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 24,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_24.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 25,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_25.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 26,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_26.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 27,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_27.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 28,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_28.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 29,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_29.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 30,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_30.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 31,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_31.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 32,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_32.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 33,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_33.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 34,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_34.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 35,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_35.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 36,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_36.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 37,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_37.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 38,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_38.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 39,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_39.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 40,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_40.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 41,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_41.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 42,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_42.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 43,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_43.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 44,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_44.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 45,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_45.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 46,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_46.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 47,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_47.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 48,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_48.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "replace_pitches_given_pitch_set",
+        "example_number": 49,
+        "file": "slm_not_norm_first/replace_pitches_given_pitch_set/generated_49.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 0,
+        "file": "slm_not_norm_first/unconditional/generated_0.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 1,
+        "file": "slm_not_norm_first/unconditional/generated_1.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 2,
+        "file": "slm_not_norm_first/unconditional/generated_2.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 3,
+        "file": "slm_not_norm_first/unconditional/generated_3.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 4,
+        "file": "slm_not_norm_first/unconditional/generated_4.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 5,
+        "file": "slm_not_norm_first/unconditional/generated_5.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 6,
+        "file": "slm_not_norm_first/unconditional/generated_6.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 7,
+        "file": "slm_not_norm_first/unconditional/generated_7.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 8,
+        "file": "slm_not_norm_first/unconditional/generated_8.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 9,
+        "file": "slm_not_norm_first/unconditional/generated_9.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 10,
+        "file": "slm_not_norm_first/unconditional/generated_10.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 11,
+        "file": "slm_not_norm_first/unconditional/generated_11.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 12,
+        "file": "slm_not_norm_first/unconditional/generated_12.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 13,
+        "file": "slm_not_norm_first/unconditional/generated_13.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 14,
+        "file": "slm_not_norm_first/unconditional/generated_14.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 15,
+        "file": "slm_not_norm_first/unconditional/generated_15.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 16,
+        "file": "slm_not_norm_first/unconditional/generated_16.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 17,
+        "file": "slm_not_norm_first/unconditional/generated_17.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 18,
+        "file": "slm_not_norm_first/unconditional/generated_18.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 19,
+        "file": "slm_not_norm_first/unconditional/generated_19.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 20,
+        "file": "slm_not_norm_first/unconditional/generated_20.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 21,
+        "file": "slm_not_norm_first/unconditional/generated_21.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 22,
+        "file": "slm_not_norm_first/unconditional/generated_22.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 23,
+        "file": "slm_not_norm_first/unconditional/generated_23.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 24,
+        "file": "slm_not_norm_first/unconditional/generated_24.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 25,
+        "file": "slm_not_norm_first/unconditional/generated_25.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 26,
+        "file": "slm_not_norm_first/unconditional/generated_26.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 27,
+        "file": "slm_not_norm_first/unconditional/generated_27.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 28,
+        "file": "slm_not_norm_first/unconditional/generated_28.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 29,
+        "file": "slm_not_norm_first/unconditional/generated_29.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 30,
+        "file": "slm_not_norm_first/unconditional/generated_30.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 31,
+        "file": "slm_not_norm_first/unconditional/generated_31.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 32,
+        "file": "slm_not_norm_first/unconditional/generated_32.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 33,
+        "file": "slm_not_norm_first/unconditional/generated_33.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 34,
+        "file": "slm_not_norm_first/unconditional/generated_34.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 35,
+        "file": "slm_not_norm_first/unconditional/generated_35.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 36,
+        "file": "slm_not_norm_first/unconditional/generated_36.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 37,
+        "file": "slm_not_norm_first/unconditional/generated_37.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 38,
+        "file": "slm_not_norm_first/unconditional/generated_38.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 39,
+        "file": "slm_not_norm_first/unconditional/generated_39.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 40,
+        "file": "slm_not_norm_first/unconditional/generated_40.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 41,
+        "file": "slm_not_norm_first/unconditional/generated_41.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 42,
+        "file": "slm_not_norm_first/unconditional/generated_42.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 43,
+        "file": "slm_not_norm_first/unconditional/generated_43.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 44,
+        "file": "slm_not_norm_first/unconditional/generated_44.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 45,
+        "file": "slm_not_norm_first/unconditional/generated_45.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 46,
+        "file": "slm_not_norm_first/unconditional/generated_46.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 47,
+        "file": "slm_not_norm_first/unconditional/generated_47.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 48,
+        "file": "slm_not_norm_first/unconditional/generated_48.mid"
+    },
+    {
+        "model": "slm_not_norm_first",
+        "task": "unconditional",
+        "example_number": 49,
+        "file": "slm_not_norm_first/unconditional/generated_49.mid"
+    }
+]

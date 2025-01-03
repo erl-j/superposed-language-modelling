@@ -12,6 +12,7 @@ import numpy as np
 import math
 import time
 from paper_checkpoints import CHECKPOINTS
+from util import sm_set_track_order
 
 # Configuration
 SEED = 42
@@ -33,10 +34,44 @@ if OUTPUT_DIR.exists():
         exit()
 
 # Number of examples to generate per task
-N_EXAMPLES = 50
+N_EXAMPLES = 100
 
 GENERATE = True
 
+
+
+def constrained_generation(
+    e,
+    ec,
+    n_events,
+    tick_range,
+    pitch_range,
+    drums,
+    tag,
+    tempo,    
+):
+    
+    # remove inactive notes
+    e = [ev for ev in e if ev.is_active()]
+
+    instruments = set().union(*[ev.a["instrument"] for ev in e])
+    pitches = set().union(*[ev.a["pitch"] for ev in e])
+    onsets = set().union(*[ev.a["onset/global_tick"] for ev in e])
+    offsets = set().union(*[ev.a["offset/global_tick"] for ev in e])
+    velocities = set().union(*[ev.a["velocity"] for ev in e])
+    tempos = set().union(*[ev.a["tempo"] for ev in e])
+
+    # get number of active notes
+    n_active_notes = sum([1 for ev in e if ev.is_active()])
+
+    new_events = [
+        ec().intersect(
+            {"instrument": instruments, "pitch": pitches, "onset/global_tick": onsets, "offset/global_tick": offsets, "velocity": velocities}
+        ).intersect({"tempo": tempos}).force_active()
+        for _ in range(n_events)
+    ]
+
+    return new_events
 
 def replace_bass_notes(
     e,
@@ -154,7 +189,6 @@ def replace_pitches(
 
     return e
 
-
 def replace_onset_offsets(
     e,
     ec,
@@ -201,13 +235,25 @@ def replace_onsets_offsets_given_onset_offset_set(
 
     return e
 
-
 def unconditional(e, ec, n_events, tick_range, pitch_range, drums, tag, tempo):
     return [ec() for _ in range(n_events)]
 
-
 # Define tasks with their parameters
 TASKS = {
+    "constrained_generation": {
+        "sampling_settings": {
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "top_k": 0,
+            "tokens_per_step": 1,
+        },
+        "fn": constrained_generation,
+        "tick_range": None,
+        "pitch_range": None,
+        "drums": None,
+        "tag": None,
+        "tempo": None,
+    },
     "replace_bass_notes": {
         "sampling_settings": {
             "temperature": 1.0,
@@ -264,8 +310,21 @@ TASKS = {
         "tag": None,
         "tempo": None,
     },
+    "infill_middle": {
+        "sampling_settings": {
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "top_k": 0,
+            "tokens_per_step": 1,
+        },
+        "fn": replace_notes_in_box,
+        "tick_range": (4, 8),
+        "pitch_range": (22, 110),
+        "drums": False,
+        "tag": None,
+        "tempo": None,
+    }
 }
-
 
 def setup_model(checkpoint_path):
     """Load and set up the model."""
@@ -273,7 +332,6 @@ def setup_model(checkpoint_path):
     model = TrainingWrapper.load_from_checkpoint(checkpoint_path, map_location=DEVICE)
     model.eval()
     return model
-
 
 def load_test_dataset(tokenizer):
     """Load the test dataset."""
@@ -301,9 +359,7 @@ def load_test_dataset(tokenizer):
 
     return test_ds
 
-
 records = []
-
 
 def main():
     # Set random seed for reproducibility
@@ -323,9 +379,12 @@ def main():
     ground_truth_indices = random.sample(range(len(test_dataset)), N_EXAMPLES)
     ground_truth_examples = [test_dataset[idx] for idx in ground_truth_indices]
 
+    print(ground_truth_examples)
+    print(ground_truth_examples[0])
+
     for i, example in enumerate(ground_truth_examples):
         example_sm = first_model.tokenizer.decode(ground_truth_examples[i]["token_ids"])
-        example_sm.dump_midi(ground_truth_dir / f"example_{i}.mid")
+        sm_set_track_order(example_sm).dump_midi(ground_truth_dir / f"example_{i}.mid")
 
     # Process each checkpoint
     for checkpoint_name, checkpoint_path in CHECKPOINTS.items():
@@ -406,8 +465,11 @@ def main():
                     # Convert to midi
                     output_sm = model.tokenizer.decode(output_mask)
 
+
                     # write
-                    output_sm.dump_midi(task_dir / f"generated_{i}.mid")
+                    sm_set_track_order(output_sm).dump_midi(
+                        task_dir / f"generated_{i}.mid"
+                    )
 
     print(records)
     # save records as csv

@@ -237,7 +237,7 @@ class SuperposedLanguageModel(torch.nn.Module):
                     updated_event_indices = set(updated_event_indices.cpu().numpy())
 
                     x = self.tokenizer.collapse_undefined_attributes(x)
-                    # x = self.tokenizer.sanitize_mask(x, event_indices=updated_event_indices)
+                    x = self.tokenizer.sanitize_mask(x, event_indices=updated_event_indices)
 
                     # masekd tokens after
                     masked_tokens_after = (x.sum(-1) > 1).sum().int().item()

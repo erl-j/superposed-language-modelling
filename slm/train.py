@@ -53,6 +53,7 @@ class TrainingWrapper(pl.LightningModule):
             assert (
                 self.masking_scheme == "variable_superposition"
                 or self.masking_scheme == "mml"
+                or self.masking_scheme == "variable_superposition_x**1/2"
             )
         pass
 
@@ -90,6 +91,10 @@ class TrainingWrapper(pl.LightningModule):
                 x_masked_ta = random_add_masking_mml(x_ta)
             elif self.masking_scheme == "variable_superposition":
                 x_masked_ta = random_add_masking_variable_superposition(x_ta)
+            elif self.masking_scheme == "variable_superposition_x**1/2":
+                x_masked_ta = random_add_masking_variable_superposition(
+                    x_ta, lambda x: x ** 0.5
+                )
             x_masked = einops.rearrange(
                 x_masked_ta,
                 "b (t a) v -> b t a v",
@@ -327,11 +332,9 @@ if __name__ == "__main__":
 
     DATASET = "mmd_loops"
 
-    # BATCH_SIZE = 60 12, 768
-    # BATCH_SIZE = 80
-
     BATCH_SIZE = 80
     # BATCH_SIZE = 40
+    #BATCH_SIZE = 120
 
     tag_list = open(f"./data/{DATASET}/tags.txt").read().splitlines()
 
@@ -397,19 +400,19 @@ if __name__ == "__main__":
         "feed_forward_size": 4 * 768,
         "n_layers": 12,
         "tokenizer_config": tokenizer_config,
-        "norm_first": True,
+        "norm_first": False,
         "enforce_constraint_in_forward": True,
         "activation": "gelu",
-        "dropout": 0.0,
+        "dropout": 0.1,
         "use_mlm": False,
     }
 
     training_wrapper = TrainingWrapper(
         model_config=model_config,
-        learning_rate=1e-4,
+        learning_rate=1e-4 if model_config["hidden_size"] == 512 else 1e-4,
         learning_rate_gamma=0.99,
         lr_steps_per_epoch=2836,
-        masking_scheme="variable_superposition",
+        masking_scheme="variable_superposition_x**1/2",
         use_weight_decay=True,
         warmup_steps=1000,
     )
@@ -494,7 +497,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[0,7],
+        devices=[0,1],
         precision="16-mixed",
         max_epochs=10_000,
         log_every_n_steps=1,

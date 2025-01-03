@@ -7,30 +7,7 @@ from util import get_scale
 import einops
 import matplotlib.pyplot as plt
 from constraints.core import MusicalEventConstraint
-# has features over old one.
-# supports velocity bins
-# drums are now a separate instrument
-# instrument classes
-# metadata is part of note attributes
-
-instrument_class_to_selected_program_nr = {
-    "Piano": 1,
-    "Chromatic Percussion":12,
-    "Organ":21,
-    "Guitar":25,
-    "Bass":36,
-    "Strings":43,
-    "Ensemble":54,
-    "Brass":61,
-    "Reed":72,
-    "Pipe":80,
-    "Synth Lead":83,
-    "Synth Pad":90,
-    "Synth Effects":103,
-    "Ethnic":108,
-    "Percussive":115,
-    "Sound Effects":112
-}
+from constants import instrument_class_to_selected_program_nr
 
 class Tokenizer():
     def __init__(self, config):

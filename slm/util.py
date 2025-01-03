@@ -13,6 +13,28 @@ import IPython.display as ipd
 import math
 import glob
 from tqdm import tqdm
+from constants import instrument_class_to_selected_program_nr
+
+def sm_set_track_order(sm):
+    track_order = ["Drums"] + list(instrument_class_to_selected_program_nr.keys())
+    sm = sm.copy()
+    # check out current instrument classes
+    existing_instrument_classes = set([pretty_midi.program_to_instrument_class(track.program) for track in sm.tracks])
+    if any([t.is_drum for t in sm.tracks]):
+        existing_instrument_classes.add("Drums")
+    
+    # add missing instrument classes
+    for instrument_class in track_order:
+        if instrument_class not in existing_instrument_classes:
+            if instrument_class == "Drums":
+                sm.tracks.append(symusic.Track(is_drum=True, program=0))
+            else:
+                sm.tracks.append(symusic.Track(program=instrument_class_to_selected_program_nr[instrument_class], is_drum=False))
+    # sort tracks by instrument class
+    # sort tracks by is drum
+    sm.tracks = sorted(sm.tracks, key=lambda x: x.is_drum)
+    sm.tracks = sorted(sm.tracks, key=lambda x: track_order.index(pretty_midi.program_to_instrument_class(x.program)))
+    return sm
 
 def sm_fix_overlap_notes(sm):
     sm = sm.copy()
@@ -123,8 +145,6 @@ def get_sm_pitch_range(sm):
     min_pitch = min(pitches)
     max_pitch = max(pitches)
     return min_pitch, max_pitch
-
-
 
 def render_directory_with_fluidsynth(midi_dir, audio_dir, overwrite=False):
     os.makedirs(audio_dir, exist_ok=True)

@@ -107,7 +107,10 @@ model = TrainingWrapper.load_from_checkpoint(
     # "./checkpoints/lucky-puddle-550/last.ckpt",
     # "./checkpoints/crimson-night-547/last.ckpt",
     # "./checkpoints/smart-brook-552/last.ckpt",
-    "./checkpoints/glad-surf-562/last.ckpt",
+    # "./checkpoints/glad-surf-562/last.ckpt",
+    # "./checkpoints/floral-firefly-567/last.ckpt",
+    "./checkpoints/golden-monkey-568/last.ckpt",
+    # "./checkpoints/glowing-snowball-572/last.ckpt",
     map_location=device,
 )
 
