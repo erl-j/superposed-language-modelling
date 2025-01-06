@@ -16,6 +16,8 @@ from masking import (
     event_masking,
 )
 from model import SuperposedLanguageModel
+from mdlm import LogLinearNoise
+
 
 
 class TrainingWrapper(pl.LightningModule):
@@ -48,12 +50,13 @@ class TrainingWrapper(pl.LightningModule):
 
         # assert that masking_scheme is compatible with use_mlm
         if self.use_mlm:
-            assert self.masking_scheme == "mlm"
+            assert self.masking_scheme == "mlm" or self.masking_scheme == "mdlm"
         else:
             assert (
                 self.masking_scheme == "variable_superposition"
                 or self.masking_scheme == "mml"
                 or self.masking_scheme == "variable_superposition_x**1/2"
+                or self.masking_scheme == "variable_superposition_x**1/4"
             )
         pass
 
@@ -70,6 +73,8 @@ class TrainingWrapper(pl.LightningModule):
             batch: dictionary containing batch data (token_ids (batch_size, events, attributes), n_loops_in_parent_song)
             batch_idx: index of batch
         """
+        if self.masking_scheme == "mdlm":
+            return self.step_mdlm(batch, batch_idx)
         token_ids = batch["token_ids"]
         target_token_ids = batch["token_ids"]
         # one hot encode token_ids with model dtype
@@ -94,6 +99,10 @@ class TrainingWrapper(pl.LightningModule):
             elif self.masking_scheme == "variable_superposition_x**1/2":
                 x_masked_ta = random_add_masking_variable_superposition(
                     x_ta, lambda x: x ** 0.5
+                )
+            elif self.masking_scheme == "variable_superposition_x**1/4":
+                x_masked_ta = random_add_masking_variable_superposition(
+                    x_ta, lambda x: x ** 0.25
                 )
             x_masked = einops.rearrange(
                 x_masked_ta,
@@ -131,6 +140,33 @@ class TrainingWrapper(pl.LightningModule):
                 for key in filtered_logits_metrics:
                     metrics[f"filtered_logits/{key}"] = filtered_logits_metrics[key]
         return metrics
+    
+    def step_mdlm(self, batch, batch_idx):
+        token_ids = batch["token_ids"]
+        target_token_ids = batch["token_ids"]
+        batch_size = token_ids.shape[0]
+        time = torch.rand(batch_size, 1, 1, device=self.get_model_device())
+        noise = LogLinearNoise()
+        total_noise, rate_noise = noise(time)
+        mask_probs = torch.rand(token_ids.shape, device=self.get_model_device(), dtype=self.get_model_dtype())
+        mask = mask_probs < total_noise[:, None, None]
+        # where mask is True, replace token_ids with mask token
+        masked_input = token_ids.clone()
+        masked_input[mask] = len(self.tokenizer.vocab)
+        masked_tokens_1h = torch.nn.functional.one_hot(
+            token_ids, num_classes=len(self.tokenizer.vocab)+1, dtype=self.get_model_dtype(), device=self.get_model_device()
+        )
+        log_probs = self.model(masked_tokens_1h)
+        # flatten logits and target_token_ids
+        log_probs_flat = einops.rearrange(log_probs, "b e a v -> b (e a) v")
+        target_token_ids_flat = einops.rearrange(target_token_ids, "b e a -> b (e a)")
+        loss = rate_noise[:,None] * F.cross_entropy(log_probs_flat, target_token_ids_flat, reduction="none")
+        metrics = {
+            "cross_entropy": loss.mean(),
+            "rate_noise": rate_noise.mean(),
+            "total_noise": total_noise.mean(),
+        }
+        return metrics
 
     def stage_step(self, batch, batch_idx, stage):
         metrics = self.step(batch, batch_idx)
@@ -150,9 +186,11 @@ class TrainingWrapper(pl.LightningModule):
         return loss
 
     def training_step(self, batch, batch_idx):
+        self.train()
         return self.stage_step(batch, batch_idx, "trn")
 
     def validation_step(self, batch, batch_idx):
+        self.eval()
         return self.stage_step(batch, batch_idx, "val")
 
     def compute_metrics(self, target_token_ids, logits, n_loops_in_parent_song):
@@ -332,9 +370,9 @@ if __name__ == "__main__":
 
     DATASET = "mmd_loops"
 
-    BATCH_SIZE = 80
+    #BATCH_SIZE = 80
     # BATCH_SIZE = 40
-    #BATCH_SIZE = 120
+    BATCH_SIZE = 80
 
     tag_list = open(f"./data/{DATASET}/tags.txt").read().splitlines()
 
@@ -370,32 +408,8 @@ if __name__ == "__main__":
     USE_RANDOM_SHIFT = False
     tokenizer = Tokenizer(tokenizer_config)
 
-    # model_config = {
-    #     "hidden_size": 768,
-    #     "n_heads": 12,
-    #     "feed_forward_size": 4 * 768,
-    #     "n_layers": 12,
-    #     "tokenizer_config": tokenizer_config,
-    #     "norm_first": False,
-    #     "enforce_constraint_in_forward": True,
-    #     "activation": "gelu",
-    #     "dropout": 0.1,
-    #     "use_mlm": False,
-    # }
-
-    # training_wrapper = TrainingWrapper(
-    #     model_config=model_config,
-    #     learning_rate=1e-4,
-    #     learning_rate_gamma=0.99,
-    #     masking_scheme="variable_superposition",
-    #     use_weight_decay=True,
-    #     warmup_steps=1000,
-    #     lr_steps_per_epoch=2836,
-    # )
-
-
     model_config = {
-        "hidden_size": 768,
+        "hidden_size":768,
         "n_heads": 12,
         "feed_forward_size": 4 * 768,
         "n_layers": 12,
@@ -404,7 +418,7 @@ if __name__ == "__main__":
         "enforce_constraint_in_forward": True,
         "activation": "gelu",
         "dropout": 0.1,
-        "use_mlm": False,
+        "use_mlm": True,
     }
 
     training_wrapper = TrainingWrapper(
@@ -412,7 +426,7 @@ if __name__ == "__main__":
         learning_rate=1e-4 if model_config["hidden_size"] == 512 else 1e-4,
         learning_rate_gamma=0.99,
         lr_steps_per_epoch=2836,
-        masking_scheme="variable_superposition_x**1/2",
+        masking_scheme="mlm",
         use_weight_decay=True,
         warmup_steps=1000,
     )
@@ -454,6 +468,25 @@ if __name__ == "__main__":
         num_workers=4,
         pin_memory=True,
     )
+
+    # val_ds2 = MidiDataset(
+    #     cache_path=f"./data/harmonic/val_midi_records_unique_pr.pt",
+    #     path_filter_fn=None,
+    #     genre_list=tag_list,
+    #     tokenizer=tokenizer,
+    #     min_notes=4 * N_BARS if DATASET == "mmd_loops" else 4 * N_BARS,
+    #     max_notes=tokenizer_config["max_notes"],
+    #     use_random_shift=USE_RANDOM_SHIFT,
+    #     sm_filter_fn=sm_filter_fn,
+    # )
+
+    # val_dl2 = torch.utils.data.DataLoader(
+    #     val_ds,
+    #     batch_size=BATCH_SIZE,
+    #     shuffle=False,
+    #     num_workers=4,
+    #     pin_memory=True,
+    # )
 
     print(f"Loaded {len(val_ds)} validation records")
 
@@ -497,9 +530,9 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[0,1],
+        devices=[6,7],
         precision="16-mixed",
-        max_epochs=10_000,
+        max_epochs=150,
         log_every_n_steps=1,
         # val_check_interval=10,
         callbacks=[
@@ -511,10 +544,17 @@ if __name__ == "__main__":
                 dirpath=f"./checkpoints/{name}/",
                 monitor="val/loss_epoch",
                 mode="min",
-                save_top_k=3,
+                save_top_k=10,
                 save_last=True,
                 filename="{epoch}-{step}-{val/loss_epoch:.5f}",
                 every_n_epochs=1 if DATASET == "mmd_loops" else 100,
+            ),
+            pl.callbacks.ModelCheckpoint(
+                dirpath=f"./checkpoints/{name}/every25",
+                save_last=True,
+                filename="{epoch}-{step}-{val/accuracy@1:.5f}",
+                every_n_epochs=10,
+                save_top_k=-1,
             ),
         ],
         logger=wandb_logger,

@@ -9,7 +9,7 @@ import symusic
 
 sys.path.append("slm/")
 # from slm.train_old import EncoderOnlyModel
-# from slm.train2_old import SuperposedLanguageModel
+from slm.train2_old import SuperposedLanguageModel
 from slm.train import TrainingWrapper
 from util import preview_sm, sm_fix_overlap_notes, loop_sm
 from slm.tokenizer import instrument_class_to_selected_program_nr
@@ -84,8 +84,8 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 #     # "./checkpoints/drawn-universe-463/last.ckpt",
 #     # "./checkpoints/dulcet-jazz-464/last.ckpt",
 #     # "./checkpoints/clean-oath-465/last.ckpt",
-#     # "./checkpoints/stoic-capybara-480/last.ckpt",
-#     "./checkpoints/stoic-capybara-480/epoch=34-step=99260-val/loss_epoch=1.11820.ckpt",
+#     "./checkpoints/stoic-capybara-480/last.ckpt",
+#     # "./checkpoints/stoic-capybara-480/epoch=34-step=99260-val/loss_epoch=1.11820.ckpt",
 #     map_location=device,
 # )
 
@@ -104,13 +104,18 @@ model = TrainingWrapper.load_from_checkpoint(
     # "./checkpoints/rural-oath-549/last.ckpt",
     # "./checkpoints/rural-oath-549/epoch=425-step=1208136-val/loss_epoch=0.14559.ckpt",
     # "./checkpoints/colorful-sun-548/last.ckpt",
-    # "./checkpoints/lucky-puddle-550/last.ckpt",
+    # "./checkpoints/lucky-puddle-550/last.ckpt", 
     # "./checkpoints/crimson-night-547/last.ckpt",
     # "./checkpoints/smart-brook-552/last.ckpt",
     # "./checkpoints/glad-surf-562/last.ckpt",
     # "./checkpoints/floral-firefly-567/last.ckpt",
-    "./checkpoints/golden-monkey-568/last.ckpt",
+    # "./checkpoints/golden-monkey-568/last.ckpt",
     # "./checkpoints/glowing-snowball-572/last.ckpt",
+    # "./checkpoints/driven-planet-576/last.ckpt",
+    # "./checkpoints/fancy-paper-577/last.ckpt",
+    # "./checkpoints/helpful-sun-589/last.ckpt",
+    # "./checkpoints/helpful-sun-589/every25/epoch=124-step=354500-val/accuracy@1=0.95040.ckpt",
+    "./checkpoints/helpful-sun-589/epoch=115-step=328976-val/loss_epoch=0.15271.ckpt",
     map_location=device,
 )
 
@@ -134,6 +139,13 @@ def generate(
         order=order,
         attribute_temperature=attribute_temperature,
     )[0].argmax(-1)
+
+    # out = model.model.generate_w_maskgit(
+    #     x=mask,
+    #     num_steps=200,
+    #     temperature=3.0,
+    #     min_temperature=1.0,
+    # )[0].argmax(-1)
     
     return out
 

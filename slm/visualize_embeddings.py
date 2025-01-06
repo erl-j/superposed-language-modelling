@@ -37,7 +37,7 @@ from paper_checkpoints import CHECKPOINTS
 
 model = TrainingWrapper.load_from_checkpoint(
     # CHECKPOINTS["slm_not_norm_first"],
-    CHECKPOINTS["slm_tiny_not_norm_first"],
+    CHECKPOINTS["slm_w_proj"],
     map_location="cpu",
 )
 

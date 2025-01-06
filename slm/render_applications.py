@@ -12,7 +12,8 @@ import numpy as np
 import math
 import time
 from paper_checkpoints import CHECKPOINTS
-from util import sm_set_track_order
+from util import sm_set_track_order, sm_fix_overlap_notes
+
 
 # Configuration
 SEED = 42
@@ -34,10 +35,63 @@ if OUTPUT_DIR.exists():
         exit()
 
 # Number of examples to generate per task
-N_EXAMPLES = 100
+N_EXAMPLES = 10
 
 GENERATE = True
 
+def triplet_piano_in_scale_pitch_set(e,
+    ec,
+    n_events,
+    tick_range,
+    pitch_range,
+    drums,
+    tag,
+    tempo,
+):
+    
+        e = []
+
+        # triplet onsets
+        onsets = [x for x in range(tick_range[0], tick_range[1], 24//3)]
+    
+        # add 50 piano notes
+        e += [ec().intersect({"instrument": {"Piano"}}).
+                intersect(ec().pitch_in_scale_constraint("C major", [35, 88])).
+            
+        
+        # pad with empty notes
+        e += [ec().force_inactive() for _ in range(n_events - len(e))]
+    
+        # set to 96
+        e = [ev.intersect(ec().tempo_constraint(tempo)) for ev in e]
+    
+        return e
+
+
+def piano_in_scale_pitch_set(e,
+    ec,
+    n_events,
+    tick_range,
+    pitch_range,
+    drums,
+    tag,
+    tempo,
+):
+
+    e = []
+
+    # add 50 piano notes
+    e += [ec().intersect({"instrument": {"Piano"}}).
+          intersect(ec().pitch_in_scale_constraint("C major", [35, 88])).force_active() for _ in range(50)]
+    
+    # pad with empty notes
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
+
+    # set to 96
+    e = [ev.intersect(ec().tempo_constraint(tempo)) for ev in e]
+
+    return e
+    
 
 
 def constrained_generation(
@@ -209,6 +263,109 @@ def replace_onset_offsets(
     return e
 
 
+def hihat_beat(
+    e,
+    ec,
+    n_events,
+    tick_range,
+    pitch_range,
+    drums,
+    tag,
+    tempo,
+):
+    e = []
+    # remove empty notes
+    e = [ev for ev in e if ev.is_active()]
+
+    # remove all drums
+    e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Drums"})]
+
+    # add 10 kicks
+    e += [ec().intersect({"pitch": {"36 (Drums)"}}).force_active() for _ in range(20)]
+
+    # add 4 snares
+    e += [ec().intersect({"pitch": {"38 (Drums)"}}).force_active() for _ in range(4)]
+
+    # add 10 hihats
+    e += [ec().intersect({"pitch": {"42 (Drums)"}}).force_active() for _ in range(40)]
+
+    # add 4 open
+    e += [ec().intersect({"pitch": {"46 (Drums)"}}).force_active() for _ in range(4)]
+
+    # add 10 ghost snare
+    e += [
+        ec()
+        .intersect({"pitch": {"38 (Drums)"}})
+        .intersect(ec().velocity_constraint(40))
+        .force_active()
+        for _ in range(10)
+    ]
+
+    # add up to 20 optional drum notes
+    e += [ec().intersect({"instrument": {"Drums"}}) for _ in range(20)]
+
+    # pad with empty notes
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
+
+    # set to 96
+    e = [ev.intersect(ec().tempo_constraint(tempo)) for ev in e]
+
+    # set tag to funk
+    e = [ev.intersect({"tag": {tag, "-"}}) for ev in e]
+
+    return e
+
+from constraints.core import TOM_PITCHES, HIHAT_PITCHES
+# create breakbeat
+
+
+def ride_tom_beat(
+    e,
+    ec,
+    n_events,
+    beat_range,
+    pitch_range,
+    drums,
+    tag,
+    tempo,
+):
+    e = []
+    # remove empty notes
+    e = [ev for ev in e if ev.is_active()]
+
+    # remove drums
+    e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Drums"})]
+    # add 10 kicks
+    e += [ec().intersect({"pitch": {"36 (Drums)"}}).force_active() for _ in range(20)]
+    # add 10 optional kicks
+    e += [ec().intersect({"pitch": {"36 (Drums)", "-"}}) for _ in range(10)]
+    # add 3 toms
+    e += [ec().intersect({"pitch": TOM_PITCHES}).force_active() for _ in range(10)]
+
+    # add ride
+    RIDE_PITCHES = {"51 (Drums)", "53 (Drums)", "59 (Drums)"}
+    # add 20 rides
+    e += [ec().intersect({"pitch": RIDE_PITCHES}).force_active() for _ in range(40)]
+    # 20 optional rides
+    e += [ec().intersect({"pitch": RIDE_PITCHES | {"-"}}) for _ in range(20)]
+    # add 10 snare
+    e += [ec().intersect({"pitch": {"38 (Drums)"}}).force_active() for _ in range(6)]
+    # add 10 optional snares
+    e += [ec().intersect({"pitch": {"38 (Drums)", "-"}}) for _ in range(10)]
+
+    # pad with empty notes
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
+
+    e = [ev.intersect({"tag": {tag, "-"}}) for ev in e]
+
+    # set tempo
+    e = [ev.intersect(ec().tempo_constraint(tempo)) for ev in e]
+
+    # tempo
+
+    return e
+
+
 def replace_onsets_offsets_given_onset_offset_set(
     e,
     ec,
@@ -318,13 +475,56 @@ TASKS = {
             "tokens_per_step": 1,
         },
         "fn": replace_notes_in_box,
-        "tick_range": (4, 8),
+        "tick_range": (4*24, 12*24),
         "pitch_range": (22, 110),
         "drums": False,
         "tag": None,
         "tempo": None,
-    }
+    },
+    "hihat_beat":{
+        "sampling_settings": {
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "top_k": 0,
+            "tokens_per_step": 1,
+        },
+        "fn": hihat_beat,
+        "tick_range": None,
+        "pitch_range": None,
+        "drums": None,
+        "tag": "pop",
+        "tempo": 96,
+    },
+    "ride_tom_beat":{
+        "sampling_settings": {
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "top_k": 0,
+            "tokens_per_step": 1,
+        },
+        "fn": ride_tom_beat,
+        "tick_range": None,
+        "pitch_range": None,
+        "drums": None,
+        "tag": "pop",
+        "tempo": 160,
+    },
+    "piano_in_scale_pitch_set":{
+        "sampling_settings": {
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "top_k": 0,
+            "tokens_per_step": 1,
+        },
+        "fn": piano_in_scale_pitch_set,
+        "tick_range": None,
+        "pitch_range": None,
+        "drums": None,
+        "tag": "pop",
+        "tempo": 120,
+    },
 }
+
 
 def setup_model(checkpoint_path):
     """Load and set up the model."""
@@ -465,7 +665,7 @@ def main():
                     # Convert to midi
                     output_sm = model.tokenizer.decode(output_mask)
 
-
+                    output_sm = sm_fix_overlap_notes(output_sm)
                     # write
                     sm_set_track_order(output_sm).dump_midi(
                         task_dir / f"generated_{i}.mid"

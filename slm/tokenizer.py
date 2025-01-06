@@ -29,6 +29,9 @@ class Tokenizer():
             self.config["durations"] = []
         self.drum_pitches = list(range(35, 82))
 
+        if "fold_event_attributes" not in self.config:
+            self.config["fold_event_attributes"] = True
+
         # exponential tempo bins
         self.tempo_bins = np.linspace(np.log(self.config["min_tempo"]), np.log(self.config["max_tempo"]), self.config["n_tempo_bins"])
         self.tempo_bins = np.exp(self.tempo_bins)
