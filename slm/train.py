@@ -32,6 +32,7 @@ class TrainingWrapper(pl.LightningModule):
         event_masking_prob=0.0,
         warmup_steps=0,
         lr_steps_per_epoch=2836,
+        collapse_inactive_events=False,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -59,6 +60,8 @@ class TrainingWrapper(pl.LightningModule):
                 or self.masking_scheme == "variable_superposition_x**1/4"
             )
         pass
+
+        self.collapse_inactive_events = collapse_inactive_events
 
     def get_model_dtype(self):
         return self.model.embedding_layer.weight.dtype
@@ -118,6 +121,8 @@ class TrainingWrapper(pl.LightningModule):
             ).to(self.get_model_device())
             # renormalize
             x_input = x_masked / x_masked.sum(dim=-1, keepdim=True)
+            if self.collapse_inactive_events:
+                self.model.tokenizer.collapse_undefined_attributes(x_input)
         logits = self.model(x_input)
         
         # get metrics
@@ -372,7 +377,7 @@ if __name__ == "__main__":
 
     #BATCH_SIZE = 80
     # BATCH_SIZE = 40
-    BATCH_SIZE = 80
+    BATCH_SIZE = 60
 
     tag_list = open(f"./data/{DATASET}/tags.txt").read().splitlines()
 
@@ -400,8 +405,8 @@ if __name__ == "__main__":
         "ignored_track_names": [f"Layers{i}" for i in range(0, 8)],
         "separate_drum_pitch": True,
         "use_drum_duration": False,
-        # "use_durations": True,
-        # "durations": [Fraction(1, 32), Fraction(1, 16), Fraction(1, 8), Fraction(1, 4), Fraction(1, 2), Fraction(1, 1), Fraction(2, 1), Fraction(4, 1)],
+        "use_durations": True,
+        "durations": [Fraction(1, 32), Fraction(1, 16), Fraction(1, 8), Fraction(1, 4), Fraction(1, 2), Fraction(1, 1), Fraction(2, 1), Fraction(4, 1)],
         "fold_event_attributes": False,
     }
 
@@ -418,7 +423,7 @@ if __name__ == "__main__":
         "enforce_constraint_in_forward": True,
         "activation": "gelu",
         "dropout": 0.1,
-        "use_mlm": True,
+        "use_mlm": False,
     }
 
     training_wrapper = TrainingWrapper(
@@ -426,9 +431,10 @@ if __name__ == "__main__":
         learning_rate=1e-4 if model_config["hidden_size"] == 512 else 1e-4,
         learning_rate_gamma=0.99,
         lr_steps_per_epoch=2836,
-        masking_scheme="mlm",
+        masking_scheme="variable_superposition",
         use_weight_decay=True,
         warmup_steps=1000,
+        collapse_inactive_events=True,
     )
 
     # training_wrapper = TrainingWrapper.load_from_checkpoint(
