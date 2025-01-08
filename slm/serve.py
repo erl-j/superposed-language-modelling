@@ -119,7 +119,8 @@ model = TrainingWrapper.load_from_checkpoint(
     # "./checkpoints/smooth-meadow-615/last.ckpt",
     # "./checkpoints/crisp-paper-617/last.ckpt",
     # "./checkpoints/smooth-meadow-615/every25/epoch=39-step=151240-val/accuracy@1=0.95662.ckpt",
-    "./checkpoints/avid-smoke-622/last.ckpt",
+    # "./checkpoints/avid-smoke-622/last.ckpt",
+    "./checkpoints/glowing-pine-623/last.ckpt",
     map_location=device,
 )
 

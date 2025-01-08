@@ -101,9 +101,10 @@ class SuperposedLanguageModel(torch.nn.Module):
 
         probs = F.softmax(logits, dim=-1)
         # add epsilon to avoid log(0)
-
+        # add eps
         probs = probs * constraint
         probs = probs / probs.sum(dim=-1, keepdim=True)
+        # add eps
         # get log likelihood
         target_probs = (target * probs).sum(dim=-1)
         # assert that target probs sums to one 

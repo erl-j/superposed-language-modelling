@@ -22,7 +22,7 @@ torch.manual_seed(SEED)
 random.seed(SEED)
 np.random.seed(SEED)
 #
-DEVICE = "cuda:5" if torch.cuda.is_available() else "cpu"
+DEVICE = "cuda:2" if torch.cuda.is_available() else "cpu"
 OUTPUT_DIR = Path("./artefacts/applications")
 
 # Model checkpoints to test
@@ -35,7 +35,7 @@ if OUTPUT_DIR.exists():
         exit()
 
 # Number of examples to generate per task
-N_EXAMPLES = 10
+N_EXAMPLES = 100
 
 GENERATE = True
 
@@ -48,16 +48,15 @@ def triplet_piano_in_scale_pitch_set(e,
     tag,
     tempo,
 ):
-    
         e = []
 
         # triplet onsets
-        onsets = [x for x in range(tick_range[0], tick_range[1], 24//3)]
+        onsets = set([str(x) for x in range(0, 24*16, 24//3)])
+
     
         # add 50 piano notes
-        e += [ec().intersect({"instrument": {"Piano"}}).
-                intersect(ec().pitch_in_scale_constraint("C major", [35, 88])).
-            
+        e += [ec().intersect({"instrument": {"Piano"},
+                                "onset/global_tick": onsets}).force_active() for _ in range(50)]
         
         # pad with empty notes
         e += [ec().force_inactive() for _ in range(n_events - len(e))]
@@ -242,26 +241,6 @@ def replace_pitches(
             e[event_idx] = e[event_idx].force_active()
 
     return e
-
-def replace_onset_offsets(
-    e,
-    ec,
-    n_events,
-    tick_range,
-    pitch_range,
-    drums,
-    tag,
-    tempo,
-):
-    # set pitch set to all pitches
-    for event_idx in range(n_events):
-        if e[event_idx].is_active():
-            e[event_idx].a["onset/global_tick"] = ec().a["onset/global_tick"]
-            e[event_idx].a["offset/global_tick"] = ec().a["offset/global_tick"]
-            e[event_idx] = e[event_idx].force_active()
-
-    return e
-
 
 def hihat_beat(
     e,
@@ -481,20 +460,20 @@ TASKS = {
         "tag": None,
         "tempo": None,
     },
-    "hihat_beat":{
-        "sampling_settings": {
-            "temperature": 1.0,
-            "top_p": 1.0,
-            "top_k": 0,
-            "tokens_per_step": 1,
-        },
-        "fn": hihat_beat,
-        "tick_range": None,
-        "pitch_range": None,
-        "drums": None,
-        "tag": "pop",
-        "tempo": 96,
-    },
+    # "hihat_beat":{
+    #     "sampling_settings": {
+    #         "temperature": 1.0,
+    #         "top_p": 1.0,
+    #         "top_k": 0,
+    #         "tokens_per_step": 1,
+    #     },
+    #     "fn": hihat_beat,
+    #     "tick_range": None,
+    #     "pitch_range": None,
+    #     "drums": None,
+    #     "tag": "pop",
+    #     "tempo": 96,
+    # },
     "ride_tom_beat":{
         "sampling_settings": {
             "temperature": 1.0,
@@ -523,7 +502,24 @@ TASKS = {
         "tag": "pop",
         "tempo": 120,
     },
+    "triplet_piano_in_scale_pitch_set":{
+        "sampling_settings": {
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "top_k": 0,
+            "tokens_per_step": 1,
+        },
+        "fn": triplet_piano_in_scale_pitch_set,
+        "tick_range": None,
+        "pitch_range": None,
+        "drums": None,
+        "tag": "pop",
+        "tempo": 120,
+    },
 }
+
+# reverse the order of the tasks
+TASKS = dict(reversed(TASKS.items()))
 
 
 def setup_model(checkpoint_path):

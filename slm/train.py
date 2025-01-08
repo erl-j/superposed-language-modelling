@@ -70,7 +70,7 @@ class TrainingWrapper(pl.LightningModule):
 
     def get_model_device(self):
         return next(self.model.parameters()).device
-
+    
     def step(self, batch, batch_idx):
         """
         Perform a single forward pass and calculate metrics
