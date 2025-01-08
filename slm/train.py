@@ -14,6 +14,7 @@ from masking import (
     random_add_masking_variable_superposition,
     attribute_masking,
     event_masking,
+    mixed_superposition
 )
 from model import SuperposedLanguageModel
 from mdlm import LogLinearNoise
@@ -58,6 +59,7 @@ class TrainingWrapper(pl.LightningModule):
                 or self.masking_scheme == "mml"
                 or self.masking_scheme == "variable_superposition_x**1/2"
                 or self.masking_scheme == "variable_superposition_x**1/4"
+                or self.masking_scheme == "mixed_superposition"
             )
         pass
 
@@ -94,24 +96,27 @@ class TrainingWrapper(pl.LightningModule):
                 a=len(self.tokenizer.note_attribute_order),
             )
         else:
-            x_ta = einops.rearrange(x, "b t a v -> b (t a) v")
-            if self.masking_scheme == "mml":
-                x_masked_ta = random_add_masking_mml(x_ta)
-            elif self.masking_scheme == "variable_superposition":
-                x_masked_ta = random_add_masking_variable_superposition(x_ta)
-            elif self.masking_scheme == "variable_superposition_x**1/2":
-                x_masked_ta = random_add_masking_variable_superposition(
-                    x_ta, lambda x: x ** 0.5
+            if self.masking_scheme == "mixed_superposition":
+                x_masked = mixed_superposition(x)
+            else:
+                x_ta = einops.rearrange(x, "b t a v -> b (t a) v")
+                if self.masking_scheme == "mml":
+                    x_masked_ta = random_add_masking_mml(x_ta)
+                elif self.masking_scheme == "variable_superposition":
+                    x_masked_ta = random_add_masking_variable_superposition(x_ta)
+                elif self.masking_scheme == "variable_superposition_x**1/2":
+                    x_masked_ta = random_add_masking_variable_superposition(
+                        x_ta, lambda x: x ** 0.5
+                    )
+                elif self.masking_scheme == "variable_superposition_x**1/4":
+                    x_masked_ta = random_add_masking_variable_superposition(
+                        x_ta, lambda x: x ** 0.25
+                    )
+                x_masked = einops.rearrange(
+                    x_masked_ta,
+                    "b (t a) v -> b t a v",
+                    a=len(self.tokenizer.note_attribute_order),
                 )
-            elif self.masking_scheme == "variable_superposition_x**1/4":
-                x_masked_ta = random_add_masking_variable_superposition(
-                    x_ta, lambda x: x ** 0.25
-                )
-            x_masked = einops.rearrange(
-                x_masked_ta,
-                "b (t a) v -> b t a v",
-                a=len(self.tokenizer.note_attribute_order),
-            )
             if self.attribute_masking_prob > 0:
                 x_masked = attribute_masking(x_masked, self.attribute_masking_prob)
             if self.event_masking_prob > 0:
@@ -431,7 +436,7 @@ if __name__ == "__main__":
         learning_rate=1e-4 if model_config["hidden_size"] == 512 else 1e-4,
         learning_rate_gamma=0.99,
         lr_steps_per_epoch=2836,
-        masking_scheme="variable_superposition",
+        masking_scheme="mixed_superposition",
         use_weight_decay=True,
         warmup_steps=1000,
         collapse_inactive_events=True,

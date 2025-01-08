@@ -43,7 +43,6 @@ def random_add_masking_mml(x):
     masked_x = torch.clamp(x + mask, 0, 1)
     return masked_x
 
-
 def random_add_masking_variable_superposition(x, superposition_prob_function=lambda x:x):
     batch_size = x.shape[0]
     position_masking_probs = torch.rand(batch_size, device=x.device)
@@ -59,6 +58,106 @@ def random_add_masking_variable_superposition(x, superposition_prob_function=lam
     mask = position_mask[:, :, None] * superposition
     masked_x = torch.clamp(x + mask, 0, 1)
     return masked_x
+
+def mixed_superposition(x):
+    """Apply superposition masking scheme to a batch of one-hot encoded tensors.
+
+    Args:
+        x: Input tensor of shape (batch_size, num_events, num_attributes, vocab_size)
+
+    Returns:
+        Tuple of (masked_tensor, mask) where mask shows which positions were masked
+    """
+
+    device = x.device
+    batch_size, num_events, num_attributes, vocab_size = x.shape
+
+    # Sample per-batch parameters
+    is_full_mask = (
+        torch.rand(batch_size, device=device) < 0.5
+    )  # 50% chance of full masking
+    masking_type = torch.rand(batch_size, device=device)  # Uniform for type selection
+
+    # Initialize mask for tracking masked positions
+    mask = torch.zeros(
+        (batch_size, num_events, num_attributes), dtype=torch.bool, device=device
+    )
+
+    # Create unmasked positions mask with Bernoulli trials
+    known_mask = torch.rand(
+        (batch_size, num_events, num_attributes), device=device
+    ) < torch.rand((batch_size, 1, 1), device=device)
+
+    # Handle attribute-level masking
+    attr_mask_samples = torch.rand(
+        (batch_size, 1, num_attributes), device=device
+    ) < torch.rand((batch_size, 1, 1), device=device)
+    attr_mask = attr_mask_samples.expand(-1, num_events, -1)
+
+    # Handle event-level masking
+    event_mask_samples = torch.rand(
+        (batch_size, num_events, 1), device=device
+    ) < torch.rand((batch_size, 1, 1), device=device)
+    event_mask = event_mask_samples.expand(-1, -1, num_attributes)
+
+    # Handle position-level masking
+    pos_mask = torch.rand(
+        (batch_size, num_events, num_attributes), device=device
+    ) < torch.rand((batch_size, 1, 1), device=device)
+
+    # Combine masks based on masking type
+    type_is_attr = masking_type[:, None, None] < 1 / 3
+    type_is_event = (masking_type[:, None, None] >= 1 / 3) & (
+        masking_type[:, None, None] < 2 / 3
+    )
+    type_is_pos = masking_type[:, None, None] >= 2 / 3
+
+    mask = (
+        type_is_attr * attr_mask + type_is_event * event_mask + type_is_pos * pos_mask
+    )
+
+    # Apply known_mask to prevent masking those positions
+    mask = mask & ~known_mask
+
+    # Create output tensor starting with copy of input
+    output = x.clone()
+
+    # Apply full masking where needed
+    full_mask_expanded = is_full_mask[:, None, None, None].expand(
+        -1, num_events, num_attributes, vocab_size
+    )
+    mask_expanded = mask.unsqueeze(-1).expand(-1, -1, -1, vocab_size)
+
+    # Where we have full masking, set all vocabulary positions to 1
+    output = torch.where(
+        full_mask_expanded & mask_expanded, torch.ones_like(output), output
+    )
+
+    # For sparse masking, do Bernoulli trials for each vocabulary position
+    sparse_positions = ~is_full_mask[:, None, None, None] & mask_expanded
+    if sparse_positions.any():
+        vocab_mask = torch.rand(
+            batch_size, num_events, num_attributes, vocab_size, device=device
+        ) < torch.rand((batch_size, 1, 1, 1), device=device)
+        output = torch.where(
+            sparse_positions & vocab_mask, torch.ones_like(output), output
+        )
+
+    return output
+
+# def random_add_masking_variable_superposition_mixed(x, format_mask):
+
+    # for position mask probs
+    # 33% mask attribute with a certain probability
+
+    # 33% mask event with a certain probability
+
+    # 33% mask each attribute of each event with a certain probability
+
+    # for superposition probs
+    # 33% full superposition, 33% sparse superposition
+
+
 
 
 # def random_add_masking_variable_superposition_ratio(x, format_mask):

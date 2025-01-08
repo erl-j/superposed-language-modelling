@@ -116,9 +116,10 @@ model = TrainingWrapper.load_from_checkpoint(
     # "./checkpoints/helpful-sun-589/last.ckpt",
     # "./checkpoints/helpful-sun-589/every25/epoch=124-step=354500-val/accuracy@1=0.95040.ckpt",
     # "./checkpoints/helpful-sun-589/epoch=115-step=328976-val/loss_epoch=0.15271.ckpt",
-    "./checkpoints/smooth-meadow-615/last.ckpt",
+    # "./checkpoints/smooth-meadow-615/last.ckpt",
     # "./checkpoints/crisp-paper-617/last.ckpt",
     # "./checkpoints/smooth-meadow-615/every25/epoch=39-step=151240-val/accuracy@1=0.95662.ckpt",
+    "./checkpoints/avid-smoke-622/last.ckpt",
     map_location=device,
 )
 

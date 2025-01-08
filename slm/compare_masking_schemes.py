@@ -9,7 +9,7 @@ import numpy as np
 from slm.train2_old import (
     random_add_masking_mml,
     random_add_masking_variable_superposition,
-    random_add_masking_variable_superposition_ratio,
+    mixed_superposition,
 )
 
 # Dataset configuration
@@ -89,6 +89,10 @@ for i in range(n_batches):
         random_add_masking_variable_superposition_ratio(one_hot, format_mask)
         * format_mask[None, ...]
     )
+    # reshape to (batch_size, n_events, n_attributes, vocab_size)
+    
+    one_hot_rs = einops.rearrange(one_hot, "b e a v -> b e a v")    
+    masked_mixed = mixed_superposition = mixed_masking(
 
     all_masked_mml.append(masked_mml)
     all_masked_var_super.append(masked_var_super)
