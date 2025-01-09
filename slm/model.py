@@ -86,6 +86,10 @@ class SuperposedLanguageModel(torch.nn.Module):
         self.eval()
         target = target.to(self.get_device())
         constraint = constraint.to(self.get_device())
+        # collapse undefined attributes
+        constraint = self.tokenizer.collapse_undefined_attributes(constraint)
+        # normalize constraint
+        constraint = constraint / constraint.sum(dim=-1, keepdim=True)
         with torch.no_grad():
             if self.use_mlm:
                 logits = self.mlm_forward_from_constraint(constraint)
@@ -93,12 +97,6 @@ class SuperposedLanguageModel(torch.nn.Module):
                 logits = self.slm_forward(constraint)
         # target logits
         target_logits = (target * logits).sum(dim=-1)
-
-        print(f"Min logits: {logits.min()}, Max logits: {logits.max()}, Mean logits: {logits.mean()}, Median logits: {logits.median()}")
-
-        # print min max mean median
-        print(f"Min target logits: {target_logits.min()}, Max target logits: {target_logits.max()}, Mean target logits: {target_logits.mean()}, Median target logits: {target_logits.median()}")
-
         probs = F.softmax(logits, dim=-1)
         # add epsilon to avoid log(0)
         # add eps
@@ -108,12 +106,9 @@ class SuperposedLanguageModel(torch.nn.Module):
         # get log likelihood
         target_probs = (target * probs).sum(dim=-1)
         # assert that target probs sums to one 
-        print(target_probs.shape)
         # count zeros in target probs
         n_zeros = torch.sum(target_probs == 0)
-        print(f"Number of zeros in target probs: {n_zeros}")
         # mean prob
-        print(target_probs.mean())
         log_likelihood = torch.log(target_probs).mean()
         return log_likelihood
 

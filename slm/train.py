@@ -14,7 +14,8 @@ from masking import (
     random_add_masking_variable_superposition,
     attribute_masking,
     event_masking,
-    mixed_superposition
+    mixed_superposition,
+    mixed_superposition_2,
 )
 from model import SuperposedLanguageModel
 from mdlm import LogLinearNoise
@@ -60,6 +61,7 @@ class TrainingWrapper(pl.LightningModule):
                 or self.masking_scheme == "variable_superposition_x**1/2"
                 or self.masking_scheme == "variable_superposition_x**1/4"
                 or self.masking_scheme == "mixed_superposition"
+                or self.masking_scheme == "mixed_superposition_2"
             )
         pass
 
@@ -98,6 +100,8 @@ class TrainingWrapper(pl.LightningModule):
         else:
             if self.masking_scheme == "mixed_superposition":
                 x_masked = mixed_superposition(x)
+            elif self.masking_scheme == "mixed_superposition_2":
+                x_masked = mixed_superposition_2(x)
             else:
                 x_ta = einops.rearrange(x, "b t a v -> b (t a) v")
                 if self.masking_scheme == "mml":
@@ -436,7 +440,7 @@ if __name__ == "__main__":
         learning_rate=1e-4 if model_config["hidden_size"] == 512 else 1e-4,
         learning_rate_gamma=0.99,
         lr_steps_per_epoch=2836,
-        masking_scheme="mixed_superposition",
+        masking_scheme="mixed_superposition_2",
         use_weight_decay=True,
         warmup_steps=1000,
         collapse_inactive_events=True,
@@ -541,7 +545,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[6,7],
+        devices=[0,1],
         precision="16-mixed",
         max_epochs=150,
         log_every_n_steps=1,

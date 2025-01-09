@@ -14,7 +14,7 @@ DEVICE = "cuda:2" if torch.cuda.is_available() else "cpu"
 SEED = 42
 
 # Analysis parameters
-N_EXAMPLES = 1  # Number of examples to analyze
+N_EXAMPLES = 40  # Number of examples to analyze
 SUPERPOSITION_RATIOS = [0.0, 0.25, 0.5, 0.75, 1.0]  # Levels of superposition to test
 N_MASKING_RATIOS = 21  # Number of masking ratio points (0% to 100%)
 OUTPUT_DIR = Path("./analysis_results")
@@ -45,113 +45,84 @@ def load_test_dataset(tokenizer):
     )
     return test_ds
 
-
-def create_cumulative_superposition_masks(
-    test_tokens, masking_positions, superposition_ratios, vocab_size
-):
-    """
-    Creates a series of masks where each mask builds upon the previous one,
-    adding more superposition at the same positions
-    """
-    # Convert tokens to one-hot vectors
-    n_positions = len(test_tokens)
-    base_mask = torch.zeros((n_positions, vocab_size))
-    base_mask[torch.arange(n_positions), test_tokens] = 1.0
-
-    masks = []
-    current_mask = base_mask.clone()
-
-    # For each superposition ratio
-    for ratio in superposition_ratios:
-        mask = current_mask.clone()
-
-        # For each position to be masked
-        for pos in masking_positions:
-            # Create uniform distribution
-            uniform_probs = torch.ones(vocab_size) / vocab_size
-
-            # Interpolate between one-hot and uniform
-            mask[pos] = (1 - ratio) * base_mask[pos] + ratio * uniform_probs
-
-        masks.append(mask)
-        current_mask = mask  # Update current mask for next iteration
-
-    return masks
-
-
-def analyze_model(model_name, checkpoint_path, test_examples):
+def analyze_model(model_name, checkpoint_path, x):
     print(f"\nAnalyzing model: {model_name}")
 
     # Setup
     model = setup_model(checkpoint_path)
     masking_ratios = np.linspace(0, 1, N_MASKING_RATIOS)  # 0% to 100%
-    vocab_size = len(model.tokenizer.vocab)
+
+    x = torch.nn.functional.one_hot(x, model.model.vocab_size).float()
+    # Move to device
+    x = x.to(DEVICE)
 
     results = []
 
-    # Process each example
-    for example_idx, test_tokens in enumerate(
-        tqdm(test_examples, desc="Processing examples")
-    ):
-        with torch.no_grad():
-            # Convert to tensor if needed
-            if not isinstance(test_tokens, torch.Tensor):
-                test_tokens = torch.tensor(test_tokens)
+    with torch.no_grad():
+        # Get dimensions
+        batch_size, n_events, n_attributes, vocab_size = x.shape
 
-            # Get total number of positions
-            total_positions = len(test_tokens)
-
-            # Create fixed random order of positions for this example
-            all_positions = list(range(total_positions))
-            random.shuffle(all_positions)
-
-            # For each masking ratio
-            for mask_ratio in masking_ratios:
-                # Calculate number of positions to mask for this ratio
-                n_positions = int(mask_ratio * total_positions)
-                masking_positions = all_positions[:n_positions]
-
-                # Create cumulative superposition masks for all ratios
-                superposition_masks = create_cumulative_superposition_masks(
-                    test_tokens, masking_positions, SUPERPOSITION_RATIOS, vocab_size
+        for superposition_ratio in tqdm(
+            SUPERPOSITION_RATIOS, desc="Superposition ratios"
+        ):
+            # Create superposition mask
+            superposition_mask = (
+                torch.rand(
+                    batch_size, n_events, n_attributes, vocab_size, device=DEVICE
                 )
+                < superposition_ratio
+            )
 
-                # Calculate log likelihood for each superposition ratio
-                for sup_ratio, modified_mask in zip(
-                    SUPERPOSITION_RATIOS, superposition_masks
-                ):
-                    log_prob = model.model.conditional_log_likelihood(
-                        test_tokens.to(DEVICE), modified_mask.to(DEVICE)
-                    ).item()
+            # Initialize position mask (where we'll progressively add ones)
+            position_mask = torch.zeros(
+                batch_size, n_events, n_attributes, 1, device=DEVICE
+            )
 
-                    results.append(
-                        {
-                            "model": model_name,
-                            "example_idx": example_idx,
-                            "superposition_ratio": sup_ratio,
-                            "masking_ratio": mask_ratio,
-                            "n_masked_positions": n_positions,
-                            "log_likelihood": log_prob,
-                        }
-                    )
+            for masking_ratio in tqdm(
+                masking_ratios, desc="Masking ratios", leave=False
+            ):
+                # Update position mask
+                position_mask = torch.rand(
+                    batch_size, n_events, n_attributes, 1, device=DEVICE
+                ) < masking_ratio
+
+                # Combine masks
+                final_mask = superposition_mask | position_mask
+
+                prior = torch.clamp(x + final_mask, 0, 1)
+
+                prior = prior / prior.sum(dim=-1, keepdim=True)
+
+                # Calculate log likelihood
+                log_probs = model.model.conditional_log_likelihood(x, prior)
+
+                # Store results for each example in batch
+                results.append(
+                    {
+                        "model": model_name,
+                        "superposition_ratio": superposition_ratio,
+                        "masking_ratio": masking_ratio,
+                        "log_likelihood": log_probs.mean().item(),
+                    }
+                )
 
     return results
 
-
 def plot_results(results_df, output_dir):
-    # Plot for each model
-    for model_name in results_df["model"].unique():
-        model_data = results_df[results_df["model"] == model_name]
-
-        # Create main plot
+    # Create a plot for each superposition ratio
+    for sup_ratio in sorted(results_df["superposition_ratio"].unique()):
         plt.figure(figsize=(12, 8))
 
-        # Calculate mean and std for each superposition/masking ratio combination
-        for sup_ratio in sorted(model_data["superposition_ratio"].unique()):
-            ratio_data = model_data[model_data["superposition_ratio"] == sup_ratio]
+        # Plot each model's data for this superposition ratio
+        for model_name in results_df["model"].unique():
+            # Filter data for current model and superposition ratio
+            model_data = results_df[
+                (results_df["model"] == model_name)
+                & (results_df["superposition_ratio"] == sup_ratio)
+            ]
 
             # Group by masking ratio and calculate statistics
-            grouped = ratio_data.groupby("masking_ratio")["log_likelihood"]
+            grouped = model_data.groupby("masking_ratio")["log_likelihood"]
             means = grouped.mean()
             stds = grouped.std()
 
@@ -160,7 +131,7 @@ def plot_results(results_df, output_dir):
                 means.index * 100,
                 means.values,
                 marker="o",
-                label=f"Superposition {sup_ratio:.2f}",
+                label=f"{model_name}",
             )
             plt.fill_between(
                 means.index * 100,
@@ -172,14 +143,17 @@ def plot_results(results_df, output_dir):
         plt.xlabel("Masking Ratio (%)")
         plt.ylabel("Log Likelihood")
         plt.title(
-            f"Log Likelihood vs Masking Ratio - {model_name}\n(Mean ± Std over {N_EXAMPLES} examples)"
+            f"Log Likelihood vs Masking Ratio\nSuperposition Ratio: {sup_ratio:.2f}\n"
+            f"(Mean ± Std over {N_EXAMPLES} examples)"
         )
-        plt.legend()
+        plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
         plt.grid(True, which="both", linestyle="--", alpha=0.7)
 
         # Save plot
         plt.savefig(
-            output_dir / f"{model_name}_analysis.png", dpi=300, bbox_inches="tight"
+            output_dir / f"superposition_{sup_ratio:.2f}_analysis.png",
+            dpi=300,
+            bbox_inches="tight",
         )
         plt.close()
 
@@ -201,10 +175,13 @@ def main():
     example_indices = random.sample(range(len(test_dataset)), N_EXAMPLES)
     test_examples = [test_dataset[idx]["token_ids"] for idx in example_indices]
 
+    # make tensor
+    x = torch.stack(test_examples).to(DEVICE)
+
     # Analyze each model
     all_results = []
     for model_name, checkpoint_path in CHECKPOINTS.items():
-        results = analyze_model(model_name, checkpoint_path, test_examples)
+        results = analyze_model(model_name, checkpoint_path, x)
         all_results.extend(results)
 
     # Convert results to DataFrame

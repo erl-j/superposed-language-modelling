@@ -1,5 +1,6 @@
 import torch
 import einops
+import random
 
 def attribute_dropout(x, n_attributes, dropout_prob):
     """
@@ -144,6 +145,49 @@ def mixed_superposition(x):
         )
 
     return output
+
+def mixed_superposition_2(x):
+    """Apply superposition masking scheme to a batch of one-hot encoded tensors.
+
+    Args:
+        x: Input tensor of shape (batch_size, num_events, num_attributes, vocab_size)
+
+    Returns:
+        Tuple of (masked_tensor, mask) where mask shows which positions were masked
+    """
+
+    device = x.device
+    batch_size, num_events, num_attributes, vocab_size = x.shape
+
+    hierarchy_mask_prob = torch.rand(batch_size, 1,1,1, device=device)
+
+    attribute_mask = torch.rand(batch_size, 1, num_attributes, 1, device=device) < hierarchy_mask_prob
+    event_mask = torch.rand(batch_size, num_events, 1, 1, device=device) < hierarchy_mask_prob
+    event_attribute_mask = torch.rand(batch_size, num_events, num_attributes, 1, device=device) < hierarchy_mask_prob
+    hierarchy_masks = [attribute_mask, event_mask, event_attribute_mask]
+
+    superposition_probs = torch.rand(batch_size, num_events, num_attributes, 1, device=device)
+    variable_superposition_mask = torch.rand_like(x, device=device) < superposition_probs
+    shared_superposition_mask = torch.rand(batch_size, 1, 1, vocab_size, device=device) < superposition_probs
+    full_mask = torch.ones_like(x, device=device)
+
+    # second mask
+    second_masks = [variable_superposition_mask, full_mask, shared_superposition_mask]
+
+    position_mask_probs = torch.rand(batch_size, 1, device=device)
+    position_mask = torch.rand(batch_size, num_events, num_attributes, device=device) < position_mask_probs[:, None, None]
+
+    # now with equal probability we pick attribute, event, event_attribute as starting point
+    # choose one random hierarchy mask
+    hmask_index = random.randint(0, len(hierarchy_masks)-1)
+    hierarchy_mask = hierarchy_masks[hmask_index]
+    
+    smask_index = random.randint(0, len(second_masks)-1)
+    second_mask = second_masks[smask_index]
+
+    mask = hierarchy_mask & second_mask & position_mask | x
+
+    return mask
 
 def mlm_mixed(x):
     """
