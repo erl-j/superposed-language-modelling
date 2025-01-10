@@ -67,7 +67,7 @@ def mixed_superposition(x):
         x: Input tensor of shape (batch_size, num_events, num_attributes, vocab_size)
 
     Returns:
-        Tuple of (masked_tensor, mask) where mask shows which positions were masked
+        Masked tensor of shape (batch_size, num_events, num_attributes, vocab_size)
     """
 
     device = x.device
@@ -146,14 +146,16 @@ def mixed_superposition(x):
 
     return output
 
-def mixed_superposition_2(x):
+def mixed_superposition_2(x, mlm=False):
     """Apply superposition masking scheme to a batch of one-hot encoded tensors.
 
     Args:
         x: Input tensor of shape (batch_size, num_events, num_attributes, vocab_size)
 
     Returns:
-        Tuple of (masked_tensor, mask) where mask shows which positions were masked
+        If mlm is True, returns masked tensor of shape (batch_size, num_events, num_attributes, vocab_size + 1)
+        where the last channel indicates masked positions (1 = masked, 0 = unmasked)
+        Else returns masked tensor of shape (batch_size, num_events, num_attributes, vocab_size)
     """
 
     device = x.device
@@ -174,8 +176,8 @@ def mixed_superposition_2(x):
     # second mask
     second_masks = [variable_superposition_mask, full_mask, shared_superposition_mask]
 
-    position_mask_probs = torch.rand(batch_size, 1, device=device)
-    position_mask = torch.rand(batch_size, num_events, num_attributes, device=device) < position_mask_probs[:, None, None]
+    position_mask_probs = torch.rand(batch_size, 1, 1, 1, device=device)
+    position_mask = torch.rand(batch_size, num_events, num_attributes, 1, device=device) < position_mask_probs
 
     # now with equal probability we pick attribute, event, event_attribute as starting point
     # choose one random hierarchy mask
@@ -185,9 +187,18 @@ def mixed_superposition_2(x):
     smask_index = random.randint(0, len(second_masks)-1)
     second_mask = second_masks[smask_index]
 
-    mask = hierarchy_mask & second_mask & position_mask | x
+    if mlm:
+        mask = hierarchy_mask * position_mask
+        # where mask is True, set x to 0, otherwise keep original values
+        masked_x = torch.where(mask, torch.zeros_like(x), x)
+        # add mask channel
+        masked_x = torch.cat([masked_x, mask], dim=-1)
+        return masked_x
 
-    return mask
+    else:
+        masked_x = torch.clamp(hierarchy_mask * second_mask * position_mask + x, 0, 1)
+
+        return masked_x
 
 def mlm_mixed(x):
     """
