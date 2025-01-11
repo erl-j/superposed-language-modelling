@@ -166,26 +166,35 @@ def mixed_superposition_2(x, mlm=False):
     attribute_mask = torch.rand(batch_size, 1, num_attributes, 1, device=device) < hierarchy_mask_prob
     event_mask = torch.rand(batch_size, num_events, 1, 1, device=device) < hierarchy_mask_prob
     event_attribute_mask = torch.rand(batch_size, num_events, num_attributes, 1, device=device) < hierarchy_mask_prob
-    hierarchy_masks = [attribute_mask, event_mask, event_attribute_mask]
 
-    superposition_probs = torch.rand(batch_size, num_events, num_attributes, 1, device=device)
-    variable_superposition_mask = torch.rand_like(x, device=device) < superposition_probs
-    shared_superposition_mask = torch.rand(batch_size, 1, 1, vocab_size, device=device) < superposition_probs
+    # per position prob, per postion superposition
+    variable_superposition_probs = torch.rand(batch_size, num_events, num_attributes, 1, device=device)
+    variable_superposition_mask = torch.rand_like(x, device=device) < variable_superposition_probs
+
+    # shared random superposition mask per sample
+    shared_superposition_probs = torch.rand(batch_size, 1, 1, 1, device=device)
+    shared_superposition_mask = torch.rand(batch_size, 1, 1, vocab_size, device=device) < shared_superposition_probs
+
+    # random superposition mask per position with shared probability
+    variable_superposition_shared_prob_prob = torch.rand(batch_size, 1, 1, 1, device=device)
+    variable_superposition_shared_prob_mask = torch.rand_like(x, device=device) < variable_superposition_shared_prob_prob
+
     full_mask = torch.ones_like(x, device=device)
 
+    # select one from attribute_mask, event_mask, or event_attribute_mask_prob
+    second_masks = torch.stack([m.expand_as(x) for m in [full_mask, full_mask, full_mask, shared_superposition_mask, variable_superposition_mask, variable_superposition_shared_prob_mask]])
+    hierarchy_masks = torch.stack([m.expand_as(x) for m in [attribute_mask, event_mask, event_attribute_mask]])
+
+    second_mask_idx = torch.randint(0, len(second_masks), (batch_size,), device=device)
+    hierarchy_mask_idx = torch.randint(0, len(hierarchy_masks), (batch_size,), device=device)
+
+    # Index into stacked masks - each sample gets a different mask
+    second_mask = second_masks[second_mask_idx, torch.arange(batch_size, device=device)]
+    hierarchy_mask = hierarchy_masks[hierarchy_mask_idx, torch.arange(batch_size, device=device)]
     # second mask
-    second_masks = [variable_superposition_mask, full_mask, shared_superposition_mask]
 
     position_mask_probs = torch.rand(batch_size, 1, 1, 1, device=device)
     position_mask = torch.rand(batch_size, num_events, num_attributes, 1, device=device) < position_mask_probs
-
-    # now with equal probability we pick attribute, event, event_attribute as starting point
-    # choose one random hierarchy mask
-    hmask_index = random.randint(0, len(hierarchy_masks)-1)
-    hierarchy_mask = hierarchy_masks[hmask_index]
-    
-    smask_index = random.randint(0, len(second_masks)-1)
-    second_mask = second_masks[smask_index]
 
     if mlm:
         mask = hierarchy_mask * position_mask

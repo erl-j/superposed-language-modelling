@@ -462,7 +462,7 @@ if __name__ == "__main__":
         "enforce_constraint_in_forward": True,
         "activation": "gelu",
         "dropout": 0.1,
-        "use_mlm": True,
+        "use_mlm": False,
     }
 
     training_wrapper = TrainingWrapper(
@@ -470,7 +470,7 @@ if __name__ == "__main__":
         learning_rate=1e-4 if model_config["hidden_size"] == 512 else 1e-4,
         learning_rate_gamma=0.99,
         lr_steps_per_epoch=2836,
-        masking_scheme="mlm_mixed_masking_2",
+        masking_scheme="mixed_superposition_2",
         use_weight_decay=True,
         warmup_steps=1000,
         collapse_inactive_events=True,
@@ -575,7 +575,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[4,5],
+        devices=[0,1],
         precision="16-mixed",
         max_epochs=150,
         log_every_n_steps=1,

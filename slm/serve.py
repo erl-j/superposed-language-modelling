@@ -104,7 +104,7 @@ model = TrainingWrapper.load_from_checkpoint(
     # "./checkpoints/rural-oath-549/last.ckpt",
     # "./checkpoints/rural-oath-549/epoch=425-step=1208136-val/loss_epoch=0.14559.ckpt",
     # "./checkpoints/colorful-sun-548/last.ckpt",
-    # "./checkpoints/lucky-puddle-550/last.ckpt", 
+    # "./checkpoints/lucky-puddle-550/last.ckpt",
     # "./checkpoints/crimson-night-547/last.ckpt",
     # "./checkpoints/smart-brook-552/last.ckpt",
     # "./checkpoints/glad-surf-562/last.ckpt",
@@ -120,7 +120,10 @@ model = TrainingWrapper.load_from_checkpoint(
     # "./checkpoints/crisp-paper-617/last.ckpt",
     # "./checkpoints/smooth-meadow-615/every25/epoch=39-step=151240-val/accuracy@1=0.95662.ckpt",
     # "./checkpoints/avid-smoke-622/last.ckpt",
-    "./checkpoints/glowing-pine-623/last.ckpt",
+    # "./checkpoints/glowing-pine-634/last.ckpt",
+    # "./checkpoints/lucky-breeze-627/last.ckpt",
+    # "./checkpoints/laced-cherry-636/last.ckpt",
+    "./checkpoints/eternal-dawn-640/last.ckpt",
     map_location=device,
 )
 

@@ -15,6 +15,8 @@ CHECKPOINTS = {
     # "slm_tiny_x**1/2" : "checkpoints/fancy-paper-577/last.ckpt",
     # "slm_w_proj" : "checkpoints/woven-pyramid-588/last.ckpt",
     "slm_w_mixed_superposition": "checkpoints/glowing-pine-623/last.ckpt",
+    "slm_w_mixed_superposition_2": "checkpoints/eternal-dawn-640/last.ckpt",
+    "mlm_w_mixed_superposition": "checkpoints/stellar-sun-634/last.ckpt",
 }
 # if checkpoints is in parent directory, change checkpoints to ../checkpoints
 for k, v in CHECKPOINTS.items():
