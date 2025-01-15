@@ -2,6 +2,112 @@ import torch
 import einops
 import random
 
+
+def random_superposition(x, syntax_mask):
+    '''
+    Returns a random superposition of the input tensor x.
+    Args:
+        x: Input tensor of shape (batch_size, num_events, num_attributes, vocab_size)
+        syntax_mask: Mask tensor of shape (num_attributes, vocab_size)
+        Syntax mask is a binary tensor where 1 indicates a valid token for that position and 0 indicates an invalid token.
+    Returns:
+        New tensor of shape (batch_size, num_events, num_attributes, vocab_size) where a random superposition has been applied.  
+    '''
+
+    device = x.device
+    #  move syntax mask to device
+    syntax_mask = syntax_mask.to(device)
+    syntax_mask = einops.repeat(syntax_mask, 'a v -> b e a v', b=x.shape[0], e=x.shape[1])
+    batch_size, num_events, num_attributes, vocab_size = x.shape
+    # convert to bits
+    x_bits = x > 0.5
+    syntax_mask_bits = syntax_mask > 0.5
+    # if in syntax mask and not in x, set to 1
+    candidate_confounders = syntax_mask_bits & ~x_bits
+    # now create a random mask and set all non confounders to 0
+
+    sup_base = torch.rand_like(x, device=device) * candidate_confounders
+    # get max value
+    sup_base_max = sup_base.max(dim=-1, keepdim=True).values
+
+    sup_rate = torch.rand(batch_size, num_events, num_attributes, 1, device=device) * (sup_base_max) 
+    confounders = sup_base >= sup_rate
+    output = torch.clamp(x + confounders, 0, 1)
+    # # assert that outputs is between 0 and 1
+    # assert (output >= 0).all()
+    # # assert than sums are between 1 and len(tokenizer.vocab)
+    # assert (output.sum(dim=-1) >= 1).all()
+    # assert (output.sum(dim=-1) <= vocab_size).all()
+    return output
+
+def position_mask(batch_size,n_positions, device):
+    '''
+    Returns a random mask of shape (batch_size, n_positions) where between 1 and n_positions are set to 1.
+    Args:
+        batch_size: Number of samples in the batch
+        n_positions: Number of positions in the sequence
+    '''
+    mask_base = torch.rand(batch_size, n_positions, device=device)
+    # get max mask base values
+    mask_base_max = mask_base.max(dim=-1, keepdim=True).values
+    # now get the mask rate
+    mask_rate = torch.rand(batch_size,1, device=device) * mask_base_max
+    # get mask
+    mask = mask_base >= mask_rate
+    return mask
+
+def ratio_superposition(x, syntax_mask, hierarchical_masks = ["attribute", "event", "event_attribute"], superpositions = ["sparse", "full"]):
+    """
+    Applies superposition masking scheme to a batch of one-hot encoded tensors.
+
+    Args:
+        x: Input tensor of shape (batch_size, num_events, num_attributes, vocab_size)
+        syntax_mask: Mask tensor of shape (batch_size, num_events, num_attributes, vocab_size)
+        Syntax mask is a binary tensor where 1 indicates a valid token for that position and 0 indicates an invalid token.
+    Returns:
+        Masked tensor of shape (batch_size, num_events, num_attributes, vocab_size)
+    """
+
+    device = x.device
+    batch_size, num_events, num_attributes, vocab_size = x.shape
+
+    attribute_mask = position_mask(batch_size, num_attributes, device)
+    attribute_mask = einops.rearrange(attribute_mask, 'b a -> b 1 a 1')
+
+    event_mask = position_mask(batch_size, num_events, device)
+    event_mask = einops.rearrange(event_mask, 'b e -> b e 1 1')
+
+    event_attribute_mask = position_mask(batch_size, num_events * num_attributes, device)
+    event_attribute_mask = einops.rearrange(event_attribute_mask, 'b (e a) -> b e a 1', e = num_events, a = num_attributes)
+
+    hierarchical_masks_dict = {"attribute": einops.repeat(attribute_mask, 'b 1 a 1 -> b e a v', v=vocab_size, e=num_events),
+                                 "event": einops.repeat(event_mask, 'b e 1 1 -> b e a v', a=num_attributes, v=vocab_size),
+                                 "event_attribute": einops.repeat(event_attribute_mask, 'b e a 1 -> b e a v', v=vocab_size)
+                            }
+    
+    syntax_mask = syntax_mask.to(device)
+    # get superposition
+    superposition = random_superposition(x, syntax_mask)
+    full_mask = einops.repeat(syntax_mask, 'a v -> b e a v', b=batch_size, e=num_events)
+
+    superpositions_dict = {"sparse": superposition, "full": full_mask}
+
+    hierarchical_mask_stack = torch.stack([hierarchical_masks_dict[mask_type] for mask_type in hierarchical_masks])
+    superposition_stack = torch.stack([superpositions_dict[mask_type] for mask_type in superpositions])
+
+    hierarchical_mask_idx = torch.randint(0, len(hierarchical_masks), (batch_size,), device=device)
+    superposition_idx = torch.randint(0, len(superpositions), (batch_size,), device=device)
+
+    hierarchical_mask = hierarchical_mask_stack[hierarchical_mask_idx, torch.arange(batch_size, device=device)]
+    superposition = superposition_stack[superposition_idx, torch.arange(batch_size, device=device)]
+
+    masked_x = torch.clamp(hierarchical_mask * superposition + x, 0, 1)
+
+    return masked_x
+
+
+
+
 def attribute_dropout(x, n_attributes, dropout_prob):
     """
     Applies attribute dropout to input tensor x. For each sample and attribute,
@@ -146,67 +252,104 @@ def mixed_superposition(x):
 
     return output
 
-def mixed_superposition_2(x, mlm=False):
+def mixed_superposition_2(x, mlm=False, 
+    hierarchy_mask_types=['attribute', 'event', 'event_attribute'],
+    second_mask_types=['full', 'full', 'full', 'shared_superposition', 'variable_superposition', 'variable_superposition_shared_prob'],
+    ):
     """Apply superposition masking scheme to a batch of one-hot encoded tensors.
 
     Args:
         x: Input tensor of shape (batch_size, num_events, num_attributes, vocab_size)
+        mlm: If True, returns masked tensor with additional mask channel
+        second_mask_types: List of strings specifying which secondary masks to use.
+            Valid options: ['full', 'shared_superposition', 'variable_superposition', 
+                          'variable_superposition_shared_prob']
+            If None, uses all available mask types
+        hierarchy_mask_types: List of strings specifying which hierarchy masks to use.
+            Valid options: ['attribute', 'event', 'event_attribute']
+            If None, uses all available mask types
 
     Returns:
         If mlm is True, returns masked tensor of shape (batch_size, num_events, num_attributes, vocab_size + 1)
         where the last channel indicates masked positions (1 = masked, 0 = unmasked)
         Else returns masked tensor of shape (batch_size, num_events, num_attributes, vocab_size)
     """
-
     device = x.device
     batch_size, num_events, num_attributes, vocab_size = x.shape
 
-    hierarchy_mask_prob = torch.rand(batch_size, 1,1,1, device=device)
+    # Initialize mask dictionaries
+    hierarchy_masks_dict = {}
+    second_masks_dict = {}
+    
+    # Generate hierarchy masks
+    hierarchy_mask_prob = torch.rand(batch_size, 1, 1, 1, device=device)
+    
+    hierarchy_masks_dict['attribute'] = torch.rand(batch_size, 1, num_attributes, 1, device=device) < hierarchy_mask_prob
+    hierarchy_masks_dict['event'] = torch.rand(batch_size, num_events, 1, 1, device=device) < hierarchy_mask_prob
+    hierarchy_masks_dict['event_attribute'] = torch.rand(batch_size, num_events, num_attributes, 1, device=device) < hierarchy_mask_prob
 
-    attribute_mask = torch.rand(batch_size, 1, num_attributes, 1, device=device) < hierarchy_mask_prob
-    event_mask = torch.rand(batch_size, num_events, 1, 1, device=device) < hierarchy_mask_prob
-    event_attribute_mask = torch.rand(batch_size, num_events, num_attributes, 1, device=device) < hierarchy_mask_prob
-
-    # per position prob, per postion superposition
-    variable_superposition_probs = torch.rand(batch_size, num_events, num_attributes, 1, device=device)
-    variable_superposition_mask = torch.rand_like(x, device=device) < variable_superposition_probs
-
-    # shared random superposition mask per sample
-    shared_superposition_probs = torch.rand(batch_size, 1, 1, 1, device=device)
-    shared_superposition_mask = torch.rand(batch_size, 1, 1, vocab_size, device=device) < shared_superposition_probs
-
-    # random superposition mask per position with shared probability
-    variable_superposition_shared_prob_prob = torch.rand(batch_size, 1, 1, 1, device=device)
-    variable_superposition_shared_prob_mask = torch.rand_like(x, device=device) < variable_superposition_shared_prob_prob
-
+    # Generate secondary masks
     full_mask = torch.ones_like(x, device=device)
+    second_masks_dict['full'] = full_mask
 
-    # select one from attribute_mask, event_mask, or event_attribute_mask_prob
-    second_masks = torch.stack([m.expand_as(x) for m in [full_mask, full_mask, full_mask, shared_superposition_mask, variable_superposition_mask, variable_superposition_shared_prob_mask]])
-    hierarchy_masks = torch.stack([m.expand_as(x) for m in [attribute_mask, event_mask, event_attribute_mask]])
+    shared_superposition_probs = torch.rand(batch_size, 1, 1, 1, device=device)
+    second_masks_dict['shared_superposition'] = (
+        torch.rand(batch_size, 1, 1, vocab_size, device=device) < shared_superposition_probs
+    )
 
-    second_mask_idx = torch.randint(0, len(second_masks), (batch_size,), device=device)
-    hierarchy_mask_idx = torch.randint(0, len(hierarchy_masks), (batch_size,), device=device)
+    variable_superposition_probs = torch.rand(batch_size, num_events, num_attributes, 1, device=device)
+    second_masks_dict['variable_superposition'] = (
+        torch.rand_like(x, device=device) < variable_superposition_probs
+    )
+
+    variable_superposition_shared_prob_prob = torch.rand(batch_size, 1, 1, 1, device=device)
+    second_masks_dict['variable_superposition_shared_prob'] = (
+        torch.rand_like(x, device=device) < variable_superposition_shared_prob_prob
+    )
+
+    # Use default masks if none specified
+    if second_mask_types is None:
+        second_mask_types = list(second_masks_dict.keys())
+    if hierarchy_mask_types is None:
+        hierarchy_mask_types = list(hierarchy_masks_dict.keys())
+
+    # Validate mask types
+    for mask_type in second_mask_types:
+        if mask_type not in second_masks_dict:
+            raise ValueError(f"Invalid second mask type: {mask_type}")
+    for mask_type in hierarchy_mask_types:
+        if mask_type not in hierarchy_masks_dict:
+            raise ValueError(f"Invalid hierarchy mask type: {mask_type}")
+
+    # Stack selected masks
+    second_masks = torch.stack([
+        second_masks_dict[mask_type].expand_as(x) 
+        for mask_type in second_mask_types
+    ])
+    hierarchy_masks = torch.stack([
+        hierarchy_masks_dict[mask_type].expand_as(x) 
+        for mask_type in hierarchy_mask_types
+    ])
+
+    # Select random masks for each batch
+    second_mask_idx = torch.randint(0, len(second_mask_types), (batch_size,), device=device)
+    hierarchy_mask_idx = torch.randint(0, len(hierarchy_mask_types), (batch_size,), device=device)
 
     # Index into stacked masks - each sample gets a different mask
     second_mask = second_masks[second_mask_idx, torch.arange(batch_size, device=device)]
     hierarchy_mask = hierarchy_masks[hierarchy_mask_idx, torch.arange(batch_size, device=device)]
-    # second mask
 
+    # Generate position mask
     position_mask_probs = torch.rand(batch_size, 1, 1, 1, device=device)
     position_mask = torch.rand(batch_size, num_events, num_attributes, 1, device=device) < position_mask_probs
 
     if mlm:
         mask = hierarchy_mask * position_mask
-        # where mask is True, set x to 0, otherwise keep original values
         masked_x = torch.where(mask, torch.zeros_like(x), x)
-        # add mask channel
         masked_x = torch.cat([masked_x, mask], dim=-1)
         return masked_x
-
     else:
         masked_x = torch.clamp(hierarchy_mask * second_mask * position_mask + x, 0, 1)
-
         return masked_x
 
 def mlm_mixed(x):

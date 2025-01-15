@@ -16,6 +16,7 @@ from masking import (
     event_masking,
     mixed_superposition,
     mixed_superposition_2,
+    ratio_superposition
 )
 from model import SuperposedLanguageModel
 from mdlm import LogLinearNoise
@@ -56,6 +57,7 @@ class TrainingWrapper(pl.LightningModule):
                 self.masking_scheme == "mlm"
                 or self.masking_scheme == "mdlm"
                 or self.masking_scheme == "mlm_mixed_masking_2"
+                or self.masking_scheme == "mlm_ratio_superposition_mixed_h_mixed_s"
             )
         else:
             assert (
@@ -65,6 +67,10 @@ class TrainingWrapper(pl.LightningModule):
                 or self.masking_scheme == "variable_superposition_x**1/4"
                 or self.masking_scheme == "mixed_superposition"
                 or self.masking_scheme == "mixed_superposition_2"
+                or self.masking_scheme == "mixed_superposition_2_all_full"
+                or self.masking_scheme == "simulated_mlm"
+                or self.masking_scheme == "mixed_superposition_2_all_sparse"
+                or self.masking_scheme == "ratio_superposition_mixed_h_mixed_s"
             )
         pass
 
@@ -95,6 +101,14 @@ class TrainingWrapper(pl.LightningModule):
         if self.use_mlm:
             if self.masking_scheme == "mlm_mixed_masking_2":
                 x_input = mixed_superposition_2(x, mlm=True)
+            elif self.masking_scheme == "mlm_ratio_superposition_mixed_h_mixed_s":
+                x_masked = ratio_superposition(x, syntax_mask=self.syntax_mask)
+                x_masked = x_masked * (
+                self.syntax_mask[None, None, ...].to(self.get_model_dtype())
+                ).to(self.get_model_device())
+                x_prior = x_masked / x_masked.sum(dim=-1, keepdim=True)
+                mlm_mask = (x_masked.sum(dim=-1, keepdim=True) > 1).to(self.get_model_dtype())
+                x_masked = torch.cat([x_masked * (1 - mlm_mask), mlm_mask], dim=-1)
             else:
                 x_ta = einops.rearrange(x, "b t a v -> b (t a) v")
                 x_masked_ta = mlm_mask(x_ta, mask_first=False)
@@ -106,8 +120,16 @@ class TrainingWrapper(pl.LightningModule):
         else:
             if self.masking_scheme == "mixed_superposition":
                 x_masked = mixed_superposition(x)
+            elif self.masking_scheme == "ratio_superposition_mixed_h_mixed_s":
+                x_masked = ratio_superposition(x, syntax_mask=self.syntax_mask)
+            elif self.masking_scheme == "mixed_superposition_2_all_sparse":
+                x_masked = mixed_superposition_2(x, mlm=False, second_mask_types=["variable_superposition"])
             elif self.masking_scheme == "mixed_superposition_2":
                 x_masked = mixed_superposition_2(x)
+            elif self.masking_scheme == "mixed_superposition_2_all_full":
+                x_masked = mixed_superposition_2(x, mlm=False, second_mask_types=["full"])
+            elif self.masking_scheme == "simulated_mlm":
+                x_masked = mixed_superposition_2(x, mlm=False, hierarchy_mask_types=["event_attribute"], second_mask_types=["full"])
             else:
                 x_ta = einops.rearrange(x, "b t a v -> b (t a) v")
                 if self.masking_scheme == "mml":
@@ -135,68 +157,34 @@ class TrainingWrapper(pl.LightningModule):
                 self.syntax_mask[None, None, ...].to(self.get_model_dtype())
             ).to(self.get_model_device())
             # renormalize
-            x_input = x_masked / x_masked.sum(dim=-1, keepdim=True)
-            if self.collapse_inactive_events:
-                self.model.tokenizer.collapse_undefined_attributes(x_input)
-        logits = self.model(x_input)
+            x_prior = x_masked / x_masked.sum(dim=-1, keepdim=True)
+         
+        if self.use_mlm:
+            logits = self.model(x_masked)
+        else:
+            logits = self.model(x_prior)
 
         # get metrics
         metrics = self.compute_metrics(
-            target_token_ids, logits, batch["n_loops_in_parent_song"]
+            target_token_ids, logits
         )
 
-        if not self.use_mlm and not self.model.enforce_constraint_in_forward:
+        if self.use_mlm:
             # apply constraint to logits
             with torch.no_grad():
                 filtered_logits = logits.clone().detach()
                 zero = torch.zeros_like(
-                    x_input, dtype=x_input.dtype, device=x_input.device
+                    x_prior, dtype=x_prior.dtype, device=x_prior.device
                 )
-                filtered_logits[x_input.isclose(zero, rtol=1e-5)] = torch.finfo(
+                filtered_logits[x_prior.isclose(zero, rtol=1e-5)] = torch.finfo(
                     logits.dtype
                 ).min
                 filtered_logits_metrics = self.compute_metrics(
-                    target_token_ids, filtered_logits, batch["n_loops_in_parent_song"]
+                    target_token_ids, filtered_logits
                 )
                 # add filtered logits metrics to metrics
                 for key in filtered_logits_metrics:
                     metrics[f"filtered_logits/{key}"] = filtered_logits_metrics[key]
-        return metrics
-
-    def step_mdlm(self, batch, batch_idx):
-        token_ids = batch["token_ids"]
-        target_token_ids = batch["token_ids"]
-        batch_size = token_ids.shape[0]
-        time = torch.rand(batch_size, 1, 1, device=self.get_model_device())
-        noise = LogLinearNoise()
-        total_noise, rate_noise = noise(time)
-        mask_probs = torch.rand(
-            token_ids.shape,
-            device=self.get_model_device(),
-            dtype=self.get_model_dtype(),
-        )
-        mask = mask_probs < total_noise[:, None, None]
-        # where mask is True, replace token_ids with mask token
-        masked_input = token_ids.clone()
-        masked_input[mask] = len(self.tokenizer.vocab)
-        masked_tokens_1h = torch.nn.functional.one_hot(
-            token_ids,
-            num_classes=len(self.tokenizer.vocab) + 1,
-            dtype=self.get_model_dtype(),
-            device=self.get_model_device(),
-        )
-        log_probs = self.model(masked_tokens_1h)
-        # flatten logits and target_token_ids
-        log_probs_flat = einops.rearrange(log_probs, "b e a v -> b (e a) v")
-        target_token_ids_flat = einops.rearrange(target_token_ids, "b e a -> b (e a)")
-        loss = rate_noise[:, None] * F.cross_entropy(
-            log_probs_flat, target_token_ids_flat, reduction="none"
-        )
-        metrics = {
-            "cross_entropy": loss.mean(),
-            "rate_noise": rate_noise.mean(),
-            "total_noise": total_noise.mean(),
-        }
         return metrics
 
     def stage_step(self, batch, batch_idx, stage):
@@ -224,7 +212,7 @@ class TrainingWrapper(pl.LightningModule):
         self.eval()
         return self.stage_step(batch, batch_idx, "val")
 
-    def compute_metrics(self, target_token_ids, logits, n_loops_in_parent_song):
+    def compute_metrics(self, target_token_ids, logits):
         """
         Compute metrics for a given batch
         Input:
@@ -462,7 +450,7 @@ if __name__ == "__main__":
         "enforce_constraint_in_forward": True,
         "activation": "gelu",
         "dropout": 0.1,
-        "use_mlm": False,
+        "use_mlm": True,
     }
 
     training_wrapper = TrainingWrapper(
@@ -470,7 +458,7 @@ if __name__ == "__main__":
         learning_rate=1e-4 if model_config["hidden_size"] == 512 else 1e-4,
         learning_rate_gamma=0.99,
         lr_steps_per_epoch=2836,
-        masking_scheme="mixed_superposition_2",
+        masking_scheme="mlm_ratio_superposition_mixed_h_mixed_s",
         use_weight_decay=True,
         warmup_steps=1000,
         collapse_inactive_events=True,
@@ -575,7 +563,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[0,1],
+        devices=[2,3],
         precision="16-mixed",
         max_epochs=150,
         log_every_n_steps=1,

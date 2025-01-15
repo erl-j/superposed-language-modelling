@@ -35,7 +35,7 @@ if OUTPUT_DIR.exists():
         exit()
 
 # Number of examples to generate per task
-N_EXAMPLES = 100
+N_EXAMPLES = 10
 
 GENERATE = True
 

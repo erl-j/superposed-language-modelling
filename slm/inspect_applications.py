@@ -1,4 +1,4 @@
-# %%
+#%%
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
@@ -6,6 +6,9 @@ import symusic
 from util import piano_roll
 import muspy
 import tqdm
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 import pandas as pd
 
 # TODO: remove layers from structural analysis
@@ -119,9 +122,6 @@ records = [
 print(f"Processed {len(records)} records")
 
 #%%
-import seaborn as sns
-import matplotlib.pyplot as plt
-import pandas as pd
 
 # Convert records to DataFrame for easier plotting
 df = pd.DataFrame(records)
