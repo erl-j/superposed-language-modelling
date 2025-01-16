@@ -37,7 +37,7 @@ from paper_checkpoints import CHECKPOINTS
 
 model = TrainingWrapper.load_from_checkpoint(
     # CHECKPOINTS["mlm_not_norm_first"],
-    CHECKPOINTS["slm_w_mixed_superposition_2"],
+    CHECKPOINTS["slm_mixed_ratio"],
     # CHECKPOINTS["mlm_w_mixed_superposition"],
     map_location="cpu",
 )

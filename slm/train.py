@@ -71,6 +71,7 @@ class TrainingWrapper(pl.LightningModule):
                 or self.masking_scheme == "simulated_mlm"
                 or self.masking_scheme == "mixed_superposition_2_all_sparse"
                 or self.masking_scheme == "ratio_superposition_mixed_h_mixed_s"
+                or self.masking_scheme == "ratio_superposition_mixed_h_full_s"
             )
         pass
 
@@ -122,6 +123,8 @@ class TrainingWrapper(pl.LightningModule):
                 x_masked = mixed_superposition(x)
             elif self.masking_scheme == "ratio_superposition_mixed_h_mixed_s":
                 x_masked = ratio_superposition(x, syntax_mask=self.syntax_mask)
+            elif self.masking_scheme == "ratio_superposition_mixed_h_full_s":
+                x_masked = ratio_superposition(x, superpositions=["full"], syntax_mask=self.syntax_mask)
             elif self.masking_scheme == "mixed_superposition_2_all_sparse":
                 x_masked = mixed_superposition_2(x, mlm=False, second_mask_types=["variable_superposition"])
             elif self.masking_scheme == "mixed_superposition_2":
@@ -450,7 +453,7 @@ if __name__ == "__main__":
         "enforce_constraint_in_forward": True,
         "activation": "gelu",
         "dropout": 0.1,
-        "use_mlm": True,
+        "use_mlm": False,
     }
 
     training_wrapper = TrainingWrapper(
@@ -458,7 +461,7 @@ if __name__ == "__main__":
         learning_rate=1e-4 if model_config["hidden_size"] == 512 else 1e-4,
         learning_rate_gamma=0.99,
         lr_steps_per_epoch=2836,
-        masking_scheme="mlm_ratio_superposition_mixed_h_mixed_s",
+        masking_scheme="ratio_superposition_mixed_h_full_s",
         use_weight_decay=True,
         warmup_steps=1000,
         collapse_inactive_events=True,
@@ -563,7 +566,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[2,3],
+        devices=[4,5],
         precision="16-mixed",
         max_epochs=150,
         log_every_n_steps=1,
