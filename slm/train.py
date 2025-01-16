@@ -388,94 +388,104 @@ class TrainingWrapper(pl.LightningModule):
 
         print("Successfully converted MLM to SLM architecture")
 
-
+import argparse
 if __name__ == "__main__":
+
+    # optionally take in the name of a checkpoint and devices to use
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--devices", type=int, nargs="+", required=True)
+    parser.add_argument("--checkpoint", type=str, default=None)
+    args = parser.parse_args()
+    checkpoint = args.checkpoint
+    # if checkpoint ends with .ckpt keep it, otherwise make it ./checkpoints/{checkpoint}/last.ckpt
+    if checkpoint is not None and not checkpoint.endswith(".ckpt"):
+        checkpoint = f"./checkpoints/{checkpoint}/last.ckpt"
+    devices = args.devices
+    if len(devices) == 0:
+        devices = [0,1]
+
     SEED = 0
 
     torch.manual_seed(SEED)
 
     DATASET = "mmd_loops"
-
-    # BATCH_SIZE = 80
-    # BATCH_SIZE = 40
     BATCH_SIZE = 60
-
-    tag_list = open(f"./data/{DATASET}/tags.txt").read().splitlines()
 
     N_BARS = 4 if DATASET == "harmonic" else 4
 
-    tokenizer_config = {
-        "ticks_per_beat": 24
-        if (DATASET == "mmd_loops" or DATASET == "harmonic")
-        else 48,
-        "time_hierarchy": "tick",
-        "pitch_range": [0, 128],
-        "max_beats": 4 * N_BARS,
-        "max_notes": 75 * N_BARS if DATASET == "mmd_loops" else 20 * N_BARS,
-        "min_tempo": 40,
-        "max_tempo": 300,
-        "n_tempo_bins": 32,
-        "n_velocity_bins": 32,
-        "time_signatures": None,
-        "tags": tag_list,
-        "shuffle_notes": True,
-        "use_offset": True,
-        "merge_pitch_and_beat": False,
-        "use_program": False,
-        "use_instrument": True,
-        "ignored_track_names": [f"Layers{i}" for i in range(0, 8)],
-        "separate_drum_pitch": True,
-        "use_drum_duration": False,
-        "use_durations": True,
-        "durations": [
-            Fraction(1, 32),
-            Fraction(1, 16),
-            Fraction(1, 8),
-            Fraction(1, 4),
-            Fraction(1, 2),
-            Fraction(1, 1),
-            Fraction(2, 1),
-            Fraction(4, 1),
-        ],
-        "fold_event_attributes": False,
-    }
+    if checkpoint is None:
 
-    USE_RANDOM_SHIFT = False
-    tokenizer = Tokenizer(tokenizer_config)
+        tag_list = open(f"./data/{DATASET}/tags.txt").read().splitlines()
 
-    model_config = {
-        "hidden_size": 768,
-        "n_heads": 12,
-        "feed_forward_size": 4 * 768,
-        "n_layers": 12,
-        "tokenizer_config": tokenizer_config,
-        "norm_first": False,
-        "enforce_constraint_in_forward": True,
-        "activation": "gelu",
-        "dropout": 0.1,
-        "use_mlm": False,
-    }
+        tokenizer_config = {
+            "ticks_per_beat": 24
+            if (DATASET == "mmd_loops" or DATASET == "harmonic")
+            else 48,
+            "time_hierarchy": "tick",
+            "pitch_range": [0, 128],
+            "max_beats": 4 * N_BARS,
+            "max_notes": 75 * N_BARS if DATASET == "mmd_loops" else 20 * N_BARS,
+            "min_tempo": 40,
+            "max_tempo": 300,
+            "n_tempo_bins": 32,
+            "n_velocity_bins": 32,
+            "time_signatures": None,
+            "tags": tag_list,
+            "shuffle_notes": True,
+            "use_offset": True,
+            "merge_pitch_and_beat": False,
+            "use_program": False,
+            "use_instrument": True,
+            "ignored_track_names": [f"Layers{i}" for i in range(0, 8)],
+            "separate_drum_pitch": True,
+            "use_drum_duration": False,
+            "use_durations": True,
+            "durations": [
+                Fraction(1, 32),
+                Fraction(1, 16),
+                Fraction(1, 8),
+                Fraction(1, 4),
+                Fraction(1, 2),
+                Fraction(1, 1),
+                Fraction(2, 1),
+                Fraction(4, 1),
+            ],
+            "fold_event_attributes": False,
+        }
 
-    training_wrapper = TrainingWrapper(
-        model_config=model_config,
-        learning_rate=1e-4 if model_config["hidden_size"] == 512 else 1e-4,
-        learning_rate_gamma=0.99,
-        lr_steps_per_epoch=2836,
-        masking_scheme="ratio_superposition_mixed_h_full_s",
-        use_weight_decay=True,
-        warmup_steps=1000,
-        collapse_inactive_events=True,
-    )
+        USE_RANDOM_SHIFT = False
+        tokenizer = Tokenizer(tokenizer_config)
 
-    # training_wrapper = TrainingWrapper.load_from_checkpoint(
-    #     "./checkpoints/toasty-bush-529/last.ckpt",
-    #     map_location="cpu",
-    # )
+        model_config = {
+            "hidden_size": 768,
+            "n_heads": 12,
+            "feed_forward_size": 4 * 768,
+            "n_layers": 12,
+            "tokenizer_config": tokenizer_config,
+            "norm_first": False,
+            "enforce_constraint_in_forward": True,
+            "activation": "gelu",
+            "dropout": 0.1,
+            "use_mlm": False,
+        }
 
-    # training_wrapper.convert_mlm_to_slm()
-    # training_wrapper.enforce_constraint_in_forward = False
-    # training_wrapper.model.embedding_layer.weight.requires_grad = False
-    # training_wrapper.model.unembedding_layer.weight.requires_grad = False
+        training_wrapper = TrainingWrapper(
+            model_config=model_config,
+            learning_rate=1e-4 if model_config["hidden_size"] == 512 else 1e-4,
+            learning_rate_gamma=0.99,
+            lr_steps_per_epoch=2836,
+            masking_scheme="ratio_superposition_mixed_h_full_s",
+            use_weight_decay=True,
+            warmup_steps=1000,
+            collapse_inactive_events=True,
+        )
+
+    else:
+        training_wrapper = TrainingWrapper.load_from_checkpoint(checkpoint)
+        tokenizer_config = training_wrapper.model.tokenizer.config
+        tokenizer = Tokenizer(tokenizer_config)
+        tag_list = tokenizer_config["tags"]
+        USE_RANDOM_SHIFT = False
 
     mmd_4bar_filter_fn = lambda x: f"n_bars={N_BARS}" in x
 
@@ -504,25 +514,6 @@ if __name__ == "__main__":
         num_workers=4,
         pin_memory=True,
     )
-
-    # val_ds2 = MidiDataset(
-    #     cache_path=f"./data/harmonic/val_midi_records_unique_pr.pt",
-    #     path_filter_fn=None,
-    #     genre_list=tag_list,
-    #     tokenizer=tokenizer,
-    #     min_notes=4 * N_BARS if DATASET == "mmd_loops" else 4 * N_BARS,
-    #     max_notes=tokenizer_config["max_notes"],
-    #     use_random_shift=USE_RANDOM_SHIFT,
-    #     sm_filter_fn=sm_filter_fn,
-    # )
-
-    # val_dl2 = torch.utils.data.DataLoader(
-    #     val_ds,
-    #     batch_size=BATCH_SIZE,
-    #     shuffle=False,
-    #     num_workers=4,
-    #     pin_memory=True,
-    # )
 
     print(f"Loaded {len(val_ds)} validation records")
 
@@ -566,7 +557,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         strategy="ddp_find_unused_parameters_true",
         accelerator="gpu",
-        devices=[4,5],
+        devices=devices,
         precision="16-mixed",
         max_epochs=150,
         log_every_n_steps=1,
@@ -599,8 +590,11 @@ if __name__ == "__main__":
         check_val_every_n_epoch=1 if DATASET == "mmd_loops" else 10,
     )
 
-    trainer.fit(
-        training_wrapper,
-        trn_dl,
-        val_dl,
-    )
+    if checkpoint is not None:
+        trainer.fit(training_wrapper, trn_dl, val_dl, ckpt_path=checkpoint)
+    else:
+        trainer.fit(
+            training_wrapper,
+            trn_dl,
+            val_dl,
+        )

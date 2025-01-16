@@ -35,8 +35,8 @@ USE_FP16 = False
 
 
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
-device = "cuda:2"
-LLM_DEVICE = "cuda:2"
+device = "cuda:6"
+LLM_DEVICE = "cuda:6"
     
 USE_LOCAL_LLM = False
 
@@ -123,7 +123,9 @@ model = TrainingWrapper.load_from_checkpoint(
     # "./checkpoints/glowing-pine-634/last.ckpt",
     # "./checkpoints/lucky-breeze-627/last.ckpt",
     # "./checkpoints/laced-cherry-636/last.ckpt",
-    "./checkpoints/eternal-dawn-640/last.ckpt",
+    # "./checkpoints/eternal-dawn-640/last.ckpt",
+    "./checkpoints/faithful-dream-655/last.ckpt",
+    # "./checkpoints/dainty-moon-661/last.ckpt",
     map_location=device,
 )
 

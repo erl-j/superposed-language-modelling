@@ -3,7 +3,7 @@ import einops
 import random
 
 
-def random_superposition(x, syntax_mask):
+def random_superposition(x, syntax_mask, mode="variable_rate"):
     '''
     Returns a random superposition of the input tensor x.
     Args:
@@ -13,6 +13,8 @@ def random_superposition(x, syntax_mask):
     Returns:
         New tensor of shape (batch_size, num_events, num_attributes, vocab_size) where a random superposition has been applied.  
     '''
+
+    modes = ["variable_rate", "shared_rate", "shared"]
 
     device = x.device
     #  move syntax mask to device
@@ -30,7 +32,11 @@ def random_superposition(x, syntax_mask):
     # get max value
     sup_base_max = sup_base.max(dim=-1, keepdim=True).values
 
-    sup_rate = torch.rand(batch_size, num_events, num_attributes, 1, device=device) * (sup_base_max) 
+    if mode == "variable_rate":
+        sup_rate = torch.rand(batch_size, num_events, num_attributes, 1, device=device) * (sup_base_max)
+    elif mode == "shared_rate":
+        sup_rate = torch.rand(batch_size, 1, num_attributes, 1, device=device) * (sup_base_max)
+ 
     confounders = sup_base >= sup_rate
     output = torch.clamp(x + confounders, 0, 1)
     # # assert that outputs is between 0 and 1
@@ -104,9 +110,6 @@ def ratio_superposition(x, syntax_mask, hierarchical_masks = ["attribute", "even
     masked_x = torch.clamp(hierarchical_mask * superposition + x, 0, 1)
 
     return masked_x
-
-
-
 
 def attribute_dropout(x, n_attributes, dropout_prob):
     """
