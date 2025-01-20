@@ -19,7 +19,8 @@ CHECKPOINTS = {
     "mlm_w_mixed_superposition": "checkpoints/stellar-sun-634/last.ckpt",
     "slm_simulated_mlm" :  "checkpoints/fresh-glitter-641/last.ckpt",
     "slm_simulated_mixed_mlm": "checkpoints/warm-spaceship-643/last.ckpt",
-    "slm_mixed_ratio": "checkpoints/faithful-dream-655/last.ckpt",
+    "slm_mixed_ratio": "./checkpoints/leafy-galaxy-677/last.ckpt",
+    "slm_mixed_ratio_w_shared": "checkpoints/lilac-paper-676/last.ckpt"
     
 }
 # if checkpoints is in parent directory, change checkpoints to ../checkpoints

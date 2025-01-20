@@ -16,7 +16,8 @@ from masking import (
     event_masking,
     mixed_superposition,
     mixed_superposition_2,
-    ratio_superposition
+    ratio_superposition,
+    simple_superposition,
 )
 from model import SuperposedLanguageModel
 from mdlm import LogLinearNoise
@@ -35,6 +36,7 @@ class TrainingWrapper(pl.LightningModule):
         warmup_steps=0,
         lr_steps_per_epoch=2836,
         collapse_inactive_events=False,
+        loss = "cross_entropy"
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -50,6 +52,7 @@ class TrainingWrapper(pl.LightningModule):
         self.attribute_masking_prob = attribute_masking_prob
         self.event_masking_prob = event_masking_prob
         self.warmup_steps = warmup_steps
+        self.loss = loss
 
         # assert that masking_scheme is compatible with use_mlm
         if self.use_mlm:
@@ -72,6 +75,11 @@ class TrainingWrapper(pl.LightningModule):
                 or self.masking_scheme == "mixed_superposition_2_all_sparse"
                 or self.masking_scheme == "ratio_superposition_mixed_h_mixed_s"
                 or self.masking_scheme == "ratio_superposition_mixed_h_full_s"
+                or self.masking_scheme == "ratio_superposition_mixed_h_mixed_s_w_shared_rate"
+                or self.masking_scheme == "ratio_superposition_mixed_h_mixed_s_w_shared_rate_&_autoregression"
+                or self.masking_scheme == "simple_superposition_x**1/2"
+                or self.masking_scheme == "simple_superposition_x**1/4"
+                or self.masking_scheme == "simple_superposition"
             )
         pass
 
@@ -93,7 +101,7 @@ class TrainingWrapper(pl.LightningModule):
         if self.masking_scheme == "mdlm":
             return self.step_mdlm(batch, batch_idx)
         token_ids = batch["token_ids"]
-        target_token_ids = batch["token_ids"]
+        target_token_ids = batch["token_ids"].to(self.get_model_device())
         # one hot encode token_ids with model dtype
         x = torch.nn.functional.one_hot(
             token_ids, num_classes=len(self.tokenizer.vocab)
@@ -104,9 +112,7 @@ class TrainingWrapper(pl.LightningModule):
                 x_input = mixed_superposition_2(x, mlm=True)
             elif self.masking_scheme == "mlm_ratio_superposition_mixed_h_mixed_s":
                 x_masked = ratio_superposition(x, syntax_mask=self.syntax_mask)
-                x_masked = x_masked * (
-                self.syntax_mask[None, None, ...].to(self.get_model_dtype())
-                ).to(self.get_model_device())
+                x_masked = x_masked * self.syntax_mask[None, None, ...].to(self.get_model_dtype()).to(self.get_model_device())
                 x_prior = x_masked / x_masked.sum(dim=-1, keepdim=True)
                 mlm_mask = (x_masked.sum(dim=-1, keepdim=True) > 1).to(self.get_model_dtype())
                 x_masked = torch.cat([x_masked * (1 - mlm_mask), mlm_mask], dim=-1)
@@ -121,8 +127,18 @@ class TrainingWrapper(pl.LightningModule):
         else:
             if self.masking_scheme == "mixed_superposition":
                 x_masked = mixed_superposition(x)
+            elif self.masking_scheme == "simple_superposition":
+                x_masked = simple_superposition(x, syntax_mask=self.syntax_mask, superpositions=["full", "sparse"])
+            elif self.masking_scheme == "simple_superposition_x**1/2":
+                x_masked = simple_superposition(x, syntax_mask=self.syntax_mask, superpositions=["full", "sparse"], schedule_fn = lambda x: x**(1/2))
+            elif self.masking_scheme == "simple_superposition_x**1/4":
+                x_masked = simple_superposition(x, syntax_mask=self.syntax_mask, superpositions=["full", "sparse"], schedule_fn = lambda x: x**(1/4))
             elif self.masking_scheme == "ratio_superposition_mixed_h_mixed_s":
                 x_masked = ratio_superposition(x, syntax_mask=self.syntax_mask)
+            elif self.masking_scheme == "ratio_superposition_mixed_h_mixed_s_w_shared_rate":
+                x_masked = ratio_superposition(x, syntax_mask=self.syntax_mask, superpositions = ["full","full","sparse","shared_rate"])
+            elif self.masking_scheme == "ratio_superposition_mixed_h_mixed_s_w_shared_rate_&_autoregression":
+                x_masked = ratio_superposition(x, syntax_mask=self.syntax_mask, superpositions = ["full","full","sparse","shared_rate"], simulate_autoregression=True)
             elif self.masking_scheme == "ratio_superposition_mixed_h_full_s":
                 x_masked = ratio_superposition(x, superpositions=["full"], syntax_mask=self.syntax_mask)
             elif self.masking_scheme == "mixed_superposition_2_all_sparse":
@@ -156,9 +172,8 @@ class TrainingWrapper(pl.LightningModule):
                 x_masked = attribute_masking(x_masked, self.attribute_masking_prob)
             if self.event_masking_prob > 0:
                 x_masked = event_masking(x_masked, self.event_masking_prob)
-            x_masked = x_masked * (
-                self.syntax_mask[None, None, ...].to(self.get_model_dtype())
-            ).to(self.get_model_device())
+            x_masked = x_masked * self.syntax_mask[None, None, ...].to(self.get_model_dtype()).to(self.get_model_device())
+           
             # renormalize
             x_prior = x_masked / x_masked.sum(dim=-1, keepdim=True)
          
@@ -169,7 +184,7 @@ class TrainingWrapper(pl.LightningModule):
 
         # get metrics
         metrics = self.compute_metrics(
-            target_token_ids, logits
+            target_token_ids, logits , prior=None if self.use_mlm else x_prior
         )
 
         if self.use_mlm:
@@ -202,7 +217,7 @@ class TrainingWrapper(pl.LightningModule):
                 prog_bar=True,
             )
         # calculate loss
-        loss = metrics["cross_entropy"]
+        loss = metrics[self.loss]
         # plot loss
         self.log(f"{stage}/loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss
@@ -215,7 +230,7 @@ class TrainingWrapper(pl.LightningModule):
         self.eval()
         return self.stage_step(batch, batch_idx, "val")
 
-    def compute_metrics(self, target_token_ids, logits):
+    def compute_metrics(self, target_token_ids, logits, prior=None):
         """
         Compute metrics for a given batch
         Input:
@@ -237,10 +252,21 @@ class TrainingWrapper(pl.LightningModule):
             target_token_ids.reshape(-1),
             reduction="none",
         )
+      
         ce = ce.reshape(batch_size, n_events * n_attributes)
 
         metrics = {}
         metrics["cross_entropy"] = ce.mean()
+
+        if prior is not None:
+            target_onehot = F.one_hot(target_token_ids, num_classes=logits.shape[-1])
+            prior_prob = (prior * target_onehot).sum(-1)
+            prior_log_prob = torch.log(prior_prob)
+            # reshape to (batch_size, events attributes)
+            prior_log_prob = einops.rearrange(prior_log_prob, "b e a -> b (e a)", e=n_events, a=n_attributes)
+            metrics["prior_cross_entropy"] = - prior_log_prob.mean()
+            metrics["cross_entropy_normed_pos"] = (ce / (1 - prior_log_prob)).mean()
+            metrics["cross_entropy_normed_set"] = (ce.mean(-1) / (1 - prior_log_prob).mean(-1)).mean()
 
         with torch.no_grad():
             # Calculate probabilities and entropy
@@ -474,7 +500,9 @@ if __name__ == "__main__":
             learning_rate=1e-4 if model_config["hidden_size"] == 512 else 1e-4,
             learning_rate_gamma=0.99,
             lr_steps_per_epoch=2836,
-            masking_scheme="ratio_superposition_mixed_h_full_s",
+            # masking_scheme="ratio_superposition_mixed_h_mixed_s_w_shared_rate_&_autoregression",
+            masking_scheme="simple_superposition_x**1/4",
+            loss = "cross_entropy",
             use_weight_decay=True,
             warmup_steps=1000,
             collapse_inactive_events=True,

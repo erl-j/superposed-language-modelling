@@ -3,6 +3,45 @@ import einops
 import random
 
 
+def simple_superposition(x, syntax_mask, superpositions = ["full","sparse"], schedule_fn=lambda x:x, attribute_masking_rate=0.05):
+    """
+    Applies superposition masking scheme to a batch of one-hot encoded tensors.
+
+    Args:
+        x: Input tensor of shape (batch_size, num_events, num_attributes, vocab_size)
+        syntax_mask: Mask tensor of shape (batch_size, num_events, num_attributes, vocab_size)
+        Syntax mask is a binary tensor where 1 indicates a valid token for that position and 0 indicates an invalid token.
+        superpositions: list of strings
+        schedule_fn,
+        attribute_masking_rate,
+    Returns:
+        Masked tensor of shape (batch_size, num_events, num_attributes, vocab_size)
+    """
+
+    device = x.device
+    batch_size, num_events, num_attributes, vocab_size = x.shape
+
+    attribute_mask = torch.rand((batch_size, 1, num_attributes, 1),device=device) < attribute_masking_rate
+    
+    syntax_mask = syntax_mask.to(device)
+    
+    superposition = random_superposition(x, syntax_mask)
+    shared_rate_superposition = random_superposition(x, syntax_mask, mode="shared_rate")
+    full_mask = einops.repeat(syntax_mask, 'a v -> b e a v', b=batch_size, e=num_events)
+
+    superpositions_dict = {"sparse": superposition, "full": full_mask, "shared_rate": shared_rate_superposition}
+
+    superposition_stack = torch.stack([superpositions_dict[mask_type] for mask_type in superpositions])
+    superposition_idx = torch.randint(0, len(superpositions), (batch_size,), device=device)
+
+    autoregressive_mask = position_mask(batch_size, num_events * num_attributes, schedule_fn, device)
+    autoregressive_mask = einops.rearrange(autoregressive_mask, 'b (e a)-> b e a 1', e=num_events, a=num_attributes)
+    superposition = superposition_stack[superposition_idx, torch.arange(batch_size, device=device)]
+
+    masked_x = torch.clamp((autoregressive_mask * superposition + attribute_mask) + x, 0, 1)
+    return masked_x
+
+
 def random_superposition(x, syntax_mask, mode="variable_rate"):
     '''
     Returns a random superposition of the input tensor x.
@@ -27,15 +66,21 @@ def random_superposition(x, syntax_mask, mode="variable_rate"):
     # if in syntax mask and not in x, set to 1
     candidate_confounders = syntax_mask_bits & ~x_bits
     # now create a random mask and set all non confounders to 0
-
-    sup_base = torch.rand_like(x, device=device) * candidate_confounders
-    # get max value
-    sup_base_max = sup_base.max(dim=-1, keepdim=True).values
-
+    
     if mode == "variable_rate":
+        sup_base = torch.rand_like(x, device=device) * candidate_confounders
+        # get max value
+        sup_base_max = sup_base.max(dim=-1, keepdim=True).values
         sup_rate = torch.rand(batch_size, num_events, num_attributes, 1, device=device) * (sup_base_max)
     elif mode == "shared_rate":
+        sup_base = torch.rand_like(x, device=device) * candidate_confounders
+        # get max value
+        sup_base_max = sup_base.max(dim=-1, keepdim=True).values
         sup_rate = torch.rand(batch_size, 1, num_attributes, 1, device=device) * (sup_base_max)
+    elif mode == "shared":
+        sup_base = torch.rand(batch_size, 1, num_attributes ,1, device=device) * candidate_confounders
+        sup_rate = torch.rand(batch_size, 1, num_attributes, 1, device=device) * (sup_base.max())
+        x = x + x.sum(dim=-3, keepdim=True)
  
     confounders = sup_base >= sup_rate
     output = torch.clamp(x + confounders, 0, 1)
@@ -46,7 +91,7 @@ def random_superposition(x, syntax_mask, mode="variable_rate"):
     # assert (output.sum(dim=-1) <= vocab_size).all()
     return output
 
-def position_mask(batch_size,n_positions, device):
+def position_mask(batch_size,n_positions, schedule_fn, device):
     '''
     Returns a random mask of shape (batch_size, n_positions) where between 1 and n_positions are set to 1.
     Args:
@@ -57,12 +102,12 @@ def position_mask(batch_size,n_positions, device):
     # get max mask base values
     mask_base_max = mask_base.max(dim=-1, keepdim=True).values
     # now get the mask rate
-    mask_rate = torch.rand(batch_size,1, device=device) * mask_base_max
+    mask_rate = schedule_fn(torch.rand(batch_size,1, device=device)) * mask_base_max
     # get mask
     mask = mask_base >= mask_rate
     return mask
 
-def ratio_superposition(x, syntax_mask, hierarchical_masks = ["attribute", "event", "event_attribute"], superpositions = ["sparse", "full"]):
+def ratio_superposition(x, syntax_mask, hierarchical_masks = ["attribute", "event", "event_attribute"], superpositions = ["sparse", "full"], simulate_autoregression=False, schedule_fn = lambda x: x):
     """
     Applies superposition masking scheme to a batch of one-hot encoded tensors.
 
@@ -77,13 +122,13 @@ def ratio_superposition(x, syntax_mask, hierarchical_masks = ["attribute", "even
     device = x.device
     batch_size, num_events, num_attributes, vocab_size = x.shape
 
-    attribute_mask = position_mask(batch_size, num_attributes, device)
+    attribute_mask = position_mask(batch_size, num_attributes, schedule_fn, device)
     attribute_mask = einops.rearrange(attribute_mask, 'b a -> b 1 a 1')
 
-    event_mask = position_mask(batch_size, num_events, device)
+    event_mask = position_mask(batch_size, num_events, schedule_fn, device)
     event_mask = einops.rearrange(event_mask, 'b e -> b e 1 1')
 
-    event_attribute_mask = position_mask(batch_size, num_events * num_attributes, device)
+    event_attribute_mask = position_mask(batch_size, num_events * num_attributes, schedule_fn, device)
     event_attribute_mask = einops.rearrange(event_attribute_mask, 'b (e a) -> b e a 1', e = num_events, a = num_attributes)
 
     hierarchical_masks_dict = {"attribute": einops.repeat(attribute_mask, 'b 1 a 1 -> b e a v', v=vocab_size, e=num_events),
@@ -94,9 +139,10 @@ def ratio_superposition(x, syntax_mask, hierarchical_masks = ["attribute", "even
     syntax_mask = syntax_mask.to(device)
     # get superposition
     superposition = random_superposition(x, syntax_mask)
+    shared_rate_superposition = random_superposition(x, syntax_mask, mode="shared_rate")
     full_mask = einops.repeat(syntax_mask, 'a v -> b e a v', b=batch_size, e=num_events)
 
-    superpositions_dict = {"sparse": superposition, "full": full_mask}
+    superpositions_dict = {"sparse": superposition, "full": full_mask, "shared_rate": shared_rate_superposition}
 
     hierarchical_mask_stack = torch.stack([hierarchical_masks_dict[mask_type] for mask_type in hierarchical_masks])
     superposition_stack = torch.stack([superpositions_dict[mask_type] for mask_type in superpositions])
@@ -107,8 +153,12 @@ def ratio_superposition(x, syntax_mask, hierarchical_masks = ["attribute", "even
     hierarchical_mask = hierarchical_mask_stack[hierarchical_mask_idx, torch.arange(batch_size, device=device)]
     superposition = superposition_stack[superposition_idx, torch.arange(batch_size, device=device)]
 
-    masked_x = torch.clamp(hierarchical_mask * superposition + x, 0, 1)
-
+    if not simulate_autoregression:
+        masked_x = torch.clamp(hierarchical_mask * superposition + x, 0, 1)
+    else:
+        autoregressive_mask = position_mask(batch_size, num_events * num_attributes, schedule_fn, device)
+        autoregressive_mask = einops.rearrange(autoregressive_mask, 'b (e a)-> b e a 1', e=num_events, a=num_attributes)
+        masked_x = torch.clamp((hierarchical_mask * superposition * autoregressive_mask) + x, 0, 1)
     return masked_x
 
 def attribute_dropout(x, n_attributes, dropout_prob):
