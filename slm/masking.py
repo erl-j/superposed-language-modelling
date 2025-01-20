@@ -27,9 +27,10 @@ def simple_superposition(x, syntax_mask, superpositions = ["full","sparse"], sch
     
     superposition = random_superposition(x, syntax_mask)
     shared_rate_superposition = random_superposition(x, syntax_mask, mode="shared_rate")
+    shared_superposition = random_superposition(x, syntax_mask, mode="shared")
     full_mask = einops.repeat(syntax_mask, 'a v -> b e a v', b=batch_size, e=num_events)
 
-    superpositions_dict = {"sparse": superposition, "full": full_mask, "shared_rate": shared_rate_superposition}
+    superpositions_dict = {"sparse": superposition, "full": full_mask, "shared_rate": shared_rate_superposition, "shared": shared_superposition}
 
     superposition_stack = torch.stack([superpositions_dict[mask_type] for mask_type in superpositions])
     superposition_idx = torch.randint(0, len(superpositions), (batch_size,), device=device)
@@ -80,7 +81,7 @@ def random_superposition(x, syntax_mask, mode="variable_rate"):
     elif mode == "shared":
         sup_base = torch.rand(batch_size, 1, num_attributes ,1, device=device) * candidate_confounders
         sup_rate = torch.rand(batch_size, 1, num_attributes, 1, device=device) * (sup_base.max())
-        x = x + x.sum(dim=-3, keepdim=True)
+        x = x + x.sum(dim=1, keepdim=True)
  
     confounders = sup_base >= sup_rate
     output = torch.clamp(x + confounders, 0, 1)

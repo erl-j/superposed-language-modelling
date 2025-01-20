@@ -51,6 +51,8 @@ vocab = model.tokenizer.vocab
 
 embedding = model.model.embedding_layer.weight.detach().numpy().T
 
+# write vocab to text file
+
 # imshow embeddings
 plt.figure()
 plt.imshow(embedding, interpolation="none")

@@ -80,6 +80,7 @@ class TrainingWrapper(pl.LightningModule):
                 or self.masking_scheme == "simple_superposition_x**1/2"
                 or self.masking_scheme == "simple_superposition_x**1/4"
                 or self.masking_scheme == "simple_superposition"
+                or self.masking_scheme == "simple_superposition_matched"
             )
         pass
 
@@ -129,6 +130,8 @@ class TrainingWrapper(pl.LightningModule):
                 x_masked = mixed_superposition(x)
             elif self.masking_scheme == "simple_superposition":
                 x_masked = simple_superposition(x, syntax_mask=self.syntax_mask, superpositions=["full", "sparse"])
+            elif self.masking_scheme == "simple_superposition_matched":
+                x_masked = simple_superposition(x, syntax_mask=self.syntax_mask, superpositions=["full", "full", "full", "sparse", "shared_rate", "shared"], schedule_fn=lambda x:x**(1/4), attribute_masking_rate = 0.05)
             elif self.masking_scheme == "simple_superposition_x**1/2":
                 x_masked = simple_superposition(x, syntax_mask=self.syntax_mask, superpositions=["full", "sparse"], schedule_fn = lambda x: x**(1/2))
             elif self.masking_scheme == "simple_superposition_x**1/4":
@@ -501,7 +504,7 @@ if __name__ == "__main__":
             learning_rate_gamma=0.99,
             lr_steps_per_epoch=2836,
             # masking_scheme="ratio_superposition_mixed_h_mixed_s_w_shared_rate_&_autoregression",
-            masking_scheme="simple_superposition_x**1/4",
+            masking_scheme="simple_superposition_matched",
             loss = "cross_entropy",
             use_weight_decay=True,
             warmup_steps=1000,

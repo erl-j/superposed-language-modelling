@@ -5,14 +5,14 @@ import torch
 import matplotlib.pyplot as plt
 
 
-ATTRIBUTE_VOCAB_SIZES = [3,9,27]
+ATTRIBUTE_VOCAB_SIZES = [10,50,100]
 attribute_ranges = []
 last_index = 0
 for attribute_vocab_size in ATTRIBUTE_VOCAB_SIZES:
     attribute_ranges.append((last_index, last_index + attribute_vocab_size))
     last_index += attribute_vocab_size
 
-N_EVENTS = 30
+N_EVENTS = 50
 
 ATTRIBUTE_VOCABS = []
 
@@ -22,7 +22,7 @@ print(total_vocab_size)
 
 print(attribute_ranges)
 
-BATCH_SIZE=1000
+BATCH_SIZE=5000
 # generate sequence of events for each attribute
 x = np.stack(
     [ np.random.randint(low=attribute_ranges[a_idx][0], high=attribute_ranges[a_idx][1], size=(BATCH_SIZE,N_EVENTS)) for a_idx in range(len(ATTRIBUTE_VOCAB_SIZES)) ],
@@ -57,39 +57,36 @@ plt.imshow(syntax_mask.T, interpolation="none")
 plt.colorbar()
 plt.show()
 
+#%%
 # convert to tensors
 x = torch.tensor(events, dtype=torch.float)
 syntax_mask = torch.tensor(syntax_mask, dtype=torch.float)
 
-# sup = ratio_superposition(x, syntax_mask, superpositions=["full", "full", "sparse","shared_rate"], schedule_fn= lambda x: x**(1/4), simulate_autoregression=False)
-# sup = ratio_superposition(x, syntax_mask, superpositions=["full", "full", "sparse","shared_rate"], simulate_autoregression=True)
-# sup = mixed_superposition_2(x)
-sup = simple_superposition(x, syntax_mask, superpositions = ["full","sparse"], schedule_fn = lambda x: x**(1/4), attribute_masking_rate=0.05)
-# multiply by syntax mask
-sup = sup * syntax_mask[None,...]
-print(sup.shape)
+schemes = {
+    "simple": lambda x : simple_superposition(x, syntax_mask, superpositions = ["full","full", "full", "sparse", "shared", "shared_rate"], schedule_fn = lambda x: x**(1/4), attribute_masking_rate=0.05),
+    "mixed" : lambda x : mixed_superposition_2(x)
+}
 
-sup2 = sup + 0.3 * syntax_mask[None,...]
 plt.figure()
-plt.imshow(sup2[0].reshape(-1, total_vocab_size).T, interpolation="none")
-plt.colorbar()
-plt.show()
 
-#%%
+for name, scheme in schemes.items():
 
-# get some stats.
+    sup = scheme(x)
 
-# histogram of n_unkown (sum larger than 1)
-plt.figure()
-plt.hist((sup.sum(-1) > 1).sum(-1).sum(-1), bins=len(ATTRIBUTE_VOCAB_SIZES) * N_EVENTS)
-plt.show()
+    sup = sup * syntax_mask[None,...]
 
-# plot n_unkown histogram for each attribute
-print(sup.shape)
-plt.figure()
-for attr_idx in range(sup.shape[2]):
-    plt.hist((sup[:,:,attr_idx].sum(-1) > 1).sum(-1))
-    plt.show()
+    # sup2 = sup + 0.3 * syntax_mask[None,...]
+    # plt.figure()
+    # plt.imshow(sup2[0].reshape(-1, total_vocab_size).T, interpolation="none")
+    # plt.colorbar()
+    # plt.show()
 
 
-# %%
+    # get some stats.
+
+    # histogram of n_unkown (sum larger than 1)
+    plt.hist((sup.sum(-1) > 1).sum(-1).sum(-1), bins=len(ATTRIBUTE_VOCAB_SIZES) * N_EVENTS, range=(0,len(ATTRIBUTE_VOCAB_SIZES) * N_EVENTS), alpha=0.2)
+plt.savefig(f"figures/maskhist.png")
+
+
+
