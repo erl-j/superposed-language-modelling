@@ -81,6 +81,9 @@ class TrainingWrapper(pl.LightningModule):
                 or self.masking_scheme == "simple_superposition_x**1/4"
                 or self.masking_scheme == "simple_superposition"
                 or self.masking_scheme == "simple_superposition_matched"
+                or self.masking_scheme == "simplest_superposition"
+                or self.masking_scheme == "simplest_superposition_5050"
+                or self.masking_scheme == "simplest_superposition_full"
             )
         pass
 
@@ -106,7 +109,7 @@ class TrainingWrapper(pl.LightningModule):
         # one hot encode token_ids with model dtype
         x = torch.nn.functional.one_hot(
             token_ids, num_classes=len(self.tokenizer.vocab)
-        ).to(self.get_model_dtype())
+        ).to(self.get_model_dtype()).to(self.get_model_device())
         # apply masking scheme
         if self.use_mlm:
             if self.masking_scheme == "mlm_mixed_masking_2":
@@ -130,6 +133,12 @@ class TrainingWrapper(pl.LightningModule):
                 x_masked = mixed_superposition(x)
             elif self.masking_scheme == "simple_superposition":
                 x_masked = simple_superposition(x, syntax_mask=self.syntax_mask, superpositions=["full", "sparse"])
+            elif self.masking_scheme == "simplest_superposition":
+                x_masked = simple_superposition(x, syntax_mask=self.syntax_mask, superpositions=["sparse"], attribute_masking_rate = 0.05)
+            elif self.masking_scheme == "simplest_superposition_5050":
+                x_masked = simple_superposition(x, syntax_mask=self.syntax_mask, superpositions=["full","sparse"], attribute_masking_rate = 0.05)
+            elif self.masking_scheme == "simplest_superposition_full":
+                x_masked = simple_superposition(x, syntax_mask=self.syntax_mask, superpositions=["full","sparse"], attribute_masking_rate = 0.05)
             elif self.masking_scheme == "simple_superposition_matched":
                 x_masked = simple_superposition(x, syntax_mask=self.syntax_mask, superpositions=["full", "full", "full", "sparse", "shared_rate", "shared"], schedule_fn=lambda x:x**(1/4), attribute_masking_rate = 0.05)
             elif self.masking_scheme == "simple_superposition_x**1/2":
@@ -504,7 +513,7 @@ if __name__ == "__main__":
             learning_rate_gamma=0.99,
             lr_steps_per_epoch=2836,
             # masking_scheme="ratio_superposition_mixed_h_mixed_s_w_shared_rate_&_autoregression",
-            masking_scheme="simple_superposition_matched",
+            masking_scheme="simplest_superposition",
             loss = "cross_entropy",
             use_weight_decay=True,
             warmup_steps=1000,

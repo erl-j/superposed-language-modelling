@@ -131,8 +131,9 @@ model = TrainingWrapper.load_from_checkpoint(
     # "./checkpoints/leafy-galaxy-677/last.ckpt",
     # "./checkpoints/glamorous-aardvark-681/last.ckpt",
     # "./checkpoints/fluent-salad-696/last.ckpt",
-    "./checkpoints/drawn-breeze-701/last.ckpt",
+    # "./checkpoints/drawn-breeze-701/last.ckpt",
     # "./checkpoints/robust-glade-702/last.ckpt",
+    # "./checkpoints/olive-field-703/last.ckpt",
     map_location=device,
 )
 
