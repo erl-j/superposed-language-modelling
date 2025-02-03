@@ -61,6 +61,7 @@ class TrainingWrapper(pl.LightningModule):
                 or self.masking_scheme == "mdlm"
                 or self.masking_scheme == "mlm_mixed_masking_2"
                 or self.masking_scheme == "mlm_ratio_superposition_mixed_h_mixed_s"
+                or self.masking_scheme == "simplest_superposition_full"
             )
         else:
             assert (
@@ -120,6 +121,12 @@ class TrainingWrapper(pl.LightningModule):
                 x_prior = x_masked / x_masked.sum(dim=-1, keepdim=True)
                 mlm_mask = (x_masked.sum(dim=-1, keepdim=True) > 1).to(self.get_model_dtype())
                 x_masked = torch.cat([x_masked * (1 - mlm_mask), mlm_mask], dim=-1)
+            elif self.masking_scheme == "simplest_superposition_full":
+                x_masked = simple_superposition(x, syntax_mask=self.syntax_mask, superpositions=["full"], attribute_masking_rate = 0.05)
+                x_masked = x_masked * self.syntax_mask[None, None, ...].to(self.get_model_dtype()).to(self.get_model_device())
+                x_prior = x_masked / x_masked.sum(dim=-1, keepdim=True)
+                mlm_mask = (x_masked.sum(dim=-1, keepdim=True) > 1).to(self.get_model_dtype())
+                x_masked = torch.cat([x_masked * (1 - mlm_mask), mlm_mask], dim=-1)
             else:
                 x_ta = einops.rearrange(x, "b t a v -> b (t a) v")
                 x_masked_ta = mlm_mask(x_ta, mask_first=False)
@@ -138,7 +145,7 @@ class TrainingWrapper(pl.LightningModule):
             elif self.masking_scheme == "simplest_superposition_5050":
                 x_masked = simple_superposition(x, syntax_mask=self.syntax_mask, superpositions=["full","sparse"], attribute_masking_rate = 0.05)
             elif self.masking_scheme == "simplest_superposition_full":
-                x_masked = simple_superposition(x, syntax_mask=self.syntax_mask, superpositions=["full","sparse"], attribute_masking_rate = 0.05)
+                x_masked = simple_superposition(x, syntax_mask=self.syntax_mask, superpositions=["full"], attribute_masking_rate = 0.05)
             elif self.masking_scheme == "simple_superposition_matched":
                 x_masked = simple_superposition(x, syntax_mask=self.syntax_mask, superpositions=["full", "full", "full", "sparse", "shared_rate", "shared"], schedule_fn=lambda x:x**(1/4), attribute_masking_rate = 0.05)
             elif self.masking_scheme == "simple_superposition_x**1/2":
@@ -512,8 +519,7 @@ if __name__ == "__main__":
             learning_rate=1e-4 if model_config["hidden_size"] == 512 else 1e-4,
             learning_rate_gamma=0.99,
             lr_steps_per_epoch=2836,
-            # masking_scheme="ratio_superposition_mixed_h_mixed_s_w_shared_rate_&_autoregression",
-            masking_scheme="simplest_superposition",
+            masking_scheme="simplest_superposition_full",
             loss = "cross_entropy",
             use_weight_decay=True,
             warmup_steps=1000,

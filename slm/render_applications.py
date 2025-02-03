@@ -16,13 +16,13 @@ from util import sm_set_track_order, sm_fix_overlap_notes
 
 
 # Configuration
-SEED = 42
+SEED = 0
 
 torch.manual_seed(SEED)
 random.seed(SEED)
 np.random.seed(SEED)
 #
-DEVICE = "cuda:2" if torch.cuda.is_available() else "cpu"
+DEVICE = "cuda:7" if torch.cuda.is_available() else "cpu"
 OUTPUT_DIR = Path("./artefacts/applications")
 
 # Model checkpoints to test
@@ -35,7 +35,7 @@ if OUTPUT_DIR.exists():
         exit()
 
 # Number of examples to generate per task
-N_EXAMPLES = 10
+N_EXAMPLES = 100
 
 GENERATE = True
 
@@ -474,48 +474,48 @@ TASKS = {
     #     "tag": "pop",
     #     "tempo": 96,
     # },
-    "ride_tom_beat":{
-        "sampling_settings": {
-            "temperature": 1.0,
-            "top_p": 1.0,
-            "top_k": 0,
-            "tokens_per_step": 1,
-        },
-        "fn": ride_tom_beat,
-        "tick_range": None,
-        "pitch_range": None,
-        "drums": None,
-        "tag": "pop",
-        "tempo": 160,
-    },
-    "piano_in_scale_pitch_set":{
-        "sampling_settings": {
-            "temperature": 1.0,
-            "top_p": 1.0,
-            "top_k": 0,
-            "tokens_per_step": 1,
-        },
-        "fn": piano_in_scale_pitch_set,
-        "tick_range": None,
-        "pitch_range": None,
-        "drums": None,
-        "tag": "pop",
-        "tempo": 120,
-    },
-    "triplet_piano_in_scale_pitch_set":{
-        "sampling_settings": {
-            "temperature": 1.0,
-            "top_p": 1.0,
-            "top_k": 0,
-            "tokens_per_step": 1,
-        },
-        "fn": triplet_piano_in_scale_pitch_set,
-        "tick_range": None,
-        "pitch_range": None,
-        "drums": None,
-        "tag": "pop",
-        "tempo": 120,
-    },
+    # "ride_tom_beat":{
+    #     "sampling_settings": {
+    #         "temperature": 1.0,
+    #         "top_p": 1.0,
+    #         "top_k": 0,
+    #         "tokens_per_step": 1,
+    #     },
+    #     "fn": ride_tom_beat,
+    #     "tick_range": None,
+    #     "pitch_range": None,
+    #     "drums": None,
+    #     "tag": "pop",
+    #     "tempo": 160,
+    # },
+    # "piano_in_scale_pitch_set":{
+    #     "sampling_settings": {
+    #         "temperature": 1.0,
+    #         "top_p": 1.0,
+    #         "top_k": 0,
+    #         "tokens_per_step": 1,
+    #     },
+    #     "fn": piano_in_scale_pitch_set,
+    #     "tick_range": None,
+    #     "pitch_range": None,
+    #     "drums": None,
+    #     "tag": "pop",
+    #     "tempo": 120,
+    # },
+    # "triplet_piano_in_scale_pitch_set":{
+    #     "sampling_settings": {
+    #         "temperature": 1.0,
+    #         "top_p": 1.0,
+    #         "top_k": 0,
+    #         "tokens_per_step": 1,
+    #     },
+    #     "fn": triplet_piano_in_scale_pitch_set,
+    #     "tick_range": None,
+    #     "pitch_range": None,
+    #     "drums": None,
+    #     "tag": "pop",
+    #     "tempo": 120,
+    # },
 }
 
 # reverse the order of the tasks

@@ -18,6 +18,15 @@ class EventConstraint:
         self.not_active = {key: {"-"} for key in self.blank_event}
         self.a = self.blank_event.copy()
 
+    def __str__(self):
+        return str(self.a)
+        
+    def __getitem__(self, key):
+        return self.a[key]
+        
+    def __setitem__(self, key, value):
+        self.a[key] = value
+
     def intersect(self, constraint):
         for key in constraint:
             self.a[key] = self.a[key] & constraint[key]
@@ -74,6 +83,9 @@ class MusicalEventConstraint(EventConstraint):
         }
         super().__init__(blank_event_dict)
         self.tokenizer = tokenizer
+
+    def copy(self):
+        return MusicalEventConstraint(self.tokenizer).intersect(self.a)
 
     def pitch_in_scale_constraint(self,scale, pitch_range):
         scale_constraint = {

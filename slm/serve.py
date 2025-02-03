@@ -35,8 +35,8 @@ USE_FP16 = False
 
 
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
-device = "cuda:7"
-LLM_DEVICE = "cuda:7"
+device = "cuda:5"
+LLM_DEVICE = "cuda:5"
     
 USE_LOCAL_LLM = False
 
@@ -133,7 +133,10 @@ model = TrainingWrapper.load_from_checkpoint(
     # "./checkpoints/fluent-salad-696/last.ckpt",
     # "./checkpoints/drawn-breeze-701/last.ckpt",
     # "./checkpoints/robust-glade-702/last.ckpt",
-    # "./checkpoints/olive-field-703/last.ckpt",
+    # "./checkpoints/different-firefly-705/last.ckpt",
+    # "./checkpoints/logical-butterfly-710/every25/epoch=149",
+    # "./checkpoints/stoic-jazz-706/last.ckpt",
+    CHECKPOINTS["slm_sparse_100epochs"],
     map_location=device,
 )
 
@@ -245,10 +248,13 @@ def generate_function(prompt):
     The attributes of each note event are: {model.tokenizer.note_attribute_order}.
     Each attribute is constrained to a set of string values.
     The tag attribute can take on the values : {model.tokenizer.config['tags']}.
-    The instruments that are available are the "Piano", "Guitar", "Bass" and "Drums".
+    The instruments that are available are {model.tokenizer.get_instruments()}.
     Pitch is expressed in MIDI pitch number. Drums have their own pitch values, in the form of "pitch (Drums)".
     To set a pitch constraint, intersect the event constraint with a set of pitch values.
-    Onset and offset are specified in beats (quarters) (integer 0-15) and ticks (integer 0-23) with 24 ticks per beat.
+    Onset and offset are specified ticks (integers 0-384) with 24 ticks per beat meaning we have a maximum of 4 bars.
+    Drum offsets can only be "offset/global_tick:none (Drums)"
+    We can also constrain duration. Duration is specified in the closest fraction of a bar (1/32, 1/16, 1/8, 1/4, 1/2, 1, 2, 4) or "duration:none (Drums)" for drums.
+    Don't constrain the three time attributes (onset, offset, duration) in the same constraint as this can create impossible to resolve constraints.
     Two special attributes are "tempo" and "velocity" which are set only using tempo_constraint and velocity_constraint methods. 
     These two are the only attributes with specific constraint methods. The rest of the attributes are set by intersecting the event with a dictionary of attribute values.
     To set velocity, use the velocity_constraint method. For example, ev.intersect(ec().velocity_constraint(40)) sets the velocity of the event to near 40.
@@ -257,6 +263,7 @@ def generate_function(prompt):
     Do not try to generate the loop directly in the function, but rather create a constraint that can be used to generate the loop.
     Always preserve tempo and tag information from the input events.
     Do not invent any new methods not provided in the examples.
+    Also, dont set constraints that contradict each other. For example if we constrain velocity of an event to be 80 we can't then later constrain the same event to have velocity 110.
     """.strip()
 
     messages = [
@@ -275,7 +282,7 @@ def generate_function(prompt):
                 {
                     "type": "text",
                     "text": """
-                            def build_constraint(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo):
+                            def build_constraint(e, ec, n_events, tick_range, pitch_range, drums, tag, tempo):
                                 '''
                                 This funkbeat will contain kicks, snares, hihats (closed and open), ghost snares, and up to 20 optional drum notes.
                                 '''
@@ -290,7 +297,7 @@ def generate_function(prompt):
                                         e += [
                                             ec()
                                             .intersect({"pitch": {"38 (Drums)"}})
-                                            .intersect({"onset/beat": {str(beat + bar * 4)}})
+                                            .intersect({"onset/global_tick": {str(beat * 16 * 24 + bar * 4 * 16 * 24)}})
                                             .force_active()
                                         ]
                                 # add 10 hihats
@@ -307,8 +314,6 @@ def generate_function(prompt):
                                 ]
                                 # add up to 20 optional drum notes
                                 e += [ec().intersect({"instrument": {"Drums"}}) for _ in range(20)]
-                                # add some triplets in the last bar
-                                e += [ec().intersect({"onset/beat": {"12","13","14","15"}, "onset/tick": {"8", "16"}}).force_active() for _ in range(5)]
                                 # set tempo to 96
                                 e = [ev.intersect(ec().tempo_constraint(96)) for ev in e]
                                 # set tag to funk
@@ -337,7 +342,7 @@ def generate_function(prompt):
                 {
                     "type": "text",
                     "text": """
-                            def build_constraint(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo):
+                            def build_constraint(e, ec, n_events, tick_range, pitch_range, drums, tag, tempo):
                                 # remove inactive notes
                                 e = [ev for ev in e if ev.is_active()]
                                 # set aside other instruments
@@ -357,8 +362,7 @@ def generate_function(prompt):
                                         .intersect(
                                             {
                                                 "instrument": {"Bass"},
-                                                "onset/beat": kick.a["onset/beat"],
-                                                "onset/tick": kick.a["onset/tick"],
+                                                "onset/global_tick": kick.a["onset/global_tick"],
                                                 "pitch": {str(pitch) for pitch in range(30, 46)}, # set pitch range to low pitches
                                             }
                                         )
@@ -389,7 +393,7 @@ def generate_function(prompt):
                 {
                     "type": "text",
                     "text": """
-                        def build_constraint(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo):
+                        def build_constraint(e, ec, n_events, tick_range, pitch_range, drums, tag, tempo):
                             '''
                             We want to""".strip(),
                 },
@@ -500,7 +504,7 @@ def edit():
             func_name = func_str.split("def ")[1].split("(")[0]
             # Call the function (this assumes no arguments for simplicity)
             e = locals()[func_name](
-                e, ec, n_events, beat_range, pitch_range, edit_drums, "other", tempo
+                e=e, ec=ec, n_events=n_events, tick_range=tick_range, pitch_range=pitch_range, drums=edit_drums, tag="pop", tempo=tempo
             )
         elif action == "unconditional":
             e = unconditional(
@@ -602,6 +606,17 @@ def edit():
             )
         elif action == "goofy":
             e = fun_beat(
+                e,
+                ec,
+                n_events,
+                tick_range,
+                pitch_range,
+                drums=edit_drums,
+                tag=DEFAULT_TAG,
+                tempo=tempo,
+            )
+        elif action == "ballad":
+            e = ballad(
                 e,
                 ec,
                 n_events,
@@ -798,13 +813,15 @@ def edit():
 
         # mask = model.fast_kill_events(mask)
 
+        ORDER = "random"
+
         x = generate(
             mask,
             top_p=float(sampling_settings["topp"]),
             temperature=float(sampling_settings["temperature"]),
             top_k=int(sampling_settings["topk"]),
             tokens_per_step=int(sampling_settings["tokens_per_step"]),
-            order="random",
+            order=ORDER,
         )
         x_sm = model.tokenizer.decode(x)
         x_sm = util.sm_fix_overlap_notes(x_sm)

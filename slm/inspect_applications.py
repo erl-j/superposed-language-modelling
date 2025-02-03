@@ -18,10 +18,20 @@ import pandas as pd
 # Load ground truth examples
 base_path = Path("../artefacts/applications")
 
-csv_path = base_path / "records.csv"
+import glob
 
-# Load records from CSV
-records = pd.read_csv(csv_path)
+csv_paths = glob.glob(str(base_path / "**/*records.csv"), recursive=True)
+
+print(f"Found {len(csv_paths)} records.csv files")
+
+# Join all records in one step
+records = pd.concat([
+    pd.read_csv(path) 
+    for path in csv_paths
+], ignore_index=True)
+
+# sort by model
+records = records.sort_values(by=["model", "task"])
 
 # plot mean log likelhood for each model and task
 models = records.model.unique()
@@ -32,14 +42,20 @@ for task in tasks:
         mean_ll = records[(records.model == model) & (records.task == task)].log_probs.mean()
         print(f"Task: {task}, Model: {model}, Mean Log Likelihood: {mean_ll}")
 
-# plot distirbution of log likelihoods for each task
 for task in tasks:
-    # plot one histogram per model, shared x axis and y axis
     fig, axes = plt.subplots(len(models), 1, sharex=True, sharey=True)
     fig.suptitle(f"Log Likelihood Distribution for Task: {task}", size=16, y=1.02)
+    
+    # First calculate the global min and max for this task to set consistent bins
+    task_data = records[records.task == task]
+    min_ll = task_data.log_probs.min()
+    max_ll = task_data.log_probs.max()
+    bins = np.linspace(min_ll, max_ll, 21)  # 20 bins, 21 edges
+    
+    # Plot histograms using the same bins for all models
     for i, model in enumerate(models):
-        model_ll = records[(records.model == model) & (records.task == task)].log_probs
-        axes[i].hist(model_ll, bins=20, alpha=0.5, label=model)
+        model_ll = task_data[task_data.model == model].log_probs
+        axes[i].hist(model_ll, bins=bins, alpha=0.5, label=model)
         axes[i].legend()
 #%%
 
@@ -126,12 +142,71 @@ print(f"Processed {len(records)} records")
 # Convert records to DataFrame for easier plotting
 df = pd.DataFrame(records)
 
+# sort by task and model 
+df = df.sort_values(by=["model", "task", "sample_index"])
+
 # Truncate model names to first 6 characters
-df["model"] = df["model"].str[:6]
+df["model"] = df["model"].str[:30]
 
 # Get all metrics columns
 metric_cols = [col for col in df.columns if col.startswith("metric/")]
 
+#%%
+# Create scatter plots comparing ground truth vs generated samples
+for task in [t for t in tasks if t != "ground_truth"]:
+    task_df = df[df["task"] == task].copy()
+    ground_truth_df = df[df["task"] == "ground_truth"].copy()
+    
+    # Get dimensions for subplot grid
+    n_metrics = len(metric_cols)
+    n_models = len(task_df["model"].unique())
+    
+    # Create figure with subplots for each metric and model
+    fig, axes = plt.subplots(n_metrics, n_models, 
+                            figsize=(5 * n_models, 4 * n_metrics),
+                            squeeze=False)
+    fig.suptitle(f"Ground Truth vs Generated Metrics for Task: {task}", 
+                size=16, y=1.02)
+    
+    # Create scatter plot for each metric and model combination
+    for metric_idx, metric in enumerate(metric_cols):
+        ground_truth_values = ground_truth_df[metric].values
+        
+        # Find metric-specific min and max for shared axes
+        metric_values = [*ground_truth_values]
+        for model_values in task_df.groupby("model")[metric].agg(list):
+            metric_values.extend(model_values)
+        metric_min, metric_max = min(metric_values), max(metric_values)
+        
+        for model_idx, model in enumerate(task_df["model"].unique()):
+            ax = axes[metric_idx, model_idx]
+            model_values = task_df[task_df["model"] == model][metric].values
+            
+            # Create scatter plot
+            ax.scatter(ground_truth_values, model_values, alpha=0.6)
+            
+            # Add diagonal reference line
+            ax.plot([metric_min, metric_max], [metric_min, metric_max], 
+                   'k--', alpha=0.5)
+            
+            # Set axes properties
+            ax.set_xlim(metric_min, metric_max)
+            ax.set_ylim(metric_min, metric_max)
+            ax.set_aspect('equal')
+            
+            # Add labels
+            metric_name = metric.replace("metric/", "").replace("_", " ").title()
+            if metric_idx == 0:
+                ax.set_title(f"Model: {model}")
+            if model_idx == 0:
+                ax.set_ylabel(f"{metric_name}\nGenerated Value")
+            if metric_idx == n_metrics - 1:
+                ax.set_xlabel("Ground Truth Value")
+    
+    plt.tight_layout()
+    plt.show()
+
+#%%
 # Create violin plots for each task (excluding ground_truth task)
 for task in [t for t in tasks if t != "ground_truth"]:
     # Filter data for current task and add ground truth data
@@ -179,6 +254,7 @@ for task in [t for t in tasks if t != "ground_truth"]:
     # Save the plot
     plt.show()
 
+#%%
 # Calculate summary statistics (including ground truth)
 summary_stats = []
 for task in [t for t in tasks if t != "ground_truth"]:

@@ -285,6 +285,9 @@ class Tokenizer():
                 if token.startswith(note_attr):
                     syntax_mask[attr_idx, self.token2idx[token]] = 1
         return syntax_mask
+
+    def get_instruments(self):
+        return self.instrument_class_names
      
     def sm_to_tokens(self, sm, tag):
 

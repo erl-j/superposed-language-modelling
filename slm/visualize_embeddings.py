@@ -70,6 +70,7 @@ print(unembedding.shape)
 plt.figure()
 plt.plot(np.linalg.norm(embedding, axis=1))
 plt.show()
+plt.save
 
 plt.figure()
 plt.plot(np.linalg.norm(unembedding, axis=1))
