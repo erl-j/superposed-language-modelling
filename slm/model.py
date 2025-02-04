@@ -46,6 +46,7 @@ class SuperposedLanguageModel(torch.nn.Module):
         )
         self.unembedding_layer = nn.Linear(hidden_size, self.vocab_size, bias=False)
         self.enforce_constraint_in_forward = enforce_constraint_in_forward
+        self.eps = 1e-9
 
     def forward(self, x):
         if self.use_mlm:
@@ -110,7 +111,7 @@ class SuperposedLanguageModel(torch.nn.Module):
         n_zeros = torch.sum(target_probs == 0)
         # mean prob
         # add eps
-        log_likelihood = torch.log(target_probs + 1e-9).mean()
+        log_likelihood = torch.log(target_probs + self.eps).sum()
         return log_likelihood
 
     @torch.no_grad()
@@ -189,7 +190,7 @@ class SuperposedLanguageModel(torch.nn.Module):
                 # Get probabilities with temperature
                 probs = F.softmax(filtered_logits / curr_temp, dim=-1)
                 probs = probs * flat_x  # Apply constraints
-                probs = probs / (probs.sum(dim=-1, keepdim=True) + 1e-6)
+                probs = probs / (probs.sum(dim=-1, keepdim=True) + self.eps)
                 
                 # Sample tokens
                 sampled = torch.multinomial(probs, 1).squeeze(-1)
@@ -442,7 +443,7 @@ class SuperposedLanguageModel(torch.nn.Module):
                     flat_probs = F.softmax(flat_logits / t, dim=-1)
                     # print min max mean
                     flat_x = einops.rearrange(x, "b e a v -> (b e a) v")
-                    flat_probs += 1e-9
+                    flat_probs += self.eps
                     flat_probs = (flat_probs) * flat_constraint
                     flat_probs = flat_probs / (flat_probs.sum(dim=-1, keepdim=True))
                     sampled = torch.multinomial(flat_probs, 1).squeeze(-1)

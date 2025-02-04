@@ -45,66 +45,66 @@ def replace_pitches_given_pitch_set(
 
 # Define tasks with their parameters
 TASKS = {
-    # "constrained_generation": {
-    #     "sampling_settings": {
-    #         "temperature": 1.0,
-    #         "top_p": 1.0,
-    #         "top_k": 0,
-    #         "tokens_per_step": 1,
-    #     },
-    #     "fn": lambda e, ec, n_events, tick_range, pitch_range, drums, tag, tempo: [
-    #         ec().intersect({
-    #             "instrument": set().union(*[ev.a["instrument"] for ev in e if ev.is_active()]),
-    #             "pitch": set().union(*[ev.a["pitch"] for ev in e if ev.is_active()]),
-    #             "onset/global_tick": set().union(*[ev.a["onset/global_tick"] for ev in e if ev.is_active()]),
-    #             "offset/global_tick": set().union(*[ev.a["offset/global_tick"] for ev in e if ev.is_active()]),
-    #             "velocity": set().union(*[ev.a["velocity"] for ev in e if ev.is_active()]),
-    #             "tempo": set().union(*[ev.a["tempo"] for ev in e if ev.is_active()])
-    #         }).force_active()
-    #         for _ in range(n_events)
-    #     ],
-    #     "tick_range": None,
-    #     "pitch_range": None,
-    #     "drums": None,
-    #     "tag": None,
-    #     "tempo": None,
-    # },
-    # "replace_bass_notes": {
-    #     "sampling_settings": {
-    #         "temperature": 1.0,
-    #         "top_p": 1.0,
-    #         "top_k": 0,
-    #         "tokens_per_step": 1,
-    #     },
-    #     "fn": lambda e, ec, n_events, tick_range, pitch_range, drums, tag, tempo: [
-    #         ec().intersect({"instrument": {"Bass"}}).force_active()
-    #         if ev.a["instrument"] == {"Bass"}
-    #         else ev
-    #         for ev in e
-    #     ],
-    #     "tick_range": None,
-    #     "pitch_range": None,
-    #     "drums": None,
-    #     "tag": None,
-    #     "tempo": None,
-    # },
-    # "replace_pitches": {
-    #     "sampling_settings": {
-    #         "temperature": 1.0,
-    #         "top_p": 1.0,
-    #         "top_k": 0,
-    #         "tokens_per_step": 1,
-    #     },
-    #     "fn": lambda e, ec, n_events, tick_range, pitch_range, drums, tag, tempo: [
-    #         (ec().force_active() if ev.is_active() else ev)
-    #         for ev in e
-    #     ],
-    #     "tick_range": None,
-    #     "pitch_range": None,
-    #     "drums": None,
-    #     "tag": None,
-    #     "tempo": None,
-    # },
+    "constrained_generation": {
+        "sampling_settings": {
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "top_k": 0,
+            "tokens_per_step": 1,
+        },
+        "fn": lambda e, ec, n_events, tick_range, pitch_range, drums, tag, tempo: [
+            ec().intersect({
+                "instrument": set().union(*[ev.a["instrument"] for ev in e if ev.is_active()]),
+                "pitch": set().union(*[ev.a["pitch"] for ev in e if ev.is_active()]),
+                "onset/global_tick": set().union(*[ev.a["onset/global_tick"] for ev in e if ev.is_active()]),
+                "offset/global_tick": set().union(*[ev.a["offset/global_tick"] for ev in e if ev.is_active()]),
+                "velocity": set().union(*[ev.a["velocity"] for ev in e if ev.is_active()]),
+                "tempo": set().union(*[ev.a["tempo"] for ev in e if ev.is_active()])
+            }).force_active()
+            for _ in range(n_events)
+        ],
+        "tick_range": None,
+        "pitch_range": None,
+        "drums": None,
+        "tag": None,
+        "tempo": None,
+    },
+    "replace_bass_notes": {
+        "sampling_settings": {
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "top_k": 0,
+            "tokens_per_step": 1,
+        },
+        "fn": lambda e, ec, n_events, tick_range, pitch_range, drums, tag, tempo: [
+            ec().intersect({"instrument": {"Bass"}}).force_active()
+            if ev.a["instrument"] == {"Bass"}
+            else ev
+            for ev in e
+        ],
+        "tick_range": None,
+        "pitch_range": None,
+        "drums": None,
+        "tag": None,
+        "tempo": None,
+    },
+    "replace_pitches": {
+        "sampling_settings": {
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "top_k": 0,
+            "tokens_per_step": 1,
+        },
+        "fn": lambda e, ec, n_events, tick_range, pitch_range, drums, tag, tempo: [
+            (ec().force_active() if ev.is_active() else ev)
+            for ev in e
+        ],
+        "tick_range": None,
+        "pitch_range": None,
+        "drums": None,
+        "tag": None,
+        "tempo": None,
+    },
     "replace_pitches_given_pitch_set": {
         "sampling_settings": {
             "temperature": 1.0,
@@ -119,48 +119,48 @@ TASKS = {
         "tag": None,
         "tempo": None,
     },
-    # "unconditional": {
-    #     "sampling_settings": {
-    #         "temperature": 1.0,
-    #         "top_p": 1.0,
-    #         "top_k": 0,
-    #         "tokens_per_step": 1,
-    #     },
-    #     "fn": lambda e, ec, n_events, tick_range, pitch_range, drums, tag, tempo: [
-    #         ec() for _ in range(n_events)
-    #     ],
-    #     "tick_range": None,
-    #     "pitch_range": None,
-    #     "drums": None,
-    #     "tag": None,
-    #     "tempo": None,
-    # },
-    # "infill_middle": {
-    #     "sampling_settings": {
-    #         "temperature": 1.0,
-    #         "top_p": 1.0,
-    #         "top_k": 0,
-    #         "tokens_per_step": 1,
-    #     },
-    #     "fn": lambda e, ec, n_events, tick_range, pitch_range, drums, tag, tempo: [
-    #         ec().intersect({
-    #             "pitch": set([f"{r}" for r in range(pitch_range[0], pitch_range[1])]) | {"-"},
-    #             "onset/global_tick": set([str(r) for r in range(tick_range[0], tick_range[1])]) | {"-"},
-    #             "offset/global_tick": set([str(r) for r in range(tick_range[0], tick_range[1])]) | {"-"},
-    #         }).force_active()
-    #         if (
-    #             len(ev.a["onset/global_tick"].intersection(set([str(r) for r in range(tick_range[0], tick_range[1])]))) > 0
-    #             and len(ev.a["pitch"].intersection(set([f"{r}" for r in range(pitch_range[0], pitch_range[1])]))) > 0
-    #         )
-    #         else ev
-    #         for ev in e
-    #     ],
-    #     "tick_range": (4*24, 12*24),
-    #     "pitch_range": (22, 110),
-    #     "drums": False,
-    #     "tag": None,
-    #     "tempo": None,
-    # },
+    "unconditional": {
+        "sampling_settings": {
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "top_k": 0,
+            "tokens_per_step": 1,
+        },
+        "fn": lambda e, ec, n_events, tick_range, pitch_range, drums, tag, tempo: [
+            ec() for _ in range(n_events)
+        ],
+        "tick_range": None,
+        "pitch_range": None,
+        "drums": None,
+        "tag": None,
+        "tempo": None,
+    },
+    "infill_middle": {
+        "sampling_settings": {
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "top_k": 0,
+            "tokens_per_step": 1,
+        },
+        "fn": lambda e, ec, n_events, tick_range, pitch_range, drums, tag, tempo: [
+            ec().intersect({
+                "pitch": set([f"{r}" for r in range(pitch_range[0], pitch_range[1])]) | {"-"},
+                "onset/global_tick": set([str(r) for r in range(tick_range[0], tick_range[1])]) | {"-"},
+                "offset/global_tick": set([str(r) for r in range(tick_range[0], tick_range[1])]) | {"-"},
+            }).force_active()
+            if (
+                len(ev.a["onset/global_tick"].intersection(set([str(r) for r in range(tick_range[0], tick_range[1])]))) > 0
+                and len(ev.a["pitch"].intersection(set([f"{r}" for r in range(pitch_range[0], pitch_range[1])]))) > 0
+            )
+            else ev
+            for ev in e
+        ],
+        "tick_range": (4*24, 12*24),
+        "pitch_range": (22, 110),
+        "drums": False,
+        "tag": None,
+        "tempo": None,
+    },
 }
 
 # Reverse the order of tasks
