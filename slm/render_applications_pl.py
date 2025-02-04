@@ -240,7 +240,7 @@ def main():
     # Load the specified model
     print(f"\nProcessing checkpoint: {args.model}")
     model = setup_model(CHECKPOINTS[args.model], device)
-    checkpoint_dir = OUTPUT_DIR / args.model
+    checkpoint_dir = OUTPUT_DIR / str(args.model + "_event_order")
     records = []
 
     # Process each task
@@ -293,6 +293,7 @@ def main():
                     output_mask = model.generate(
                         task_mask,
                         **task_config["sampling_settings"],
+                        order="event"
                     )[0].argmax(dim=-1)
                     
                     output_sm = model.tokenizer.decode(output_mask)

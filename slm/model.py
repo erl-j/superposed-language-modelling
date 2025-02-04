@@ -398,6 +398,8 @@ class SuperposedLanguageModel(torch.nn.Module):
         flat_constraint = einops.rearrange(
             constraint, "b e a v -> (b e a) v", b=constraint.shape[0]
         ).to(self.get_device()).to(self.embedding_layer.weight.dtype)
+        # normalize constraint
+        flat_prior = flat_constraint / flat_constraint.sum(dim=-1, keepdim=True)
         dtype = self.embedding_layer.weight.dtype
         # move x to device
         x = x.to(self.get_device())
@@ -444,8 +446,10 @@ class SuperposedLanguageModel(torch.nn.Module):
                     # print min max mean
                     flat_x = einops.rearrange(x, "b e a v -> (b e a) v")
                     flat_probs += self.eps
+                    flat_pre_constraint_probs = flat_probs
                     flat_probs = (flat_probs) * flat_constraint
                     flat_probs = flat_probs / (flat_probs.sum(dim=-1, keepdim=True))
+                    flat_post_constraint_probs = flat_probs
                     sampled = torch.multinomial(flat_probs, 1).squeeze(-1)
                     masked_indices = torch.where(flat_x.sum(-1) > 1)[0]
                     n_attributes = len(self.tokenizer.note_attribute_order)
@@ -453,6 +457,20 @@ class SuperposedLanguageModel(torch.nn.Module):
                     n_tokens_to_unmask = tokens_per_step
                     if "random" in order:
                         masked_indices = masked_indices[torch.randperm(n_masked)]
+                    if "kl_preconstraint_postconstraint" in order:
+                        kl = torch.sum(
+                            flat_post_constraint_probs
+                            * torch.log(flat_post_constraint_probs / flat_pre_constraint_probs),
+                            dim=-1,
+                        )
+                        masked_indices = masked_indices[torch.argsort(kl)]
+                    elif "kl_postconstraint_preconstraint" in order:
+                        kl = torch.sum(
+                            flat_pre_constraint_probs
+                            * torch.log(flat_pre_constraint_probs / flat_post_constraint_probs),
+                            dim=-1,
+                        )
+                        masked_indices = masked_indices[torch.argsort(kl)]
                     elif "attribute" in order:
                         pass
                     elif "lowest_entropy" in order:

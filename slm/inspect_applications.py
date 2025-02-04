@@ -33,6 +33,14 @@ records = pd.concat([
 # sort by model
 records = records.sort_values(by=["model", "task"])
 
+
+
+models_to_keep = ["slm_mixed_150epochs", "mlm_150epochs", "ground_truth"]
+tasks_to_keep = ["infill_middle", "replace_pitches_given_pitch_set", "unconditional", "ground_truth"]
+
+records = records[records.model.isin(models_to_keep)]
+records = records[records.task.isin(tasks_to_keep)]
+
 # plot mean log likelhood for each model and task
 models = records.model.unique()
 tasks = records.task.unique()
@@ -57,6 +65,36 @@ for task in tasks:
         model_ll = task_data[task_data.model == model].log_probs
         axes[i].hist(model_ll, bins=bins, alpha=0.5, label=model)
         axes[i].legend()
+#%%
+
+# inspect applications
+
+# load fmd results
+fmd_results = pd.read_json(base_path / "fmd_results.json")
+
+# load into pandas dataframe
+df = pd.DataFrame(fmd_results)
+
+# keep only models
+
+df = df[df.model.isin(models_to_keep)]
+df = df[df.task.isin(tasks_to_keep)]
+# rename tasks
+df["task"] = df["task"].str.replace("infill_middle", "replace_notes_within_box")
+# crop model strings to before "_"
+df["model"] = df["model"].str.split("_").str[0]
+
+# sort by model and task
+df = df.sort_values(by=["model", "task"])
+
+pivot_df = df.pivot(index='model', columns='task', values='score')
+
+# Print the table using pandas styling
+print(pivot_df.to_string())
+
+# Alternatively, for a prettier format:
+display(pivot_df.style.format("{:.3f}"))
+
 #%%
 
 ground_truth_path = base_path / "ground_truth"
@@ -139,14 +177,28 @@ print(f"Processed {len(records)} records")
 
 #%%
 
+
 # Convert records to DataFrame for easier plotting
 df = pd.DataFrame(records)
+
 
 # sort by task and model 
 df = df.sort_values(by=["model", "task", "sample_index"])
 
+# filter models and tasks
+df = df[df.model.isin(models_to_keep)]
+df = df[df.task.isin(tasks_to_keep)]
+
+# rename tasks
+df["task"] = df["task"].str.replace("infill_middle", "replace_notes_within_box")
+# crop model strings to before "_"
+df["model"] = df["model"].str.split("_").str[0]
+
+models = df.model.unique()
+tasks = df.task.unique()
+
 # Truncate model names to first 6 characters
-df["model"] = df["model"].str[:30]
+# df["model"] = df["model"].str[:30]
 
 # Get all metrics columns
 metric_cols = [col for col in df.columns if col.startswith("metric/")]

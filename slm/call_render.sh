@@ -8,7 +8,7 @@ models=(
     "slm_full_150epochs"
     "slm_mixed_100epochs"
     "slm_mixed_150epochs"
-    "mlm_100epochs"
+    # "mlm_100epochs"
     "mlm_150epochs"
 )
 

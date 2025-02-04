@@ -43,7 +43,7 @@ def simple_superposition(x, syntax_mask, superpositions = ["full","sparse"], sch
     return masked_x
 
 
-def random_superposition(x, syntax_mask, mode="variable_rate"):
+def random_superposition(x, syntax_mask, mode="variable_rate", ratio=None):
     '''
     Returns a random superposition of the input tensor x.
     Args:
@@ -72,15 +72,24 @@ def random_superposition(x, syntax_mask, mode="variable_rate"):
         sup_base = torch.rand_like(x, device=device) * candidate_confounders
         # get max value
         sup_base_max = sup_base.max(dim=-1, keepdim=True).values
-        sup_rate = torch.rand(batch_size, num_events, num_attributes, 1, device=device) * (sup_base_max)
+        if ratio is not None:
+            sup_rate = torch.ones_like(sup_base_max) * ratio
+        else:
+            sup_rate = torch.rand(batch_size, num_events, num_attributes, 1, device=device) * (sup_base_max)
     elif mode == "shared_rate":
         sup_base = torch.rand_like(x, device=device) * candidate_confounders
         # get max value
         sup_base_max = sup_base.max(dim=-1, keepdim=True).values
-        sup_rate = torch.rand(batch_size, 1, num_attributes, 1, device=device) * (sup_base_max)
+        if ratio is not None:
+            sup_rate = torch.ones_like(sup_base_max) * ratio
+        else:
+            sup_rate = torch.rand(batch_size, 1, num_attributes, 1, device=device) * (sup_base_max)
     elif mode == "shared":
         sup_base = torch.rand(batch_size, 1, num_attributes ,1, device=device) * candidate_confounders
-        sup_rate = torch.rand(batch_size, 1, num_attributes, 1, device=device) * (sup_base.max())
+        if ratio is not None:
+            sup_rate = torch.ones_like(sup_base) * ratio
+        else:
+            sup_rate = torch.rand(batch_size, 1, num_attributes, 1, device=device) * (sup_base.max())
         x = x + x.sum(dim=1, keepdim=True)
  
     confounders = sup_base >= sup_rate

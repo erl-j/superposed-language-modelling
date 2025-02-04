@@ -8,6 +8,7 @@ from data import MidiDataset
 import pandas as pd
 from paper_checkpoints import CHECKPOINTS
 from tqdm import tqdm
+from masking import random_superposition
 
 # Configuration
 DEVICE = "cuda:2" if torch.cuda.is_available() else "cpu"
@@ -64,14 +65,12 @@ def analyze_model(model_name, checkpoint_path, x):
 
         for superposition_ratio in tqdm(
             SUPERPOSITION_RATIOS, desc="Superposition ratios"
-        ):
+        ):  
+            
+            # set random seed
+            torch.manual_seed(SEED)
             # Create superposition mask
-            superposition_mask = (
-                torch.rand(
-                    batch_size, n_events, n_attributes, vocab_size, device=DEVICE
-                )
-                < superposition_ratio
-            )
+            superposition_mask = random_superposition(x, syntax_mask = model.syntax_mask, ratio=superposition_ratio)
 
             # Initialize position mask (where we'll progressively add ones)
             position_mask = torch.zeros(
@@ -87,9 +86,8 @@ def analyze_model(model_name, checkpoint_path, x):
                 ) < masking_ratio
 
                 # Combine masks
-                final_mask = superposition_mask | position_mask
 
-                prior = torch.clamp(x + final_mask, 0, 1)
+                prior = torch.clamp(x + position_mask * superposition_mask, 0, 1)
 
                 prior = prior / prior.sum(dim=-1, keepdim=True)
 
