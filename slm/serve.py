@@ -1,3 +1,4 @@
+#%%
 import sys
 import socket
 import os
@@ -136,10 +137,9 @@ model = TrainingWrapper.load_from_checkpoint(
     # "./checkpoints/different-firefly-705/last.ckpt",
     # "./checkpoints/logical-butterfly-710/every25/epoch=149",
     # "./checkpoints/stoic-jazz-706/last.ckpt",
-    CHECKPOINTS["slm_sparse_100epochs"],
+    CHECKPOINTS["slm_mixed_150epochs"],
     map_location=device,
 )
-
 
 def generate(
     mask,
@@ -506,6 +506,17 @@ def edit():
             e = locals()[func_name](
                 e=e, ec=ec, n_events=n_events, tick_range=tick_range, pitch_range=pitch_range, drums=edit_drums, tag="pop", tempo=tempo
             )
+        elif action == "bass_and_drums":
+            e = bass_and_drums(
+                e,
+                ec,
+                n_events,
+                tick_range,
+                pitch_range,
+                drums=edit_drums,
+                tag=DEFAULT_TAG,
+                tempo=tempo,
+            )
         elif action == "unconditional":
             e = unconditional(
                 e,
@@ -850,3 +861,5 @@ def edit():
         print(traceback.print_exception(etype, value, tb))
         print(e)
         return jsonify({"error": str(e)}), 500
+
+# %%

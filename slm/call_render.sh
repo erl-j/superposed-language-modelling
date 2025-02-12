@@ -8,7 +8,7 @@ models=(
     "slm_full_150epochs"
     "slm_mixed_100epochs"
     "slm_mixed_150epochs"
-    # "mlm_100epochs"
+    "mlm_100epochs"
     "mlm_150epochs"
 )
 
@@ -28,6 +28,8 @@ else
 fi
 
 # Create a new tmux session for each model
+i=0
+
 for model in "${models[@]}"; do
     # Generate a clean session name from model name (remove any problematic characters)
     session_name="gen_${model//[^a-zA-Z0-9]/_}"
@@ -35,6 +37,8 @@ for model in "${models[@]}"; do
     # If using auto GPU allocation, calculate GPU ID
     if [ "$1" == "--auto-gpu" ]; then
         gpu_id=$((i % n_gpus))
+        # Increment the counter
+        ((i++))
     else
         gpu_id=${gpu_mapping[$model]}
     fi

@@ -16,7 +16,7 @@ import pandas as pd
 # load csv
 
 # Load ground truth examples
-base_path = Path("../artefacts/applications")
+base_path = Path("../artefacts/applications_250")
 
 import glob
 
@@ -35,8 +35,15 @@ records = records.sort_values(by=["model", "task"])
 
 
 
-models_to_keep = ["slm_mixed_150epochs", "mlm_150epochs", "ground_truth"]
-tasks_to_keep = ["infill_middle", "replace_pitches_given_pitch_set", "unconditional", "ground_truth"]
+# models_to_keep = ["slm_sparse_150epochs", 
+#                   "slm_full_150epochs", 
+#                   "slm_mixed_150epochs",
+#                 #   "slm_mixed_150epochs_event_order", 
+#                   "mlm_150epochs", 
+#                 #   "mlm_150epochs_event_order", 
+#                   "ground_truth"]
+models_to_keep = records.model.unique()
+tasks_to_keep =records.task.unique() #["infill_middle", "replace_pitches_given_pitch_set", "unconditional", "ground_truth", "constrained_generation"]
 
 records = records[records.model.isin(models_to_keep)]
 records = records[records.task.isin(tasks_to_keep)]
@@ -77,12 +84,14 @@ df = pd.DataFrame(fmd_results)
 
 # keep only models
 
-df = df[df.model.isin(models_to_keep)]
+# df = df[df.model.isin(models_to_keep)]
 df = df[df.task.isin(tasks_to_keep)]
 # rename tasks
 df["task"] = df["task"].str.replace("infill_middle", "replace_notes_within_box")
 # crop model strings to before "_"
-df["model"] = df["model"].str.split("_").str[0]
+# df["model"] = df["model"].str.split("_").str[0]
+# pinrt models
+print(df.model.unique())
 
 # sort by model and task
 df = df.sort_values(by=["model", "task"])
@@ -119,7 +128,7 @@ ground_truth_midis = [symusic.Score(f) for f in ground_truth_files]
 records = [
     {
         "midi": midi,
-        "piano_roll": piano_roll(midi, 96),
+        "piano_roll": piano_roll(midi, 24, include_drums=False),
         "path": path,
         "task": "ground_truth",
         "model": "ground_truth",
@@ -133,7 +142,7 @@ records.extend(
     [
         {
             "midi": symusic.Score(file),
-            "piano_roll": piano_roll(symusic.Score(file), 96),
+            "piano_roll": piano_roll(symusic.Score(file), 24, include_drums=False),
             "path": file,
             "task": task,
             "model": model,
@@ -178,6 +187,10 @@ print(f"Processed {len(records)} records")
 #%%
 
 
+
+#%%
+
+
 # Convert records to DataFrame for easier plotting
 df = pd.DataFrame(records)
 
@@ -185,6 +198,8 @@ df = pd.DataFrame(records)
 # sort by task and model 
 df = df.sort_values(by=["model", "task", "sample_index"])
 
+# remove "mlm_100epochs"
+models_to_keep = [model for model in models if "mlm_100epochs" not in model]
 # filter models and tasks
 df = df[df.model.isin(models_to_keep)]
 df = df[df.task.isin(tasks_to_keep)]

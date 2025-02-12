@@ -30,22 +30,50 @@ def ballad(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo,
     return e
 
 
-def ballad(ec, n_events):
+def bass_and_drums(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo):
+    e = []
+    # force 1 bass note
+    e += [ec().intersect({"instrument": {"Bass"}}).force_active() for _ in range(3)]
+    # force 1 drums note
+    e += [ec().intersect({"instrument": {"Drums"}}).force_active() for _ in range(3)]
+
+    # constrain instrument to be only bass and drums
+    e += [ec().intersect({"instrument": {"Bass", "Drums"}}).force_active() for i in range(50)]
+
+    # add 50 optional bass and drums
+    e += [ec().intersect({"instrument": {"Bass", "Drums", "-"}}) for i in range(50)]
+    # pad
+    # set tag to pop
+    e = [ev.intersect({"tag": {"rock", "-"}}) for ev in e]
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
+    return e
+
+def strings_and_flute(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo):
+    e = []
+
+    e += [ec().intersect({"instrument": {"Flute", "Strings"}}).force_active() for _ in range(80)]
+
+    e = [ev.intersect({"tag": {"classical", "-"}}) for ev in e]
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
+    return e
+
+
+def ballad(e, ec, n_events):
     # remove current notes
     e = []
-    # add 20 piano notes
+    # add 64 piano notes
     e += [ec().intersect({"instrument": {"Piano"}}).force_active() for _ in range(64)]
-    # add 20 bass notes
+    # add 16 bass notes
     e += [ec().intersect({"instrument": {"Bass"}}).force_active() for _ in range(16)]
-    # add 100 optional notes
+    # add 64 optional notes
     e += [ec().intersect({"instrument": {"Piano","Bass","-"}}) for _ in range(64)]
     # add pitch constraint to all notes
     e = [ev.intersect(ec().pitch_in_scale_constraint("C major", (20, 100))) for ev in e]
-    # add 20 drums
+    # add 32 drums
     e += [ec().intersect({"instrument": {"Drums"}}).force_active() for _ in range(32)]
-    # add 50 optional drums
+    # add 32 optional drums
     e += [ec().intersect({"instrument": {"Drums"}}) for _ in range(32)]
-    # set tempo to 120
+    # set tempo to 75
     e = [ev.intersect(ec().tempo_constraint(75)) for ev in e]
     # add tag constraint
     e = [ev.intersect({"tag": {"pop", "-"}}) for ev in e]
@@ -64,28 +92,20 @@ def jazz_piano(
     tag,
     tempo,
 ) : 
-    
     # remove empty notes
     e = [ev for ev in e if ev.is_active()]
-
     # remove all piano
     e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Piano"})]
-
-    # add between 30 and 100 piano notes
+    # add between 50 piano notes
     e += [ec().intersect({"instrument": {"Piano"}}).force_active() for _ in range(50)]
-
-    # add 70 optional notes
+    # add 50 optional piano notes
     e += [ec().intersect({"instrument": {"Piano", "-"}}) for _ in range(50)]
-
     # set tempo to 120
     e = [ev.intersect(ec().tempo_constraint(tempo)) for ev in e]
-
     # add tag constraint
     e = [ev.intersect({"tag": {tag, "-"}}) for ev in e]
-
     # pad with empty notes
     e += [ec().force_inactive() for _ in range(n_events - len(e))]
-
     return e
 
 
@@ -269,7 +289,7 @@ def breakbeat(
     # 20 optional rides
     e += [ec().intersect({"pitch": HIHAT_PITCHES |{"-"}}) for _ in range(20)]
     # add 10 snare
-    e += [ec().intersect({"pitch": {"38 (Drums)"}}).force_active() for _ in range(6)]
+    e += [ec().intersect({"pitch": {"38 (Drums)"}}).force_active() for _ in range(8)]
     # add 10 optional snares
     e += [ec().intersect({"pitch": {"38 (Drums)", "-"}}) for _ in range(10)]
 

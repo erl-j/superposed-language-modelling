@@ -5,6 +5,7 @@ bfn-checkpoints/
 checkpoints/
 dfm-checkpoints/
 workdir/
+mgeval/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *__pycache__/
@@ -16,6 +17,7 @@ __pycache__/
 data/
 # C extensions
 *.so
+.sander-wood/
 
 # Distribution / packaging
 .Python

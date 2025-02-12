@@ -37,7 +37,7 @@ from paper_checkpoints import CHECKPOINTS
 
 model = TrainingWrapper.load_from_checkpoint(
     # CHECKPOINTS["mlm_not_norm_first"],
-    CHECKPOINTS["slm_mixed_ratio"],
+    CHECKPOINTS["slm_full_150epochs"],
     # CHECKPOINTS["mlm_w_mixed_superposition"],
     map_location="cpu",
 )
@@ -70,7 +70,7 @@ print(unembedding.shape)
 plt.figure()
 plt.plot(np.linalg.norm(embedding, axis=1))
 plt.show()
-plt.save
+# plt.savefig("embedding_norms.png")
 
 plt.figure()
 plt.plot(np.linalg.norm(unembedding, axis=1))

@@ -47,12 +47,27 @@ class SuperposedLanguageModel(torch.nn.Module):
         self.unembedding_layer = nn.Linear(hidden_size, self.vocab_size, bias=False)
         self.enforce_constraint_in_forward = enforce_constraint_in_forward
         self.eps = 1e-9
+        
+    def convert_mlm_to_slm(self):
+        """
+        Convert the model from Masked Language Model (MLM) to Superposed Language Model (SLM).
+        This is used to test the hypothesis that the mlm can be used as a slm without retuning.
+        This hypothesis is likely rejected.
+        """
+        if not self.use_mlm:
+            raise ValueError("Model is already an SLM.")
+        self.use_mlm = False
+        # remove the last channel from the embedding layer
+        print(self.embedding_layer.weight.shape)
+        self.embedding_layer.weight = nn.Parameter(self.embedding_layer.weight[:, :-1])
+        print(self.embedding_layer.weight.shape)
 
-    def forward(self, x):
+
+    def forward(self, x, return_activations=False):
         if self.use_mlm:
-            return self.mlm_forward(x)
+            return self.mlm_forward(x, return_activations)
         else:
-            return self.slm_forward(x)
+            return self.slm_forward(x, return_activations)
 
     def mlm_forward_from_constraint(self, x):
         """
@@ -240,48 +255,7 @@ class SuperposedLanguageModel(torch.nn.Module):
                     
         return x
 
-    def slm_forward_alternating_attention(self, x):
-        """
-        Forward pass for Superposed Language Model (SLM).
-        Input:
-            x: Input tensor of shape (batch_size, events, attributes, vocab_size)
-        """
-        b, e, a, v = x.shape
-        syntax_mask = self.syntax_mask[None, None, ...].to(x.device).to(x.dtype)
-        syntax_mask = einops.repeat(syntax_mask, "1 1 a v -> b e a v", b=b, e=e)
-        # apply syntax mask
-        x = x * syntax_mask
-        # renormalize
-        x = x / x.sum(dim=-1, keepdim=True)
-        # embed attributes
-        z_prior = self.embedding_layer(x)
-        z = z_prior
-        for layer_idx, layer in enumerate(self.main_block.layers):
-            if layer_idx % 2 == 0:
-                z = einops.rearrange(z, "b e a h -> (b a) e h")
-                z = layer(z)
-                z = einops.rearrange(z, "(b a) e h -> b e a h", b=b, a=a)
-            else:
-                z = einops.rearrange(z, "b e a h -> (b e) a h")
-                z = layer(z)
-                z = einops.rearrange(z, "(b e) a h -> b e a h", b=b, e=e)
-        z_post = z
-
-        # pass through unembedding layer
-        logits = self.unembedding_layer(z_post)
-   
-        zero = torch.zeros_like(x, device=x.device, dtype=x.dtype)
-
-        # apply syntax mask to logits with appropriate tolerance
-        logits[syntax_mask.isclose(zero, rtol=1e-5)] = torch.finfo(logits.dtype).min
-
-        # enforce constraint with appropriate tolerances
-        if self.enforce_constraint_in_forward:
-            logits[x.isclose(zero, rtol=1e-5)] = torch.finfo(logits.dtype).min
-
-        return logits
-
-    def slm_forward(self, x):
+    def slm_forward(self, x, return_activations=False):
         """
         Forward pass for Superposed Language Model (SLM).
         Input:
@@ -317,9 +291,12 @@ class SuperposedLanguageModel(torch.nn.Module):
         # enforce constraint with appropriate tolerances
         if self.enforce_constraint_in_forward:
             logits[x.isclose(zero, rtol=1e-5)] = torch.finfo(logits.dtype).min
+
+        if return_activations:
+            return logits, z_post
         return logits
 
-    def mlm_forward(self, x_masked):
+    def mlm_forward(self, x_masked, return_activations=False):
         """
         Forward pass for Masked Language Model (MLM).
         Args:
@@ -367,6 +344,9 @@ class SuperposedLanguageModel(torch.nn.Module):
             ),
             logits,
         )
+
+        if return_activations:
+            return logits, z_post
 
         return logits
 
@@ -445,8 +425,8 @@ class SuperposedLanguageModel(torch.nn.Module):
                     flat_probs = F.softmax(flat_logits / t, dim=-1)
                     # print min max mean
                     flat_x = einops.rearrange(x, "b e a v -> (b e a) v")
-                    flat_probs += self.eps
                     flat_pre_constraint_probs = flat_probs
+                    flat_probs += self.eps
                     flat_probs = (flat_probs) * flat_constraint
                     flat_probs = flat_probs / (flat_probs.sum(dim=-1, keepdim=True))
                     flat_post_constraint_probs = flat_probs
@@ -457,13 +437,14 @@ class SuperposedLanguageModel(torch.nn.Module):
                     n_tokens_to_unmask = tokens_per_step
                     if "random" in order:
                         masked_indices = masked_indices[torch.randperm(n_masked)]
-                    if "kl_preconstraint_postconstraint" in order:
+                    elif "kl_preconstraint_postconstraint" in order:
                         kl = torch.sum(
                             flat_post_constraint_probs
-                            * torch.log(flat_post_constraint_probs / flat_pre_constraint_probs),
+                            * torch.log( flat_post_constraint_probs / (flat_pre_constraint_probs + 1)),
                             dim=-1,
                         )
-                        masked_indices = masked_indices[torch.argsort(kl)]
+                        print(kl.shape)
+                        masked_indices = masked_indices[torch.argsort(kl, descending=True)]
                     elif "kl_postconstraint_preconstraint" in order:
                         kl = torch.sum(
                             flat_pre_constraint_probs
@@ -471,8 +452,8 @@ class SuperposedLanguageModel(torch.nn.Module):
                             dim=-1,
                         )
                         masked_indices = masked_indices[torch.argsort(kl)]
-                    elif "attribute" in order:
-                        pass
+                    elif "left_to_right" in order:
+                        masked_indices = masked_indices[torch.argsort(masked_indices)]
                     elif "lowest_entropy" in order:
                         masked_probs = flat_probs[masked_indices]
                         entropy = -torch.sum(
@@ -491,7 +472,7 @@ class SuperposedLanguageModel(torch.nn.Module):
                         # mod by number of attributes
                         masked_indices_event_index = masked_indices % n_attributes
                         masked_indices = masked_indices[
-                            torch.argsort(masked_indices_event_index)
+                            torch.argsort(masked_indices_event_index, stable=True)
                         ]
                     if "reverse" in order:
                         masked_indices = masked_indices.flip(0)
@@ -525,3 +506,27 @@ class SuperposedLanguageModel(torch.nn.Module):
                         break
         # assert that x respects constraints
         return x
+
+    def embed(self, x, mask_attributes=[]):
+        """
+        Embed input tensor using the embedding layer.
+        Args:
+            x: Input tensor of shape (batch_size, events, attributes, vocab_size)
+        """
+        # convert to one hot
+        x = torch.nn.functional.one_hot(x, num_classes=self.vocab_size if not self.use_mlm else self.vocab_size + 1)
+
+        for attribute in mask_attributes:
+            attr_idx = self.tokenizer.note_attribute_order.index(attribute) 
+            x[..., attr_idx, :] = 1  
+
+        x = x.float()
+        # renomalize
+        x = x / x.sum(dim=-1, keepdim=True)
+
+        # convert to float
+        # run forward pass
+        return self.forward(x, return_activations=True)[-1]
+
+        
+    

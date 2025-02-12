@@ -14,11 +14,44 @@ from paper_checkpoints import CHECKPOINTS
 from util import sm_set_track_order, sm_fix_overlap_notes
 
 # Number of examples to generate per task
-N_EXAMPLES = 100
+N_EXAMPLES = 250
 GENERATE = True
-OUTPUT_DIR = Path("./artefacts/applications")
+ORDER = "lowest_entropy"
 
+OUTPUT_DIR = Path("./artefacts/applications_250" + (f"_{ORDER}" if ORDER is not "random" else ""))
 
+def bass_and_drums(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo):
+    e = []
+    # force 1 bass note
+    e += [ec().intersect({"instrument": {"Bass"}}).force_active() for _ in range(3)]
+    # force 1 drums note
+    e += [ec().intersect({"instrument": {"Drums"}}).force_active() for _ in range(3)]
+
+    # constrain instrument to be only bass and drums
+    e += [ec().intersect({"instrument": {"Bass", "Drums"}}).force_active() for i in range(50)]
+
+    # add 50 optional bass and drums
+    e += [ec().intersect({"instrument": {"Bass", "Drums", "-"}}) for i in range(50)]
+    # pad
+    # set tag to pop
+    e = [ev.intersect({"tag": {"rock", "-"}}) for ev in e]
+    # set tempo to 130
+    e = [ev.intersect(ec().tempo_constraint(130)) for ev in e]
+
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
+    return e
+
+def strings_and_flute(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo):
+    e = []
+
+    e += [ec().intersect({"instrument": {"Flute", "Strings"}}).force_active() for _ in range(80)]
+
+    e = [ev.intersect({"tag": {"classical", "-"}}) for ev in e]
+
+    # set tempo to 130
+    e = [ev.intersect(ec().tempo_constraint(130)) for ev in e]
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
+    return e
 
 def replace_pitches_given_pitch_set(
     e,
@@ -33,18 +66,46 @@ def replace_pitches_given_pitch_set(
     # get union of pitches of all notes
     current_pitches = set()
     for ev in e:
-        current_pitches.update(ev.a["pitch"])
+        # unless drums or inactive
+        if ev.a["instrument"] != {"Drums"} and ev.is_active():
+            current_pitches.update(ev.a["pitch"])
 
     # for current active pitches. replace pitch
     for event_idx in range(n_events):
-        if e[event_idx].is_active():
+        if e[event_idx].is_active() and e[event_idx].a["instrument"] != {"Drums"}:
             e[event_idx].a["pitch"] = current_pitches
-            e[event_idx] = e[event_idx].force_active()
-
     return e
 
 # Define tasks with their parameters
 TASKS = {
+    "bass_and_drums": {
+        "sampling_settings": {
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "top_k": 0,
+            "tokens_per_step": 1,
+        },
+        "fn": bass_and_drums,
+        "tick_range": None,
+        "pitch_range": None,
+        "drums": None,
+        "tag": None,
+        "tempo": None,
+    },
+    "strings_and_flute": {
+        "sampling_settings": {
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "top_k": 0,
+            "tokens_per_step": 1,
+        },
+        "fn": strings_and_flute,
+        "tick_range": None,
+        "pitch_range": None,
+        "drums": None,
+        "tag": None,
+        "tempo": None,
+    },
     "constrained_generation": {
         "sampling_settings": {
             "temperature": 1.0,
@@ -57,9 +118,11 @@ TASKS = {
                 "instrument": set().union(*[ev.a["instrument"] for ev in e if ev.is_active()]),
                 "pitch": set().union(*[ev.a["pitch"] for ev in e if ev.is_active()]),
                 "onset/global_tick": set().union(*[ev.a["onset/global_tick"] for ev in e if ev.is_active()]),
-                "offset/global_tick": set().union(*[ev.a["offset/global_tick"] for ev in e if ev.is_active()]),
+                # "offset/global_tick": set().union(*[ev.a["offset/global_tick"] for ev in e if ev.is_active()]),
+                # "duration": set().union(*[ev.a["duration"] for ev in e if ev.is_active()]),
                 "velocity": set().union(*[ev.a["velocity"] for ev in e if ev.is_active()]),
-                "tempo": set().union(*[ev.a["tempo"] for ev in e if ev.is_active()])
+                "tempo": set().union(*[ev.a["tempo"] for ev in e if ev.is_active()]),
+                # "tag": set().union(*[ev.a["tag"] for ev in e if ev.is_active()])
             }).force_active()
             for _ in range(n_events)
         ],
@@ -69,25 +132,25 @@ TASKS = {
         "tag": None,
         "tempo": None,
     },
-    "replace_bass_notes": {
-        "sampling_settings": {
-            "temperature": 1.0,
-            "top_p": 1.0,
-            "top_k": 0,
-            "tokens_per_step": 1,
-        },
-        "fn": lambda e, ec, n_events, tick_range, pitch_range, drums, tag, tempo: [
-            ec().intersect({"instrument": {"Bass"}}).force_active()
-            if ev.a["instrument"] == {"Bass"}
-            else ev
-            for ev in e
-        ],
-        "tick_range": None,
-        "pitch_range": None,
-        "drums": None,
-        "tag": None,
-        "tempo": None,
-    },
+    # "replace_bass_notes": {
+    #     "sampling_settings": {
+    #         "temperature": 1.0,
+    #         "top_p": 1.0,
+    #         "top_k": 0,
+    #         "tokens_per_step": 1,
+    #     },
+    #     "fn": lambda e, ec, n_events, tick_range, pitch_range, drums, tag, tempo: [
+    #         ec().intersect({"instrument": {"Bass"}}).force_active()
+    #         if ev.a["instrument"] == {"Bass"}
+    #         else ev
+    #         for ev in e
+    #     ],
+    #     "tick_range": None,
+    #     "pitch_range": None,
+    #     "drums": None,
+    #     "tag": None,
+    #     "tempo": None,
+    # },
     "replace_pitches": {
         "sampling_settings": {
             "temperature": 1.0,
@@ -105,7 +168,7 @@ TASKS = {
         "tag": None,
         "tempo": None,
     },
-    "replace_pitches_given_pitch_set": {
+    "replace_pitches_given_pitch_set_2": {
         "sampling_settings": {
             "temperature": 1.0,
             "top_p": 1.0,
@@ -119,22 +182,7 @@ TASKS = {
         "tag": None,
         "tempo": None,
     },
-    "unconditional": {
-        "sampling_settings": {
-            "temperature": 1.0,
-            "top_p": 1.0,
-            "top_k": 0,
-            "tokens_per_step": 1,
-        },
-        "fn": lambda e, ec, n_events, tick_range, pitch_range, drums, tag, tempo: [
-            ec() for _ in range(n_events)
-        ],
-        "tick_range": None,
-        "pitch_range": None,
-        "drums": None,
-        "tag": None,
-        "tempo": None,
-    },
+    
     "infill_middle": {
         "sampling_settings": {
             "temperature": 1.0,
@@ -155,16 +203,32 @@ TASKS = {
             else ev
             for ev in e
         ],
-        "tick_range": (4*24, 12*24),
+        "tick_range": (8*24, 12*24),
         "pitch_range": (22, 110),
         "drums": False,
+        "tag": None,
+        "tempo": None,
+    },
+    "unconditional": {
+        "sampling_settings": {
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "top_k": 0,
+            "tokens_per_step": 1,
+        },
+        "fn": lambda e, ec, n_events, tick_range, pitch_range, drums, tag, tempo: [
+            ec() for _ in range(n_events)
+        ],
+        "tick_range": None,
+        "pitch_range": None,
+        "drums": None,
         "tag": None,
         "tempo": None,
     },
 }
 
 # Reverse the order of tasks
-TASKS = dict(reversed(list(TASKS.items())))
+# TASKS = dict(reversed(list(TASKS.items())))
 
 def setup_model(checkpoint_path, device):
     """Load and set up the model."""
@@ -240,7 +304,7 @@ def main():
     # Load the specified model
     print(f"\nProcessing checkpoint: {args.model}")
     model = setup_model(CHECKPOINTS[args.model], device)
-    checkpoint_dir = OUTPUT_DIR / str(args.model + "_event_order")
+    checkpoint_dir = OUTPUT_DIR / str(args.model)
     records = []
 
     # Process each task
@@ -293,7 +357,7 @@ def main():
                     output_mask = model.generate(
                         task_mask,
                         **task_config["sampling_settings"],
-                        order="event"
+                        order=ORDER,
                     )[0].argmax(dim=-1)
                     
                     output_sm = model.tokenizer.decode(output_mask)

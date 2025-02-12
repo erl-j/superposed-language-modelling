@@ -264,13 +264,17 @@ def loop_sm(sm, loop_bars, n_loops):
         track.notes.extend(new_notes)
     return sm
 
-def piano_roll(sm, tpq):
+def piano_roll(sm, tpq, include_drums):
     sm = sm.copy()
     sm = sm.resample(tpq=tpq, min_dur=0)
 
-    # set all is_drum to False
-    for track in sm.tracks:
-        track.is_drum = False
+    # if include drums, set all tracks to not be drums
+    if include_drums:
+        for track in sm.tracks:
+            track.is_drum = False
+    else:
+        # remove drum tracks
+        sm.tracks = [track for track in sm.tracks if not track.is_drum]
 
     pr = sm.pianoroll(modes=["frame"]).sum(axis=0).sum(axis=0)
 
