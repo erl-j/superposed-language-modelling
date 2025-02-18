@@ -16,7 +16,7 @@ import pandas as pd
 # load csv
 
 # Load ground truth examples
-base_path = Path("../artefacts/applications_250")
+base_path = Path("../artefacts/applications_250e")
 
 import glob
 
@@ -183,8 +183,6 @@ records = [
 ]
 
 print(f"Processed {len(records)} records")
-
-#%%
 
 
 

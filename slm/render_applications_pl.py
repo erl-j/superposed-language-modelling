@@ -16,22 +16,66 @@ from util import sm_set_track_order, sm_fix_overlap_notes
 # Number of examples to generate per task
 N_EXAMPLES = 250
 GENERATE = True
-ORDER = "lowest_entropy"
+ORDER = "random"
 
-OUTPUT_DIR = Path("./artefacts/applications_250" + (f"_{ORDER}" if ORDER is not "random" else ""))
+OUTPUT_DIR = Path("./artefacts/applications_250e")
+
+# replace given instrument set
+def replace_w_instrument_set(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo):
+
+    # get tempo
+    tempo = None
+    for ev in e:
+        if ev.is_active():
+            tempo = ev.a["tempo"]
+            break
+    tag = None
+    for ev in e:
+        if ev.is_active():
+            tag = ev.a["tag"]
+            break
+    
+    instruments = set()
+    # get instrument tokens currently present in the events
+    for ev in e:
+        if ev.is_active():
+            instruments.update(ev.a["instrument"])
+
+    # count number of active events
+    n_active_events = sum([1 for ev in e if ev.is_active()])
+
+    # force one note per instrument
+    instrument_list = list(instruments)
+    e = [ec().intersect({"instrument": {instrument_list[i]}}).force_active() for i in range(len(instrument_list))]
+
+    n_free_instrument_to_add = n_active_events - len(e)
+
+    e += [ec().intersect({"instrument": instruments}).force_active() for _ in range(n_free_instrument_to_add)]
+
+    # set tempo to tempo and tag to tag
+    e = [ev.intersect({"tempo": tempo, "tag": tag}) for ev in e]
+
+    # pad with inactive events
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
+
+    print(e)
+
+    return e
+
 
 def bass_and_drums(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo):
     e = []
-    # force 1 bass note
-    e += [ec().intersect({"instrument": {"Bass"}}).force_active() for _ in range(3)]
+
+    # force 8 bass note
+    e += [ec().intersect({"instrument": {"Bass"}}).force_active() for _ in range(8)]
     # force 1 drums note
-    e += [ec().intersect({"instrument": {"Drums"}}).force_active() for _ in range(3)]
+    e += [ec().intersect({"instrument": {"Drums"}}).force_active() for _ in range(8)]
 
     # constrain instrument to be only bass and drums
-    e += [ec().intersect({"instrument": {"Bass", "Drums"}}).force_active() for i in range(50)]
+    e += [ec().intersect({"instrument": {"Bass", "Drums"}}).force_active() for i in range(64)]
 
-    # add 50 optional bass and drums
-    e += [ec().intersect({"instrument": {"Bass", "Drums", "-"}}) for i in range(50)]
+    # add 64 optional bass and drums
+    e += [ec().intersect({"instrument": {"Bass", "Drums", "-"}}) for i in range(64)]
     # pad
     # set tag to pop
     e = [ev.intersect({"tag": {"rock", "-"}}) for ev in e]
@@ -41,10 +85,17 @@ def bass_and_drums(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo):
     e += [ec().force_inactive() for _ in range(n_events - len(e))]
     return e
 
-def strings_and_flute(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo):
+def pipe_and_chromatic_percussion(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo):
     e = []
 
-    e += [ec().intersect({"instrument": {"Flute", "Strings"}}).force_active() for _ in range(80)]
+    # force 8 strings notes
+    e += [ec().intersect({"instrument": {"Chromatic Percussion"}}).force_active() for _ in range(8)]
+
+    # force 8 flute notes
+    e += [ec().intersect({"instrument": {"Pipe"}}).force_active() for _ in range(8)]
+
+    # add 80 optional Chromatic Percussion and flute notes
+    e += [ec().intersect({"instrument": {"Pipe", "Chromatic Percussion"}}) for _ in range(80)]
 
     e = [ev.intersect({"tag": {"classical", "-"}}) for ev in e]
 
@@ -53,121 +104,215 @@ def strings_and_flute(e, ec, n_events, beat_range, pitch_range, drums, tag, temp
     e += [ec().force_inactive() for _ in range(n_events - len(e))]
     return e
 
-def replace_pitches_given_pitch_set(
-    e,
-    ec,
-    n_events,
-    tick_range,
-    pitch_range,
-    drums,
-    tag,
-    tempo,
-):
+def piano_pentatonic(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo):
+
+    e = []
+    # add 8 optional piano notes in C major pentatonic pitch set
+    e += [ec().intersect({"instrument": {"Piano"}}).intersect(ec().pitch_in_scale_constraint("C pentatonic", (36,108))).force_active() for i in range(8) ]
+
+    # add 64 optional piano notes in C major pentatonic pitch set
+    e += [ec().intersect({"instrument": {"Piano"}}).intersect(ec().pitch_in_scale_constraint("C pentatonic", (36,108))) for i in range(64)]
+
+    # pad with inactive events
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
+
+    # set tempo
+    e = [ev.intersect(ec().tempo_constraint(130)) for ev in e]
+
+    return e
+
+def constrained_generation(e, ec, n_events, tick_range, pitch_range, drums, tag, tempo):
+        
+        n_active_events = sum([1 for ev in e if ev.is_active()])
+        e = [ec().intersect(
+            {
+            "instrument": set().union(*[ev.a["instrument"] for ev in e if ev.is_active()]),
+            "pitch": set().union(*[ev.a["pitch"] for ev in e if ev.is_active()]),
+            "onset/global_tick": set().union(*[ev.a["onset/global_tick"] for ev in e if ev.is_active()]),
+            "duration": set().union(*[ev.a["duration"] for ev in e if ev.is_active()]),
+            "velocity": set().union(*[ev.a["velocity"] for ev in e if ev.is_active()]),
+            "tempo": set().union(*[ev.a["tempo"] for ev in e if ev.is_active()]),
+            "tag": set().union(*[ev.a["tag"] for ev in e if ev.is_active()])
+        }).force_active()
+        for _ in range(n_active_events)]
+
+        # pad with inactive events
+        e += [ec().force_inactive() for _ in range(n_events - len(e))]
+        return e
+    
+
+def replace_pitches_given_instrument_pitch_set(e, ec, n_events, tick_range, pitch_range, drums, tag, tempo):
+    # get all instrument tokens currently present in the events
+    current_instruments = set()
+    for ev in e:
+        if ev.is_active():
+            current_instruments.update(ev.a["instrument"])
+
+    instruments_to_replace = set(random.sample(current_instruments, min(2, len(current_instruments))))
+
+    # for each instrument, get the pitch set of that instrument
+    instrument_pitch_set = {}
+    for event_idx in range(n_events):
+        if e[event_idx].is_active():
+            for instrument in e[event_idx].a["instrument"]:
+                if instrument not in instrument_pitch_set:
+                    instrument_pitch_set[instrument] = set()
+                instrument_pitch_set[instrument].update(e[event_idx].a["pitch"])
+    
+    # for events whose instrument is in instruments_to_replace, replace pitch with the pitch set of instrument
+    for event_idx in range(n_events):
+        if e[event_idx].is_active() and len(e[event_idx].a["instrument"].intersection(instruments_to_replace)) > 0:
+            # get instrument token
+            instrument = e[event_idx].a["instrument"].pop()
+            e[event_idx].a["pitch"] = instrument_pitch_set[instrument]
+    return e
+
+def replace_pitches_given_pitch_set(e, ec, n_events, tick_range, pitch_range, drums, tag, tempo):
+
+    # current tempo
+    current_tempos = set()
+    for ev in e:
+        current_tempos.update(ev.a["tempo"])
+
+    # current tags
+    current_tags = set()
+    for ev in e:
+        current_tags.update(ev.a["tag"])
+
+
     # get union of pitches of all notes
     current_pitches = set()
     for ev in e:
-        # unless drums or inactive
-        if ev.a["instrument"] != {"Drums"} and ev.is_active():
+        if ev.is_active():
             current_pitches.update(ev.a["pitch"])
 
     # for current active pitches. replace pitch
     for event_idx in range(n_events):
         if e[event_idx].is_active() and e[event_idx].a["instrument"] != {"Drums"}:
             e[event_idx].a["pitch"] = current_pitches
+
+    # constrain to current tempo
+    for event_idx in range(n_events):
+        e[event_idx] = e[event_idx].intersect({"tempo": current_tempos})
+    # constrain to current tag
+    for event_idx in range(n_events):
+        e[event_idx] = e[event_idx].intersect({"tag": current_tags})
     return e
+
+def infill_middle(e, ec, n_events, tick_range, pitch_range, drums, tag, tempo):
+    # get tags
+    tags = set()
+    for ev in e:
+        if ev.is_active():
+            tags.update(ev.a["tag"])
+
+    # get tempos
+    tempos = set()
+    for ev in e:
+        if ev.is_active():
+            tempos.update(ev.a["tempo"])
+
+    # instruments to replace 
+
+    return [
+        ec().intersect({
+            "pitch": set([f"{r}" for r in range(pitch_range[0], pitch_range[1])]) | {"-"},
+            "onset/global_tick": set([str(r) for r in range(tick_range[0], tick_range[1])]) | {"-"},
+            "offset/global_tick": set([str(r) for r in range(tick_range[0], tick_range[1])]) | {"-"},
+            "tag": tags,
+            "tempo": tempos
+        }).force_active()
+        if (
+            len(ev.a["onset/global_tick"].intersection(set([str(r) for r in range(tick_range[0], tick_range[1])]))) > 0
+            and len(ev.a["offset/global_tick"].intersection(set([str(r) for r in range(tick_range[0], tick_range[1])]))) > 0
+            and len(ev.a["pitch"].intersection(set([f"{r}" for r in range(pitch_range[0], pitch_range[1])]))) > 0
+        )
+        else ev
+        for ev in e
+    ]
+
+def replace_2_instruments(e, ec, n_events, tick_range, pitch_range, drums, tag, tempo):
+    # get tags
+    tags = set()
+    for ev in e:
+        if ev.is_active():
+            tags.update(ev.a["tag"])
+
+    tempos = set()
+    for ev in e:
+        if ev.is_active():
+            tempos.update(ev.a["tempo"])
+
+    # get all instrument tokens currently present in the events
+    current_instruments = set()
+    for ev in e:
+        if ev.is_active():
+            current_instruments.update(ev.a["instrument"])
+
+    # get seed by hashing first element
+    seed = hash(tuple(e[0].a["instrument"]))
+    # pick 2 instruments from the current instruments with seed as the seed
+    random_state = random.Random(seed)
+
+    instruments_to_replace = set(random_state.sample(list(current_instruments), min(2, len(current_instruments))))
+
+    for event_idx in range(n_events):
+        if e[event_idx].is_active() and len(e[event_idx].a["instrument"].intersection(instruments_to_replace)) > 0:
+            e[event_idx] = ec().force_active()
+            e[event_idx]["instrument"] = instruments_to_replace
+            e[event_idx] = e[event_idx].intersect({"tag": tags, "tempo": tempos})
+
+    # pad with inactive events
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
+    return e
+
+def unconditional(e, ec, n_events, tick_range, pitch_range, drums, tag, tempo):
+    return [ec() for _ in range(n_events)]
 
 # Define tasks with their parameters
 TASKS = {
-    "bass_and_drums": {
-        "sampling_settings": {
-            "temperature": 1.0,
-            "top_p": 1.0,
-            "top_k": 0,
-            "tokens_per_step": 1,
-        },
-        "fn": bass_and_drums,
-        "tick_range": None,
-        "pitch_range": None,
-        "drums": None,
-        "tag": None,
-        "tempo": None,
-    },
-    "strings_and_flute": {
-        "sampling_settings": {
-            "temperature": 1.0,
-            "top_p": 1.0,
-            "top_k": 0,
-            "tokens_per_step": 1,
-        },
-        "fn": strings_and_flute,
-        "tick_range": None,
-        "pitch_range": None,
-        "drums": None,
-        "tag": None,
-        "tempo": None,
-    },
-    "constrained_generation": {
-        "sampling_settings": {
-            "temperature": 1.0,
-            "top_p": 1.0,
-            "top_k": 0,
-            "tokens_per_step": 1,
-        },
-        "fn": lambda e, ec, n_events, tick_range, pitch_range, drums, tag, tempo: [
-            ec().intersect({
-                "instrument": set().union(*[ev.a["instrument"] for ev in e if ev.is_active()]),
-                "pitch": set().union(*[ev.a["pitch"] for ev in e if ev.is_active()]),
-                "onset/global_tick": set().union(*[ev.a["onset/global_tick"] for ev in e if ev.is_active()]),
-                # "offset/global_tick": set().union(*[ev.a["offset/global_tick"] for ev in e if ev.is_active()]),
-                # "duration": set().union(*[ev.a["duration"] for ev in e if ev.is_active()]),
-                "velocity": set().union(*[ev.a["velocity"] for ev in e if ev.is_active()]),
-                "tempo": set().union(*[ev.a["tempo"] for ev in e if ev.is_active()]),
-                # "tag": set().union(*[ev.a["tag"] for ev in e if ev.is_active()])
-            }).force_active()
-            for _ in range(n_events)
-        ],
-        "tick_range": None,
-        "pitch_range": None,
-        "drums": None,
-        "tag": None,
-        "tempo": None,
-    },
-    # "replace_bass_notes": {
+    # "bass_and_drums": {
     #     "sampling_settings": {
     #         "temperature": 1.0,
     #         "top_p": 1.0,
     #         "top_k": 0,
     #         "tokens_per_step": 1,
     #     },
-    #     "fn": lambda e, ec, n_events, tick_range, pitch_range, drums, tag, tempo: [
-    #         ec().intersect({"instrument": {"Bass"}}).force_active()
-    #         if ev.a["instrument"] == {"Bass"}
-    #         else ev
-    #         for ev in e
-    #     ],
+    #     "fn": bass_and_drums,
     #     "tick_range": None,
     #     "pitch_range": None,
     #     "drums": None,
     #     "tag": None,
     #     "tempo": None,
     # },
-    "replace_pitches": {
-        "sampling_settings": {
-            "temperature": 1.0,
-            "top_p": 1.0,
-            "top_k": 0,
-            "tokens_per_step": 1,
-        },
-        "fn": lambda e, ec, n_events, tick_range, pitch_range, drums, tag, tempo: [
-            (ec().force_active() if ev.is_active() else ev)
-            for ev in e
-        ],
-        "tick_range": None,
-        "pitch_range": None,
-        "drums": None,
-        "tag": None,
-        "tempo": None,
-    },
+    # "pipe_and_chromatic_percussion": {
+    #     "sampling_settings": {
+    #         "temperature": 1.0,
+    #         "top_p": 1.0,
+    #         "top_k": 0,
+    #         "tokens_per_step": 1,
+    #     },
+    #     "fn": pipe_and_chromatic_percussion,
+    #     "tick_range": None,
+    #     "pitch_range": None,
+    #     "drums": None,
+    #     "tag": None,
+    #     "tempo": None,
+    # },
+    # "constrained_generation": {
+    #     "sampling_settings": {
+    #         "temperature": 1.0,
+    #         "top_p": 1.0,
+    #         "top_k": 0,
+    #         "tokens_per_step": 1,
+    #     },
+    #     "fn": constrained_generation,
+    #     "tick_range": None,
+    #     "pitch_range": None,
+    #     "drums": None,
+    #     "tag": None,
+    #     "tempo": None,
+    # },
     "replace_pitches_given_pitch_set_2": {
         "sampling_settings": {
             "temperature": 1.0,
@@ -182,29 +327,44 @@ TASKS = {
         "tag": None,
         "tempo": None,
     },
-    
-    "infill_middle": {
+    "infill_1_bar_box": {
         "sampling_settings": {
             "temperature": 1.0,
             "top_p": 1.0,
             "top_k": 0,
             "tokens_per_step": 1,
         },
-        "fn": lambda e, ec, n_events, tick_range, pitch_range, drums, tag, tempo: [
-            ec().intersect({
-                "pitch": set([f"{r}" for r in range(pitch_range[0], pitch_range[1])]) | {"-"},
-                "onset/global_tick": set([str(r) for r in range(tick_range[0], tick_range[1])]) | {"-"},
-                "offset/global_tick": set([str(r) for r in range(tick_range[0], tick_range[1])]) | {"-"},
-            }).force_active()
-            if (
-                len(ev.a["onset/global_tick"].intersection(set([str(r) for r in range(tick_range[0], tick_range[1])]))) > 0
-                and len(ev.a["pitch"].intersection(set([f"{r}" for r in range(pitch_range[0], pitch_range[1])]))) > 0
-            )
-            else ev
-            for ev in e
-        ],
-        "tick_range": (8*24, 12*24),
-        "pitch_range": (22, 110),
+        "fn": infill_middle,
+        "tick_range": (7*24, 11*24),
+        "pitch_range": (10,125),
+        "drums": False,
+        "tag": None,
+        "tempo": None,
+    },
+    "infill_2_bar_box": {
+        "sampling_settings": {
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "top_k": 0,
+            "tokens_per_step": 1,
+        },
+        "fn": infill_middle,
+        "tick_range": (5*24, 13*24),
+        "pitch_range": (10,125),
+        "drums": False,
+        "tag": None,
+        "tempo": None,
+    },
+    "infill_3_bar_box": {
+        "sampling_settings": {
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "top_k": 0,
+            "tokens_per_step": 1,
+        },
+        "fn": infill_middle,
+        "tick_range": (3*24, 15*24),
+        "pitch_range": (10,125),
         "drums": False,
         "tag": None,
         "tempo": None,
@@ -216,15 +376,41 @@ TASKS = {
             "top_k": 0,
             "tokens_per_step": 1,
         },
-        "fn": lambda e, ec, n_events, tick_range, pitch_range, drums, tag, tempo: [
-            ec() for _ in range(n_events)
-        ],
+        "fn": unconditional,
         "tick_range": None,
         "pitch_range": None,
         "drums": None,
         "tag": None,
         "tempo": None,
     },
+    # "replace_2_instruments": {
+    #     "sampling_settings": {
+    #         "temperature": 1.0,
+    #         "top_p": 1.0,
+    #         "top_k": 0,
+    #         "tokens_per_step": 1,
+    #     },
+    #     "fn": replace_2_instruments,
+    #     "tick_range": None,
+    #     "pitch_range": None,
+    #     "drums": None,
+    #     "tag": None,
+    #     "tempo": None,
+    # },
+    # "replace_w_instrument_set": {
+    #     "sampling_settings": {
+    #         "temperature": 1.0,
+    #         "top_p": 1.0,
+    #         "top_k": 0,
+    #         "tokens_per_step": 1,
+    #     },
+    #     "fn": replace_w_instrument_set,
+    #     "tick_range": None,
+    #     "pitch_range": None,
+    #     "drums": None,
+    #     "tag": None,
+    #     "tempo": None,
+    # },
 }
 
 # Reverse the order of tasks
@@ -304,13 +490,13 @@ def main():
     # Load the specified model
     print(f"\nProcessing checkpoint: {args.model}")
     model = setup_model(CHECKPOINTS[args.model], device)
-    checkpoint_dir = OUTPUT_DIR / str(args.model)
-    records = []
+    checkpoint_dir = f"{OUTPUT_DIR}/{args.model}_{ORDER}"
 
     # Process each task
     for task_name, task_config in TASKS.items():
+        records = []
         print(f"\nProcessing task: {task_name}")
-        task_dir = checkpoint_dir / task_name
+        task_dir = Path(checkpoint_dir) / task_name
         task_dir.mkdir(parents=True, exist_ok=True)
 
         for i, idx in enumerate(ground_truth_indices):
@@ -360,13 +546,16 @@ def main():
                         order=ORDER,
                     )[0].argmax(dim=-1)
                     
-                    output_sm = model.tokenizer.decode(output_mask)
-                    output_sm = sm_fix_overlap_notes(output_sm)
-                    sm_set_track_order(output_sm).dump_midi(task_dir / f"generated_{i}.mid")
+                    try:
+                        output_sm = model.tokenizer.decode(output_mask)
+                        output_sm = sm_fix_overlap_notes(output_sm)
+                        sm_set_track_order(output_sm).dump_midi(task_dir / f"generated_{i}.mid")
+                    except Exception as e:
+                        print(f"Error decoding MIDI: {e}")
 
-    # Save records for this model
-    df = pd.DataFrame(records)
-    df.to_csv(checkpoint_dir / "records.csv")
+        # Save records for this model
+        df = pd.DataFrame(records)
+        df.to_csv(f"{str(task_dir)}/records.csv", index=False)
 
 if __name__ == "__main__":
     main()

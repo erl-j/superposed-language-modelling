@@ -409,7 +409,7 @@ class SuperposedLanguageModel(torch.nn.Module):
                     if attribute_temperature is not None:
                         # turn t into 1,1,a tensor
                         attr_t = (
-                            torch.ones(self.n_attributes, device=x.device) * temperature
+                            torch.ones(len(self.tokenizer.note_attribute_order), device=x.device) * temperature
                         )
                         for k, v in attribute_temperature.items():
                             # get attribute index

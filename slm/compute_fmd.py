@@ -15,7 +15,7 @@ def find_midi_dirs(base_path):
            midi_dirs.append(root)
    return midi_dirs
 
-base_path = "artefacts/applications_250"
+base_path = "artefacts/applications_250e"
 ground_truth_path = f"{base_path}/ground_truth"
 test_dirs = find_midi_dirs(base_path)
 
@@ -49,26 +49,26 @@ for feature_extractor in ['clamp2']:
                 })
             print(f"{test_dir}: {score}")
 
-            # get results for individual examples
-            for midi_file in tqdm(glob.glob(f"{test_dir}/**/*.mid", recursive=True)):
-                score = metric.score_individual(
-                    reference_path=ground_truth_path,
-                    test_song_path=midi_file
-                )
-                individual_results.append({
-                    "filename": midi_file.split("/")[-1],
-                    "model": model,
-                    "task": task,
-                    "score": score,
-                    "midi_path": midi_file
-                })
+            # # get results for individual examples
+            # for midi_file in tqdm(glob.glob(f"{test_dir}/**/*.mid", recursive=True)):
+            #     score = metric.score_individual(
+            #         reference_path=ground_truth_path,
+            #         test_song_path=midi_file
+            #     )
+            #     individual_results.append({
+            #         "filename": midi_file.split("/")[-1],
+            #         "model": model,
+            #         "task": task,
+            #         "score": score,
+            #         "midi_path": midi_file
+            #     })
 
     # output results as json
     with open(base_path + f"/fmd_results.json", "w") as f:
         json.dump(results, f)
 
-    with open(base_path + f"/fmd_individual_results.json", "w") as f:
-        json.dump(individual_results, f)
+    # with open(base_path + f"/fmd_individual_results.json", "w") as f:
+    #     json.dump(individual_results, f)
 
 
 # compute fmd for individual examples

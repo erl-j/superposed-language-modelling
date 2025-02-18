@@ -3,9 +3,9 @@ import symusic
 import glob
 from tqdm import tqdm
 
-a_path = "../artefacts/applications_250/mlm_150epochs_left_to_right_reverse/strings_and_flute"
-b_path = "../artefacts/applications_250/slm_mixed_150epochs_left_to_right_reverse/strings_and_flute"
-c_path = "../artefacts/applications_250/ground_truth/"
+a_path = "../artefacts/applications_250b/mlm_150epochs_random/pipe_and_chromatic_percussion"
+b_path = "../artefacts/applications_250b/slm_sparse_150epochs_random/pipe_and_chromatic_percussion"
+c_path = "../artefacts/applications_250b/ground_truth/"
 
 model_dirs = [a_path, b_path, c_path]
 
@@ -55,7 +55,7 @@ c_hist = np.histogram(c_pitches, bins=range(128))
 
 plt.bar(a_hist[1][:-1], a_hist[0], alpha=0.5, label="mlm")
 plt.bar(b_hist[1][:-1], b_hist[0], alpha=0.5, label="slm")
-plt.bar(c_hist[1][:-1], c_hist[0], alpha=0.5, label="ground_truth")
+# plt.bar(c_hist[1][:-1], c_hist[0], alpha=0.5, label="ground_truth")
 plt.legend()
 
 
