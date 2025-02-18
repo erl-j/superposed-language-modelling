@@ -98,7 +98,9 @@ ec = lambda: MusicalEventConstraint(model.tokenizer)
 def bass_and_drums(e, ec, n_events):
     e = []
     # force 1 bass note
-    e += [ec().intersect({"instrument": {"Brass", "Pipe", "Strings"}}).force_active() for _ in range(100)]
+    e += [ec().intersect({"instrument": {"Piano"}})
+          .intersect(ec().pitch_in_scale_constraint("C major", (59,73)))
+          .force_active() for _ in range(150)]
     # e += [ec().force_active() for _ in range(3)]
 
     # add 100 inactive events
