@@ -40,7 +40,6 @@ model = TrainingWrapper.load_from_checkpoint(
 )
 
 
-# %%
 def generate(
     mask,
     temperature=1.0,
@@ -77,6 +76,24 @@ if USE_FP16:
 N_EVENTS = model.tokenizer.config["max_notes"]
 
 
+def generate_from_constraints(e, sampling_params={}):
+    mask = model.tokenizer.event_constraints_to_mask(e).to(DEVICE)
+    x = generate(
+        mask,
+        temperature=sampling_params.get("temperature", 1.0),
+        top_p=sampling_params.get("top_p", 1.0),
+        top_k=sampling_params.get("top_k", 0),
+        tokens_per_step=sampling_params.get("tokens_per_step", 1),
+        attribute_temperature=sampling_params.get("attribute_temperature", None),
+        order=sampling_params.get("order", "random"),
+    )
+    x_sm = model.tokenizer.decode(x)
+    x_sm = util.sm_fix_overlap_notes(x_sm)
+    return x_sm
+
+ec = lambda: MusicalEventConstraint(model.tokenizer)
+#%%
+
 def bass_and_drums(e, ec, n_events):
     e = []
     # force 1 bass note
@@ -95,29 +112,9 @@ def bass_and_drums(e, ec, n_events):
     e += [ec().force_inactive() for _ in range(n_events - len(e))]
     return e
 
-ec = lambda: MusicalEventConstraint(model.tokenizer)
-
-#%%
-
-def generate_from_constraints(e, sampling_params={}):
-    mask = model.tokenizer.event_constraints_to_mask(e).to(DEVICE)
-    x = generate(
-        mask,
-        temperature=sampling_params.get("temperature", 1.0),
-        top_p=sampling_params.get("top_p", 1.0),
-        top_k=sampling_params.get("top_k", 0),
-        tokens_per_step=sampling_params.get("tokens_per_step", 1),
-        attribute_temperature=sampling_params.get("attribute_temperature", None),
-        order=sampling_params.get("order", "random"),
-    )
-    x_sm = model.tokenizer.decode(x)
-    x_sm = util.sm_fix_overlap_notes(x_sm)
-    return x_sm
-#%%
 e = bass_and_drums([], ec, N_EVENTS)
 preview_sm(generate_from_constraints(e))
 # %%
-
 # now we'll create a pentatonic chromatic percussion loop
 
 def chromatic_percussion(e, ec, n_events):
@@ -221,6 +218,59 @@ e = pads([], ec, N_EVENTS)
 preview_sm(generate_from_constraints(e, {"temperature": 0.95}))
 
 # %%
+
+# we want to enforce the chord progression C - G - Am - F
+
+def chord_progression(e, ec, n_events):
+
+    # create 4 sets, one for each chord
+
+    chord_to_pitches = {
+        "C": [60, 67, 72, 76, 79, 84, 88, 91, 96, 100, 103],
+        "G": [55, 62, 67, 71, 74, 79, 83, 86, 91, 95, 98],
+        "Am": [57,  64, 69, 72, 76, 81, 84, 88, 93, 96, 100],
+        "F": [53, 60, 65, 69, 72, 77, 81, 84, 89, 93, 96],
+    }
+
+    chord_progression = [{"start_beat": 0, 
+                          "end_beat": 4,
+                          "chord": "C"}, 
+                          {"start_beat": 4, 
+                            "end_beat": 8,
+                           "chord": "G"}, 
+                           {"start_beat": 8, 
+                            "end_beat": 12,
+                            "chord": "Am"}, 
+                            {"start_beat": 12,
+                            "end_beat": 16,
+                            "chord": "Am"}
+                        ]
+    e = []
+    for chord_idx in range(len(chord_progression)):
+        tick_range = { str(s) for s in range(int(chord_progression[chord_idx]["start_beat"]*24), int(chord_progression[chord_idx]["end_beat"]*24))}
+        e += [
+            ec().intersect({"instrument": {"Piano"}, 
+                            "pitch": {str(s) for s in chord_to_pitches[chord_progression[chord_idx]["chord"]]}
+                            ,"onset/global_tick": tick_range,
+                            "offset/global_tick": tick_range})
+            for i in range(16)
+        ]
+
+    # add 40 flute notes
+    e += [
+        ec().intersect({"instrument": {"Guitar"}, "duration": {"1/4", "1/8"}}).force_active() for i in range(40)
+    ]
+
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
+
+    return e
+
+e = chord_progression([], ec, N_EVENTS)
+
+preview_sm(generate_from_constraints(e, {"temperature": 1.0}))
+
+
+
 
 
 # %%
