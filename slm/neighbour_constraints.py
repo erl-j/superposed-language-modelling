@@ -98,8 +98,11 @@ ec = lambda: MusicalEventConstraint(model.tokenizer)
 def bass_and_drums(e, ec, n_events):
     e = []
     # force 1 bass note
-    e += [ec().intersect({"instrument": {"Piano"}})
-          .intersect(ec().pitch_in_scale_constraint("C major", (59,73)))
+    e += [ec()
+          #.intersect({"instrument": {"Piano"}})
+          .intersect({"instrument": {"Strings", "Ensemble", "Pipe", "Brass"}})
+        #   .intersect(ec().pitch_in_scale_constraint("C major", (90,103)))
+        #   .intersect({"tag":{"classical"}})
           .force_active() for _ in range(150)]
     # e += [ec().force_active() for _ in range(3)]
 
@@ -121,8 +124,6 @@ out_logits = model.model.forward(mask.float())
 
 print(out_logits.shape)
 
-
-
 # plot distribution 
 
 import matplotlib.pyplot as plt
@@ -140,6 +141,9 @@ for attribute in ["pitch", "instrument", "tag"]:
     # plot probs for each attribute
     attr_probs = last_event_probs[attribute_index, attribute_token_indices].cpu().detach().numpy()
     # plot bar plot with token names
+
+    # make figure wide
+    plt.figure(figsize=(10,5))
     plt.figure()
     plt.bar(attribute_vocab, attr_probs)
     plt.title(attribute)
@@ -157,8 +161,6 @@ for attribute in ["pitch", "instrument", "tag"]:
     plt.title(attribute)
     plt.xticks(rotation=90)
     plt.show()
-
-    
 
 
 # %%

@@ -128,7 +128,7 @@ def constrained_generation(e, ec, n_events, tick_range, pitch_range, drums, tag,
             {
             "instrument": set().union(*[ev.a["instrument"] for ev in e if ev.is_active()]),
             "pitch": set().union(*[ev.a["pitch"] for ev in e if ev.is_active()]),
-            "onset/global_tick": set().union(*[ev.a["onset/global_tick"] for ev in e if ev.is_active()]),
+            # "onset/global_tick": set().union(*[ev.a["onset/global_tick"] for ev in e if ev.is_active()]),
             "duration": set().union(*[ev.a["duration"] for ev in e if ev.is_active()]),
             "velocity": set().union(*[ev.a["velocity"] for ev in e if ev.is_active()]),
             "tempo": set().union(*[ev.a["tempo"] for ev in e if ev.is_active()]),
@@ -139,7 +139,99 @@ def constrained_generation(e, ec, n_events, tick_range, pitch_range, drums, tag,
         # pad with inactive events
         e += [ec().force_inactive() for _ in range(n_events - len(e))]
         return e
-    
+
+def constrained_half(e, ec, n_events, tick_range, pitch_range, drums, tag, tempo):
+
+    n_active_events = sum([1 for ev in e if ev.is_active()])
+
+    e = [ec().intersect(
+        {
+        "instrument": set().union(*[ev.a["instrument"] for ev in e if ev.is_active()]),
+        "pitch": set().union(*[ev.a["pitch"] for ev in e if ev.is_active()]),
+        # "onset/global_tick": set().union(*[ev.a["onset/global_tick"] for ev in e if ev.is_active()]),
+        "duration": set().union(*[ev.a["duration"] for ev in e if ev.is_active()]),
+        "velocity": set().union(*[ev.a["velocity"] for ev in e if ev.is_active()]),
+        "tempo": set().union(*[ev.a["tempo"] for ev in e if ev.is_active()]),
+        "tag": set().union(*[ev.a["tag"] for ev in e if ev.is_active()])
+    }).force_active()
+    for _ in range(n_active_events//2)]
+
+    unconstrained_events_to_add = n_active_events - len(e)
+
+    e += [ec().force_active() for _ in range(unconstrained_events_to_add)]
+
+    # pad with inactive events
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
+    return e
+
+def constrained_quarter(e, ec, n_events, tick_range, pitch_range, drums, tag, tempo):
+    n_active_events = sum([1 for ev in e if ev.is_active()])
+
+    e = [
+        ec()
+        .intersect(
+            {
+                "instrument": set().union(
+                    *[ev.a["instrument"] for ev in e if ev.is_active()]
+                ),
+                "pitch": set().union(*[ev.a["pitch"] for ev in e if ev.is_active()]),
+                # "onset/global_tick": set().union(*[ev.a["onset/global_tick"] for ev in e if ev.is_active()]),
+                "duration": set().union(
+                    *[ev.a["duration"] for ev in e if ev.is_active()]
+                ),
+                "velocity": set().union(
+                    *[ev.a["velocity"] for ev in e if ev.is_active()]
+                ),
+                "tempo": set().union(*[ev.a["tempo"] for ev in e if ev.is_active()]),
+                "tag": set().union(*[ev.a["tag"] for ev in e if ev.is_active()]),
+            }
+        )
+        .force_active()
+        for _ in range(n_active_events // 4)
+    ]
+
+    unconstrained_events_to_add = n_active_events - len(e)
+
+    e += [ec().force_active() for _ in range(unconstrained_events_to_add)]
+
+    # pad with inactive events
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
+    return e
+
+def constrained_eight(e, ec, n_events, tick_range, pitch_range, drums, tag, tempo):
+    n_active_events = sum([1 for ev in e if ev.is_active()])
+
+    e = [
+        ec()
+        .intersect(
+            {
+                "instrument": set().union(
+                    *[ev.a["instrument"] for ev in e if ev.is_active()]
+                ),
+                "pitch": set().union(*[ev.a["pitch"] for ev in e if ev.is_active()]),
+                # "onset/global_tick": set().union(*[ev.a["onset/global_tick"] for ev in e if ev.is_active()]),
+                "duration": set().union(
+                    *[ev.a["duration"] for ev in e if ev.is_active()]
+                ),
+                "velocity": set().union(
+                    *[ev.a["velocity"] for ev in e if ev.is_active()]
+                ),
+                "tempo": set().union(*[ev.a["tempo"] for ev in e if ev.is_active()]),
+                "tag": set().union(*[ev.a["tag"] for ev in e if ev.is_active()]),
+            }
+        )
+        .force_active()
+        for _ in range(n_active_events // 8)
+    ]
+
+    unconstrained_events_to_add = n_active_events - len(e)
+
+    e += [ec().force_active() for _ in range(unconstrained_events_to_add)]
+
+    # pad with inactive events
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
+    return e
+
 
 def replace_pitches_given_instrument_pitch_set(e, ec, n_events, tick_range, pitch_range, drums, tag, tempo):
     # get all instrument tokens currently present in the events
@@ -183,13 +275,63 @@ def replace_pitches_given_pitch_set(e, ec, n_events, tick_range, pitch_range, dr
     # get union of pitches of all notes
     current_pitches = set()
     for ev in e:
-        if ev.is_active():
+        if ev.is_active() and ev.a["instrument"] != {"Drums"}:
             current_pitches.update(ev.a["pitch"])
 
     # for current active pitches. replace pitch
     for event_idx in range(n_events):
         if e[event_idx].is_active() and e[event_idx].a["instrument"] != {"Drums"}:
             e[event_idx].a["pitch"] = current_pitches
+
+    # constrain to current tempo
+    for event_idx in range(n_events):
+        e[event_idx] = e[event_idx].intersect({"tempo": current_tempos})
+    # constrain to current tag
+    for event_idx in range(n_events):
+        e[event_idx] = e[event_idx].intersect({"tag": current_tags})
+    return e
+
+def replace_pitches_given_pitch_set_tiled_across_octaves(
+    e, ec, n_events, tick_range, pitch_range, drums, tag, tempo
+):
+    # current tempo
+    current_tempos = set()
+    for ev in e:
+        current_tempos.update(ev.a["tempo"])
+
+    # current tags
+    current_tags = set()
+    for ev in e:
+        current_tags.update(ev.a["tag"])
+
+    # get union of pitches of all notes
+    current_pitches = set()
+    for ev in e:
+        if ev.is_active() and ev.a["instrument"] != {"Drums"}:
+            current_pitches.update(ev.a["pitch"])
+
+
+    current_pitches_w_octaves = set()
+    
+    def get_octaves(pitch):
+        # get lowest octave
+        lowest_octave = int(pitch) % 12
+
+        # get all octaves
+        octave_pitches = set()
+        for i in range(lowest_octave, 127, 12):
+            octave_pitches.add(str(i))
+        return octave_pitches
+
+    for pitch in list(current_pitches):
+        octaves = get_octaves(pitch)
+        for octave in octaves:
+            current_pitches_w_octaves.add(str(octave))
+
+    # for current active pitches. replace pitch
+    for event_idx in range(n_events):
+        if e[event_idx].is_active() and e[event_idx].a["instrument"] != {"Drums"}:
+            e[event_idx].a["pitch"] = current_pitches_w_octaves
 
     # constrain to current tempo
     for event_idx in range(n_events):
@@ -271,6 +413,20 @@ def unconditional(e, ec, n_events, tick_range, pitch_range, drums, tag, tempo):
 
 # Define tasks with their parameters
 TASKS = {
+    "replace_pitches_given_pitch_set_tiled_across_octaves": {
+        "sampling_settings": {
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "top_k": 0,
+            "tokens_per_step": 1,
+        },
+        "fn": replace_pitches_given_pitch_set_tiled_across_octaves,
+        "tick_range": None,
+        "pitch_range": None,
+        "drums": None,
+        "tag": None,
+        "tempo": None,
+    },
     # "bass_and_drums": {
     #     "sampling_settings": {
     #         "temperature": 1.0,
@@ -313,76 +469,118 @@ TASKS = {
     #     "tag": None,
     #     "tempo": None,
     # },
-    "replace_pitches_given_pitch_set_2": {
-        "sampling_settings": {
-            "temperature": 1.0,
-            "top_p": 1.0,
-            "top_k": 0,
-            "tokens_per_step": 1,
-        },
-        "fn": replace_pitches_given_pitch_set,
-        "tick_range": None,
-        "pitch_range": None,
-        "drums": None,
-        "tag": None,
-        "tempo": None,
-    },
-    "infill_1_bar_box": {
-        "sampling_settings": {
-            "temperature": 1.0,
-            "top_p": 1.0,
-            "top_k": 0,
-            "tokens_per_step": 1,
-        },
-        "fn": infill_middle,
-        "tick_range": (7*24, 11*24),
-        "pitch_range": (10,125),
-        "drums": False,
-        "tag": None,
-        "tempo": None,
-    },
-    "infill_2_bar_box": {
-        "sampling_settings": {
-            "temperature": 1.0,
-            "top_p": 1.0,
-            "top_k": 0,
-            "tokens_per_step": 1,
-        },
-        "fn": infill_middle,
-        "tick_range": (5*24, 13*24),
-        "pitch_range": (10,125),
-        "drums": False,
-        "tag": None,
-        "tempo": None,
-    },
-    "infill_3_bar_box": {
-        "sampling_settings": {
-            "temperature": 1.0,
-            "top_p": 1.0,
-            "top_k": 0,
-            "tokens_per_step": 1,
-        },
-        "fn": infill_middle,
-        "tick_range": (3*24, 15*24),
-        "pitch_range": (10,125),
-        "drums": False,
-        "tag": None,
-        "tempo": None,
-    },
-    "unconditional": {
-        "sampling_settings": {
-            "temperature": 1.0,
-            "top_p": 1.0,
-            "top_k": 0,
-            "tokens_per_step": 1,
-        },
-        "fn": unconditional,
-        "tick_range": None,
-        "pitch_range": None,
-        "drums": None,
-        "tag": None,
-        "tempo": None,
-    },
+    # "constrained_half": {
+    #     "sampling_settings": {
+    #         "temperature": 1.0,
+    #         "top_p": 1.0,
+    #         "top_k": 0,
+    #         "tokens_per_step": 1,
+    #     },
+    #     "fn": constrained_half,
+    #     "tick_range": None,
+    #     "pitch_range": None,
+    #     "drums": None,
+    #     "tag": None,
+    #     "tempo": None,
+    # },
+    # "constrained_quarter": {
+    #     "sampling_settings": {
+    #         "temperature": 1.0,
+    #         "top_p": 1.0,
+    #         "top_k": 0,
+    #         "tokens_per_step": 1,
+    #     },
+    #     "fn": constrained_quarter,
+    #     "tick_range": None,
+    #     "pitch_range": None,
+    #     "drums": None,
+    #     "tag": None,
+    #     "tempo": None,
+    # },
+    # "constrained_eight": {
+    #     "sampling_settings": {
+    #         "temperature": 1.0,
+    #         "top_p": 1.0,
+    #         "top_k": 0,
+    #         "tokens_per_step": 1,
+    #     },
+    #     "fn": constrained_eight,
+    #     "tick_range": None,
+    #     "pitch_range": None,
+    #     "drums": None,
+    #     "tag": None,
+    #     "tempo": None,
+    # },
+    # "replace_pitches_given_pitch_set_2": {
+    #     "sampling_settings": {
+    #         "temperature": 1.0,
+    #         "top_p": 1.0,
+    #         "top_k": 0,
+    #         "tokens_per_step": 1,
+    #     },
+    #     "fn": replace_pitches_given_pitch_set,
+    #     "tick_range": None,
+    #     "pitch_range": None,
+    #     "drums": None,
+    #     "tag": None,
+    #     "tempo": None,
+    # },
+    # "infill_1_bar_box": {
+    #     "sampling_settings": {
+    #         "temperature": 1.0,
+    #         "top_p": 1.0,
+    #         "top_k": 0,
+    #         "tokens_per_step": 1,
+    #     },
+    #     "fn": infill_middle,
+    #     "tick_range": (7*24, 11*24),
+    #     "pitch_range": (10,125),
+    #     "drums": False,
+    #     "tag": None,
+    #     "tempo": None,
+    # },
+    # "infill_2_bar_box": {
+    #     "sampling_settings": {
+    #         "temperature": 1.0,
+    #         "top_p": 1.0,
+    #         "top_k": 0,
+    #         "tokens_per_step": 1,
+    #     },
+    #     "fn": infill_middle,
+    #     "tick_range": (5*24, 13*24),
+    #     "pitch_range": (10,125),
+    #     "drums": False,
+    #     "tag": None,
+    #     "tempo": None,
+    # },
+    # "infill_3_bar_box": {
+    #     "sampling_settings": {
+    #         "temperature": 1.0,
+    #         "top_p": 1.0,
+    #         "top_k": 0,
+    #         "tokens_per_step": 1,
+    #     },
+    #     "fn": infill_middle,
+    #     "tick_range": (3*24, 15*24),
+    #     "pitch_range": (10,125),
+    #     "drums": False,
+    #     "tag": None,
+    #     "tempo": None,
+    # },
+    # "unconditional": {
+    #     "sampling_settings": {
+    #         "temperature": 1.0,
+    #         "top_p": 1.0,
+    #         "top_k": 0,
+    #         "tokens_per_step": 1,
+    #     },
+    #     "fn": unconditional,
+    #     "tick_range": None,
+    #     "pitch_range": None,
+    #     "drums": None,
+    #     "tag": None,
+    #     "tempo": None,
+    # },
     # "replace_2_instruments": {
     #     "sampling_settings": {
     #         "temperature": 1.0,
@@ -453,6 +651,7 @@ def main():
                       help='GPU device ID to use')
     parser.add_argument('--seed', type=int, default=0,
                       help='Random seed')
+    # parser.add_argument('--topp', type=float, default=1)
     args = parser.parse_args()
 
     # Set random seeds
