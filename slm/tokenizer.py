@@ -303,6 +303,7 @@ class Tokenizer():
         for track in sm.tracks:
             if track.name not in self.config["ignored_track_names"]:
                 for note in track.notes:
+                    # if note starts before max_tick, skip
                     note_encoding = [
                     ]
                     for note_attr in self.note_attribute_order:

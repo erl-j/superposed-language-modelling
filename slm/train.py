@@ -379,7 +379,7 @@ if __name__ == "__main__":
 
     torch.manual_seed(SEED)
 
-    DATASET = "mmd_loops"
+    DATASET = "gmd_loops"
     BATCH_SIZE = 60
 
     N_BARS = 4 if DATASET == "harmonic" else 4
@@ -390,12 +390,12 @@ if __name__ == "__main__":
 
         tokenizer_config = {
             "ticks_per_beat": 24
-            if (DATASET == "mmd_loops" or DATASET == "harmonic")
+            if ("md_loops" in DATASET or DATASET == "harmonic")
             else 48,
             "time_hierarchy": "tick",
             "pitch_range": [0, 128],
             "max_beats": 4 * N_BARS,
-            "max_notes": 75 * N_BARS if DATASET == "mmd_loops" else 20 * N_BARS,
+            "max_notes": 75 * N_BARS if "md_loops" in DATASET else 20 * N_BARS,
             "min_tempo": 40,
             "max_tempo": 300,
             "n_tempo_bins": 32,
@@ -445,7 +445,7 @@ if __name__ == "__main__":
             learning_rate=1e-4 if model_config["hidden_size"] == 512 else 1e-4,
             learning_rate_gamma=0.99,
             lr_steps_per_epoch=2836,
-            masking_scheme="simplest_superposition_full",
+            masking_scheme="simplest_superposition_5050",
             loss = "cross_entropy",
             use_weight_decay=True,
             warmup_steps=1000,
@@ -469,11 +469,11 @@ if __name__ == "__main__":
     )
 
     val_ds = MidiDataset(
-        cache_path=f"./data/{DATASET}/val_midi_records_unique_pr.pt",
-        path_filter_fn=mmd_4bar_filter_fn if DATASET == "mmd_loops" else None,
+        cache_path=f"./data/{DATASET}/val_midi_records.pt",
+        path_filter_fn=mmd_4bar_filter_fn if "md_loops" in DATASET  else None,
         genre_list=tag_list,
         tokenizer=tokenizer,
-        min_notes=4 * N_BARS if DATASET == "mmd_loops" else 4 * N_BARS,
+        min_notes=4 * N_BARS if "md_loops" in DATASET  else 4 * N_BARS,
         max_notes=tokenizer_config["max_notes"],
         use_random_shift=USE_RANDOM_SHIFT,
         sm_filter_fn=sm_filter_fn,
@@ -490,14 +490,14 @@ if __name__ == "__main__":
     print(f"Loaded {len(val_ds)} validation records")
 
     trn_ds = MidiDataset(
-        cache_path=f"./data/{DATASET}/trn_midi_records_unique_pr.pt",
-        path_filter_fn=mmd_4bar_filter_fn if DATASET == "mmd_loops" else None,
+        cache_path=f"./data/{DATASET}/trn_midi_records.pt",
+        path_filter_fn=mmd_4bar_filter_fn if "md_loops" in DATASET else None,
         genre_list=tag_list,
         tokenizer=tokenizer,
         transposition_range=[-6, 6]
-        if DATASET == "mmd_loops" or DATASET == "harmonic"
+        if "md_loops" in DATASET or DATASET == "harmonic"
         else None,
-        min_notes=4 * N_BARS if DATASET == "mmd_loops" else 4 * N_BARS,
+        min_notes=4 * N_BARS if "md_loops" in DATASET else 4 * N_BARS,
         max_notes=tokenizer_config["max_notes"],
         use_random_shift=USE_RANDOM_SHIFT,
         sm_filter_fn=sm_filter_fn,
@@ -524,6 +524,20 @@ if __name__ == "__main__":
     logger = logging.getLogger("wandb")
     logger.setLevel(logging.ERROR)
 
+    # log learning rate
+    wandb_logger.log_hyperparams(
+        {
+            "learning_rate": training_wrapper.learning_rate,
+            "learning_rate_gamma": training_wrapper.learning_rate_gamma,
+        }
+    )
+    # log dataset
+    wandb_logger.log_hyperparams(
+        {
+            "dataset": DATASET,
+        }
+    )
+
     progress_bar_callback = RichProgressBar(refresh_rate=1)
 
     trainer = pl.Trainer(
@@ -546,7 +560,7 @@ if __name__ == "__main__":
                 save_top_k=10,
                 save_last=True,
                 filename="{epoch}-{step}-{val/loss_epoch:.5f}",
-                every_n_epochs=1 if DATASET == "mmd_loops" else 100,
+                every_n_epochs=1 if "md_loops" in DATASET else 100,
             ),
             pl.callbacks.ModelCheckpoint(
                 dirpath=f"./checkpoints/{name}/every25",
@@ -559,7 +573,7 @@ if __name__ == "__main__":
         logger=wandb_logger,
         gradient_clip_val=1.0,
         # accumulate_grad_batches=4,
-        check_val_every_n_epoch=1 if DATASET == "mmd_loops" else 10,
+        check_val_every_n_epoch=1 if "md_loops" in DATASET else 10,
     )
 
     if checkpoint is not None:
