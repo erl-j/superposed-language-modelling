@@ -10,51 +10,67 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
-
+import glob
 # TODO: remove layers from structural analysis
 
-# load csv
+def filter_models(df):
+    # remove models with "100epochs"
+    models_to_keep = [model for model in df.model.unique() if "100epochs" not in model]
+    # filter out "full", and "sparse" models
+    models_to_keep = [model for model in models_to_keep if "full" not in model and "sparse" not in model]
+    return df[df.model.isin(models_to_keep)]
+
+def rename_models(df):
+    # replace "150epochs_random" with ""
+    df["model"] = df["model"].str.replace("_150epochs_random", "")
+    return df
+
+task_rename = {
+    "constrained_eight" : "constrained_1/8",
+    "constrained_quarter" : "constrained_1/4",
+    "constrained_half" : "constrained_1/2",
+    "constrained_generation" : "constrained",
+    "replace_w_instrument_set" : "replace_w_instrument_set",
+    "replace_2_instruments" : "replace_w_instrument_set_2_instruments",
+    "replace_pitches_given_pitch_set_2" : "replace_w_pitch_set",
+    "replace_pitches_given_pitch_set_tiled_across_octaves" : "replace_w_pitch_set_w_octave",
+}
+
+def rename_tasks(df):
+    df["task"] = df["task"].replace(task_rename)
+    return df
+
+def preprocess(df):
+    df = filter_models(df)
+    df = rename_models(df)
+    df = rename_tasks(df)
+    return df
 
 # Load ground truth examples
 base_path = Path("../artefacts/applications_250e")
-
-import glob
-
 csv_paths = glob.glob(str(base_path / "**/*records.csv"), recursive=True)
 
 print(f"Found {len(csv_paths)} records.csv files")
 
 # Join all records in one step
-records = pd.concat([
+df = pd.concat([
     pd.read_csv(path) 
     for path in csv_paths
 ], ignore_index=True)
 
+# preprocess
+df = preprocess(df)
+
 # sort by model
-records = records.sort_values(by=["model", "task"])
-
-
-
-# models_to_keep = ["slm_sparse_150epochs", 
-#                   "slm_full_150epochs", 
-#                   "slm_mixed_150epochs",
-#                 #   "slm_mixed_150epochs_event_order", 
-#                   "mlm_150epochs", 
-#                 #   "mlm_150epochs_event_order", 
-#                   "ground_truth"]
-models_to_keep = records.model.unique()
-tasks_to_keep =records.task.unique() #["infill_middle", "replace_pitches_given_pitch_set", "unconditional", "ground_truth", "constrained_generation"]
-
-records = records[records.model.isin(models_to_keep)]
-records = records[records.task.isin(tasks_to_keep)]
+df = df.sort_values(by=["model", "task"])
 
 # plot mean log likelhood for each model and task
-models = records.model.unique()
-tasks = records.task.unique()
+models = df.model.unique()
+tasks = df.task.unique()
 
 for task in tasks:
     for model in models:
-        mean_ll = records[(records.model == model) & (records.task == task)].log_probs.mean()
+        mean_ll = df[(df.model == model) & (df.task == task)].log_probs.mean()
         print(f"Task: {task}, Model: {model}, Mean Log Likelihood: {mean_ll}")
 
 for task in tasks:
@@ -62,7 +78,7 @@ for task in tasks:
     fig.suptitle(f"Log Likelihood Distribution for Task: {task}", size=16, y=1.02)
     
     # First calculate the global min and max for this task to set consistent bins
-    task_data = records[records.task == task]
+    task_data = df[df.task == task]
     min_ll = task_data.log_probs.min()
     max_ll = task_data.log_probs.max()
     bins = np.linspace(min_ll, max_ll, 21)  # 20 bins, 21 edges
@@ -81,17 +97,7 @@ fmd_results = pd.read_json(base_path / "fmd_results.json")
 
 # load into pandas dataframe
 df = pd.DataFrame(fmd_results)
-
-# keep only models
-
-# df = df[df.model.isin(models_to_keep)]
-df = df[df.task.isin(tasks_to_keep)]
-# rename tasks
-df["task"] = df["task"].str.replace("infill_middle", "replace_notes_within_box")
-# crop model strings to before "_"
-# df["model"] = df["model"].str.split("_").str[0]
-# pinrt models
-print(df.model.unique())
+df = preprocess(df)
 
 # sort by model and task
 df = df.sort_values(by=["model", "task"])
@@ -103,6 +109,50 @@ print(pivot_df.to_string())
 
 # Alternatively, for a prettier format:
 display(pivot_df.style.format("{:.3f}"))
+
+
+model_colors = {
+    'mlm': '#2ecc71',        # Green
+    'slm_mixed': '#3498db',   # Blue
+    'slm_sparse': '#f1c40f',  # Yellow
+    'slm_full': '#e74c3c',    # Red
+}
+
+# Create a single plot
+plt.figure(figsize=(12, 6))
+
+# Calculate mean scores for each model and task
+mean_scores = []
+for model in model_colors.keys():
+    task_scores = []
+    for task in tasks:
+        score = df[(df.model == model) & (df.task == task)].score.mean()
+        task_scores.append(score)
+    mean_scores.append((model, task_scores))
+
+# Plot lines for each model
+for model, scores in mean_scores:
+    plt.plot(tasks, scores, 
+             marker='o',  # Add markers at each point
+             linewidth=2, 
+             label=model.replace('_150epochs_random', ''),
+             color=model_colors[model])
+
+# Customize appearance
+plt.grid(True, linestyle='--', alpha=0.3)
+plt.ylabel('FMD Score', fontsize=12)
+plt.title('FMD across Tasks', fontsize=14, pad=20)
+
+# Rotate x-axis labels for better readability
+plt.xticks(rotation=45, ha='right')
+
+# Add legend
+plt.legend(bbox_to_anchor=(1.02, 0.5), loc='center left')
+
+# Adjust layout
+plt.tight_layout()
+
+plt.show()
 
 #%%
 
@@ -153,59 +203,36 @@ records.extend(
     ]
 )
 
-# Calculate pitch in scale rate using list comprehension
-records = [
-    {
-        **record,
-        "metric/scale_consitency": muspy.metrics.scale_consistency(
-            muspy.read_midi(record["path"])
+# Convert records to DataFrame for easier plotting
+df = pd.DataFrame(records)
+df = preprocess(df)
+
+for metric_name in [
+    "scale_consistency",
+    "polyphony_rate", 
+    "pitch_class_entropy",
+    "polyphony",
+    "n_pitches_used",
+    "n_pitch_classes_used",
+    "pitch_entropy"
+]:
+    df[f"metric/{metric_name}"] = df.apply(
+        lambda row: getattr(muspy.metrics, metric_name)(
+            muspy.read_midi(row["path"])
         ),
-        "metric/n_instruments" : len(record["midi"].tracks),
-        "metric/polyphony_rate" : muspy.metrics.polyphony_rate(
-            muspy.read_midi(record["path"])
-        ),
-        "metric/pitch_class_entropy" : muspy.metrics.pitch_class_entropy(
-            muspy.read_midi(record["path"])
-        ),
-        "metric/polyphony": muspy.metrics.polyphony(
-            muspy.read_midi(record["path"])
-        ),
-        "metric/n_pitches_used": muspy.metrics.n_pitches_used(
-            muspy.read_midi(record["path"])
-        ),
-        "metric/n_pitch_classes_used": muspy.metrics.n_pitch_classes_used(
-            muspy.read_midi(record["path"])
-        ),
-        "metric/pitch_entropy": muspy.metrics.pitch_entropy(
-            muspy.read_midi(record["path"])
-        )}
-    for record in records
-]
+        axis=1
+    )
+
+# Add number of instruments separately since it uses a different access pattern
+df["metric/n_instruments"] = df.apply(
+    lambda row: len(row["midi"].tracks),
+    axis=1
+)
 
 print(f"Processed {len(records)} records")
 
 
-
 #%%
-
-
-# Convert records to DataFrame for easier plotting
-df = pd.DataFrame(records)
-
-
-# sort by task and model 
-df = df.sort_values(by=["model", "task", "sample_index"])
-
-# remove "mlm_100epochs"
-models_to_keep = [model for model in models if "mlm_100epochs" not in model]
-# filter models and tasks
-df = df[df.model.isin(models_to_keep)]
-df = df[df.task.isin(tasks_to_keep)]
-
-# rename tasks
-df["task"] = df["task"].str.replace("infill_middle", "replace_notes_within_box")
-# crop model strings to before "_"
-df["model"] = df["model"].str.split("_").str[0]
 
 models = df.model.unique()
 tasks = df.task.unique()

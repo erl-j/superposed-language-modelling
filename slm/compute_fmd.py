@@ -15,7 +15,7 @@ def find_midi_dirs(base_path):
            midi_dirs.append(root)
    return midi_dirs
 
-base_path = "artefacts/applications_250e"
+base_path = "artefacts/applications_250e_4x"
 ground_truth_path = f"{base_path}/ground_truth"
 test_dirs = find_midi_dirs(base_path)
 

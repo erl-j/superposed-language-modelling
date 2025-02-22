@@ -95,15 +95,15 @@ ec = lambda: MusicalEventConstraint(model.tokenizer)
 
 #%%
 
-def bass_and_drums(e, ec, n_events):
+def neighbor_constraints(e, ec, n_events):
     e = []
     # force 1 bass note
     e += [ec()
-          #.intersect({"instrument": {"Piano"}})
-          .intersect({"instrument": {"Strings", "Ensemble", "Pipe", "Brass"}})
-        #   .intersect(ec().pitch_in_scale_constraint("C major", (90,103)))
+        #   .intersect({"pitch": {"60", "67"}})
+          .intersect({"instrument": {"Bass"}})
+        #   .intersect(ec().pitch_in_scale_constraint("C major", (60, 73)))
         #   .intersect({"tag":{"classical"}})
-          .force_active() for _ in range(150)]
+          .force_active() for _ in range(25)]
     # e += [ec().force_active() for _ in range(3)]
 
     # add 100 inactive events
@@ -115,7 +115,7 @@ def bass_and_drums(e, ec, n_events):
     # set last 10 events to be inactive
     return e
 
-e = bass_and_drums([], ec, N_EVENTS)
+e = neighbor_constraints([], ec, N_EVENTS)
 mask = model.tokenizer.event_constraints_to_mask(e).to(DEVICE)
 
 print(mask.shape)
@@ -142,8 +142,10 @@ for attribute in ["pitch", "instrument", "tag"]:
     attr_probs = last_event_probs[attribute_index, attribute_token_indices].cpu().detach().numpy()
     # plot bar plot with token names
 
-    # make figure wide
-    plt.figure(figsize=(10,5))
+    # make figure wide globally with rc params
+    plt.rcParams['figure.figsize'] = [32, 8]
+    
+
     plt.figure()
     plt.bar(attribute_vocab, attr_probs)
     plt.title(attribute)
