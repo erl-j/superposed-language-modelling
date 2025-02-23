@@ -14,12 +14,10 @@ import torch
 # print(template_ds[0][0])
 
 #%%
-TPQ = 24
+TPQ = 96
+LIMIT = 1_000_000_000
 
 ds_path = "./data/gmd_loops/"
-
-LIMIT = 500
-
 
 def preprocess_sample(sample):
     # remove the midi file from the sample
@@ -62,6 +60,21 @@ split_shorthands = {
     "test": "tst"
 }
 
+def crop_sm(sm, n_bars, beats_per_bar):
+    sm = sm.copy()
+    end_tick = n_bars * sm.ticks_per_quarter * beats_per_bar
+    for track_idx in range(len(sm.tracks)):
+        track = sm.tracks[track_idx]
+        new_notes = []
+        for note in track.notes:
+            if note.start < end_tick:
+                # crop duration
+                if note.start + note.duration > end_tick:
+                    note.duration = end_tick - note.start
+                new_notes.append(note)
+        sm.tracks[track_idx].notes = new_notes
+    return sm
+
 
 def get_loop_records(record):
     loop_records = []
@@ -79,9 +92,10 @@ def get_loop_records(record):
 
         loop_time = loop["end_tick"] - loop["start_tick"]
         # remove notes that start after the loop ends
-
-
+                   
         loop_bars = (loop["end_tick"] - loop["start_tick"]) // (TPQ * 4)
+
+        loop_sm = crop_sm(loop_sm, loop_bars, 4)
 
         loop_records.append(
             {
@@ -97,14 +111,14 @@ def get_loop_records(record):
 for split in ["test","validation","train"]:
     dataset = load_dataset("Metacreation/GigaMIDI", split=split)
     records = []
-    sample = 0
+    sample_idx = 0
     for sample in tqdm(dataset):
         try:
-            sample += 1
+            sample_idx += 1
             records.append(preprocess_sample(sample))
         except Exception as e:
-            continue
-        if sample >= LIMIT:
+            print(e)
+        if sample_idx >= LIMIT:
             break
     print(f"Number of records: {len(records)}")
 

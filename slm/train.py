@@ -58,6 +58,7 @@ class TrainingWrapper(pl.LightningModule):
         if self.use_mlm:
             assert (
                 self.masking_scheme == "mlm"
+                or self.masking_scheme == "simplest_superposition_full"
             )
         else:
             assert (
@@ -380,7 +381,6 @@ if __name__ == "__main__":
     torch.manual_seed(SEED)
 
     DATASET = "gmd_loops"
-    BATCH_SIZE = 60
 
     N_BARS = 4 if DATASET == "harmonic" else 4
 
@@ -389,9 +389,7 @@ if __name__ == "__main__":
         tag_list = open(f"./data/{DATASET}/tags.txt").read().splitlines()
 
         tokenizer_config = {
-            "ticks_per_beat": 24
-            if ("md_loops" in DATASET or DATASET == "harmonic")
-            else 48,
+            "ticks_per_beat": 96 if "md_loops" in DATASET or DATASET == "harmonic" else 48,
             "time_hierarchy": "tick",
             "pitch_range": [0, 128],
             "max_beats": 4 * N_BARS,
@@ -423,6 +421,9 @@ if __name__ == "__main__":
             ],
             "fold_event_attributes": False,
         }
+
+        BATCH_SIZE = 60 if tokenizer_config["ticks_per_beat"] == 24 else 30
+
 
         USE_RANDOM_SHIFT = False
         tokenizer = Tokenizer(tokenizer_config)
@@ -468,6 +469,8 @@ if __name__ == "__main__":
         for track in sm.tracks
     )
 
+    gmd_loops_filter_fn = lambda sm: len(sm.tempos) > 0
+
     val_ds = MidiDataset(
         cache_path=f"./data/{DATASET}/val_midi_records.pt",
         path_filter_fn=mmd_4bar_filter_fn if "md_loops" in DATASET  else None,
@@ -476,7 +479,7 @@ if __name__ == "__main__":
         min_notes=4 * N_BARS if "md_loops" in DATASET  else 4 * N_BARS,
         max_notes=tokenizer_config["max_notes"],
         use_random_shift=USE_RANDOM_SHIFT,
-        sm_filter_fn=sm_filter_fn,
+        sm_filter_fn=sm_filter_fn if "mmd_loops" in DATASET else gmd_loops_filter_fn,
     )
 
     val_dl = torch.utils.data.DataLoader(
@@ -500,7 +503,7 @@ if __name__ == "__main__":
         min_notes=4 * N_BARS if "md_loops" in DATASET else 4 * N_BARS,
         max_notes=tokenizer_config["max_notes"],
         use_random_shift=USE_RANDOM_SHIFT,
-        sm_filter_fn=sm_filter_fn,
+        sm_filter_fn=sm_filter_fn if "mmd_loops" in DATASET else gmd_loops_filter_fn,
     )
     # print len of dataset
     print(f"Loaded {len(trn_ds)} training records")
