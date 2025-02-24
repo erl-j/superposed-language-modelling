@@ -32,6 +32,10 @@ class Tokenizer():
         if "fold_event_attributes" not in self.config:
             self.config["fold_event_attributes"] = True
 
+        if "midi_types" not in self.config:
+            self.config["midi_types"] = []
+
+
         # exponential tempo bins
         self.tempo_bins = np.linspace(np.log(self.config["min_tempo"]), np.log(self.config["max_tempo"]), self.config["n_tempo_bins"])
         self.tempo_bins = np.exp(self.tempo_bins)
@@ -53,6 +57,12 @@ class Tokenizer():
         meta_attribute_order = []
 
         self.vocab = []
+
+        if len(self.config["midi_types"]) > 0:
+            meta_attribute_order.append("midi_type")
+            self.vocab.append("midi_type:-")
+            for midi_type in self.config["midi_types"]:
+                self.vocab.append("midi_type:" + midi_type)
 
         meta_attribute_order.append("tag")
         self.vocab.append("tag:-")
@@ -235,8 +245,8 @@ class Tokenizer():
             mask = einops.rearrange(mask, "b n a v -> b (n a) v")
         return mask
             
-    def encode(self, sm, tag):
-        tokens = self.sm_to_tokens(sm, tag)
+    def encode(self, sm, tag, midi_type=None):
+        tokens = self.sm_to_tokens(sm, tag, midi_type)
         if self.config["fold_event_attributes"]:
             # output of size (n_notes * n_attributes)
             return self.tokens_to_indices(tokens)
@@ -289,7 +299,10 @@ class Tokenizer():
     def get_instruments(self):
         return self.instrument_class_names
      
-    def sm_to_tokens(self, sm, tag):
+    def sm_to_tokens(self, sm, tag, midi_type=None):
+
+        if midi_type is not None:
+            assert midi_type in self.config["midi_types"]
 
         sm = sm.resample(tpq=self.config["ticks_per_beat"],min_dur=1)
 
@@ -371,6 +384,8 @@ class Tokenizer():
                             note_encoding.append("tempo:" + str(self.tempo_to_tempo_bin(tempo)))
                         if note_attr == "tag":
                             note_encoding.append("tag:" + tag)
+                        if note_attr == "midi_type":
+                            note_encoding.append("midi_type:" + midi_type)
                     note_encodings.append(note_encoding)
 
         # if more notes than max_notes, remove notes
@@ -635,6 +650,9 @@ class Tokenizer():
                 elif note_attr == "tag":
                     assert note[i].split(":")[0] == "tag"
                     tag = note[i].split(":")[1]
+                elif note_attr == "midi_type":
+                    assert note[i].split(":")[0] == "midi_type"
+                    midi_type = note[i].split(":")[1]
 
             if self.config["time_hierarchy"] == "beat_tick":
                 onset_tick = onset_beat * self.config["ticks_per_beat"] + onset_tick
@@ -657,7 +675,8 @@ class Tokenizer():
                 "velocity": velocity,
                 "program": program,
                 "tempo": tempo,
-                "tag": tag
+                "tag": tag,
+                "midi_type": midi_type
             })
         if len(note_recs) > 0:
             tempo = note_recs[0]["tempo"]

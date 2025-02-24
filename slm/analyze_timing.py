@@ -5,7 +5,7 @@ import torch
 import tempfile
 import muspy
 from tqdm import tqdm
-ckpt = "../data/mmd_loops/val_midi_records_unique_pr.pt"
+ckpt = "../data/gmd_loops/trn_midi_records.pt"
 
 records = torch.load(ckpt)
 
@@ -309,7 +309,7 @@ onsets = []
 offsets = []
 durations = []
 
-tpq = 12
+tpq = 96
 
 for record in tqdm(records):
     for r in record:

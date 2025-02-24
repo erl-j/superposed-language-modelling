@@ -6,6 +6,7 @@ import itertools
 from tqdm import tqdm
 import random
 from augmentation import transpose_sm
+from util import crop_sm
 
 
 def get_num_notes(sm):
@@ -44,10 +45,85 @@ def random_shift(sm, max_tick, tpq):
     return sm
 
 
+class RandomCropMidiDataset(torch.utils.data.Dataset):
+    def __init__(
+        self,
+        cache_path,
+        max_bars,
+        n_bars,
+        simulated_dataset_size,
+        genre_list,
+        path_filter_fn=None,
+        tokenizer=None,
+        transposition_range=None,
+        min_notes=1,
+        max_notes=1e6,
+        group_by_source=False,
+        sm_filter_fn=None,
+    ):
+        self.n_bars = n_bars
+        self.tokenizer = tokenizer
+        self.records = torch.load(cache_path)
+
+        self.simulated_dataset_size = simulated_dataset_size
+
+        self.max_bars = max_bars
+        self.transposition_range = transposition_range
+
+        # filter with sm filter
+        if sm_filter_fn is not None:
+            self.records = [
+                x for x in self.records if sm_filter_fn(x["midi"])
+            ]
+        # filter out records with mpre than max_midi_bars
+        self.records = [
+            x for x in self.records
+            if x["midi"].end() <= self.max_bars * 4 * x["midi"].tpq
+        ]
+
+
+    def __len__(self):
+        return self.simulated_dataset_size
+
+    def __getitem__(self, idx):
+        # get random dataset
+        record = random.choice(self.records)
+        midi = record["midi"]
+        # get n ticks
+        midi = record["midi"].copy()
+        # downsample
+        midi = midi.resample(self.tokenizer.config["ticks_per_beat"], min_dur=0)
+        # get number of ticks
+        total_ticks = midi.end()
+        # get random start tick in range 0 to total_ticks - n_bars * 4
+        start_tick = random.randint(0, total_ticks - self.n_bars * 4)
+        tempos = midi.tempos
+        # crop
+        midi = midi.clip(start=start_tick, end=start_tick + self.n_bars * 4, clip_end=True).shift_time(-start_tick)
+        midi = crop_sm(midi, self.n_bars, 4)
+        # set tempos
+        midi.tempos = tempos
+        if self.transposition_range is not None:
+            transposition = random.randint(*self.transposition_range)
+            midi = transpose_sm(midi, transposition)
+        return {
+            "token_ids": torch.tensor(
+                self.tokenizer.encode(
+                    midi,
+                    random.choice(
+                        record["genre"] if len(record["genre"]) > 0 else ["other"]
+                    ),
+                    midi_type = "random_crop"
+                )
+            ),
+            "n_loops_in_parent_song": -1,
+        }
+
 class MidiDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         cache_path,
+        n_bars,
         genre_list,
         path_filter_fn=None,
         tokenizer=None,
@@ -57,7 +133,9 @@ class MidiDataset(torch.utils.data.Dataset):
         group_by_source=False,
         sm_filter_fn=None,
         use_random_shift=False,
+        use_midi_type=False
     ):
+        self.n_bars = n_bars
         self.tokenizer = tokenizer
         self.records = torch.load(cache_path)
         for i in range(len(self.records)):
@@ -83,6 +161,7 @@ class MidiDataset(torch.utils.data.Dataset):
         self.transposition_range = transposition_range
         self.group_by_source = group_by_source
         self.use_random_shift = use_random_shift
+        self.use_midi_type = use_midi_type
         if not self.group_by_source:
             midi_hash = {}
             new_records = []
@@ -118,6 +197,11 @@ class MidiDataset(torch.utils.data.Dataset):
                 * self.tokenizer.config["max_beats"],
                 tpq=self.tokenizer.config["ticks_per_beat"],
             )
+        midi = crop_sm(
+            midi,
+            self.n_bars,
+            4,
+        )
 
         return {
             "token_ids": torch.tensor(
@@ -126,6 +210,7 @@ class MidiDataset(torch.utils.data.Dataset):
                     random.choice(
                         record["genre"] if len(record["genre"]) > 0 else ["other"]
                     ),
+                    midi_type = "loop" if self.use_midi_type else None
                 )
             ),
             "n_loops_in_parent_song": torch.tensor([record["n_loops_in_parent_song"]]),

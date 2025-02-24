@@ -2,7 +2,7 @@ import logging
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
-from data import MidiDataset
+from data import MidiDataset, RandomCropMidiDataset
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, RichProgressBar
 from pytorch_lightning.loggers import WandbLogger
 from tokenizer import Tokenizer
@@ -361,6 +361,8 @@ class TrainingWrapper(pl.LightningModule):
         print("Successfully converted MLM to SLM architecture")
 
 import argparse
+
+
 if __name__ == "__main__":
 
     # optionally take in the name of a checkpoint and devices to use
@@ -382,6 +384,8 @@ if __name__ == "__main__":
 
     DATASET = "gmd_loops"
 
+    USE_RANDOM_CROPS = True
+
     N_BARS = 4 if DATASET == "harmonic" else 4
 
     if checkpoint is None:
@@ -389,7 +393,7 @@ if __name__ == "__main__":
         tag_list = open(f"./data/{DATASET}/tags.txt").read().splitlines()
 
         tokenizer_config = {
-            "ticks_per_beat": 24 if "md_loops" in DATASET or DATASET == "harmonic" else 48,
+            "ticks_per_beat": 96 if "md_loops" in DATASET or DATASET == "harmonic" else 48,
             "time_hierarchy": "tick",
             "pitch_range": [0, 128],
             "max_beats": 4 * N_BARS,
@@ -420,6 +424,7 @@ if __name__ == "__main__":
                 Fraction(4, 1),
             ],
             "fold_event_attributes": False,
+            "midi_types": ["loop", "random_crop"] if USE_RANDOM_CROPS else [],
         }
 
         BATCH_SIZE = 60 if tokenizer_config["ticks_per_beat"] == 24 else 30
@@ -429,9 +434,9 @@ if __name__ == "__main__":
         tokenizer = Tokenizer(tokenizer_config)
 
         model_config = {
-            "hidden_size": 768,
-            "n_heads": 12,
-            "feed_forward_size": 4 * 768,
+            "hidden_size":768,
+            "n_heads":  12,
+            "feed_forward_size": 4*768,
             "n_layers": 12,
             "tokenizer_config": tokenizer_config,
             "norm_first": False,
@@ -472,7 +477,8 @@ if __name__ == "__main__":
     gmd_loops_filter_fn = lambda sm: len(sm.tempos) > 0
 
     val_ds = MidiDataset(
-        cache_path=f"./data/{DATASET}/val_midi_records.pt",
+        n_bars = N_BARS,
+        cache_path=f"./data/{DATASET}/val_midi_records.pt" if not USE_RANDOM_CROPS else f"./data/{DATASET}/val_midi_records_loops.pt",
         path_filter_fn=mmd_4bar_filter_fn if "md_loops" in DATASET  else None,
         genre_list=tag_list,
         tokenizer=tokenizer,
@@ -480,6 +486,7 @@ if __name__ == "__main__":
         max_notes=tokenizer_config["max_notes"],
         use_random_shift=USE_RANDOM_SHIFT,
         sm_filter_fn=sm_filter_fn if "mmd_loops" in DATASET else gmd_loops_filter_fn,
+        use_midi_type=True if USE_RANDOM_CROPS else False,
     )
 
     val_dl = torch.utils.data.DataLoader(
@@ -493,7 +500,8 @@ if __name__ == "__main__":
     print(f"Loaded {len(val_ds)} validation records")
 
     trn_ds = MidiDataset(
-        cache_path=f"./data/{DATASET}/trn_midi_records.pt",
+        n_bars = N_BARS,
+        cache_path=f"./data/{DATASET}/trn_midi_records.pt" if not USE_RANDOM_CROPS else f"./data/{DATASET}/trn_midi_records_loops.pt",
         path_filter_fn=mmd_4bar_filter_fn if "md_loops" in DATASET else None,
         genre_list=tag_list,
         tokenizer=tokenizer,
@@ -504,7 +512,26 @@ if __name__ == "__main__":
         max_notes=tokenizer_config["max_notes"],
         use_random_shift=USE_RANDOM_SHIFT,
         sm_filter_fn=sm_filter_fn if "mmd_loops" in DATASET else gmd_loops_filter_fn,
+        use_midi_type=True if USE_RANDOM_CROPS else False,
     )
+
+    if USE_RANDOM_CROPS:
+        trn_random_crop_ds = RandomCropMidiDataset(
+        n_bars=N_BARS,
+        cache_path=f"./data/{DATASET}/trn_midi_records_full.pt",
+        max_bars=1000,
+        simulated_dataset_size=len(trn_ds),
+        genre_list=tag_list,
+        path_filter_fn=None,
+        tokenizer=tokenizer,
+        transposition_range=None,
+        min_notes= 4 * N_BARS,
+        max_notes=tokenizer_config["max_notes"],
+        group_by_source=False,
+        sm_filter_fn=sm_filter_fn if "mmd_loops" in DATASET else gmd_loops_filter_fn
+        )
+        trn_ds = torch.utils.data.ConcatDataset([trn_ds, trn_random_crop_ds])
+
     # print len of dataset
     print(f"Loaded {len(trn_ds)} training records")
 

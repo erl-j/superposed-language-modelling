@@ -7,9 +7,12 @@ import pandas as pd
 import torch
 from util import loop_sm, crop_sm
 
+# TODO: CHECK CONSISTENCY BETWEEN TRACKS AND INSTRUMENT CATEGORY BETTER
+# TODO: MAKE SURE THAT ALL LOOPS HAVE TEMPOS. CLIP, SHIFT AND CROP might be messing with tempos
+
 #%%
-TPQ = 96
 LIMIT = 1_000_000_000
+TARGET_TPQ = 96
 
 ds_path = "./data/gmd_loops/"
 
@@ -17,9 +20,9 @@ ds_path = "./data/gmd_loops/"
 genre_set = open(f"{ds_path}/tags.txt").read().splitlines()
 
 split_shorthands = {
-    "train": "trn",
     "validation": "val",
-    "test": "tst"
+    "test": "tst",
+    "train": "trn"
 }
 
 for split in split_shorthands.keys():
@@ -65,7 +68,7 @@ for split in split_shorthands.keys():
 
     #%%
     # convert to tpq
-    TARGET_TPQ = 96
+    print(f"Resample to {TARGET_TPQ} TPQ")
     records = [{**record, "midi": record["midi"].resample(TARGET_TPQ, min_dur=0)} for record in tqdm(records)]
     #%%
 
@@ -102,11 +105,21 @@ for split in split_shorthands.keys():
             score.tracks[track_idx].program = 0
         return score
 
+    def has_drums(score):
+        for track in score.tracks:
+            if track.is_drum:
+                return True
+        return False
+
     # if instrument_category is "drums-only", set all tracks to drums
     print("Set drum only tracks to really only have drums")
     records = [
         {**record, "midi": set_to_drums(record["midi"])} if record["instrument_category"] == "drums-only" else record
         for record in records ]
+
+    # filter out pieces that are "no-drums" but have drums
+    print("Filter out pieces that are 'no-drums' but have drums")
+    records = [record for record in records if not (record["instrument_category"] == "no-drums" and has_drums(record["midi"]))]
 
     #%%
     # make histogram of number of bars
@@ -131,7 +144,28 @@ for split in split_shorthands.keys():
     records = [record for record in records if not is_expressive_solo_piano(record)]
     print(f"Pieces remaining: {len(records)}")
         
-        
+    # save records
+    full_records = []
+    for record in records:
+        genres = record["genres_scraped"] if record["genres_scraped"] is not None else []
+        # keep only genres in genre_list
+        genres = [genre for genre in genres if genre in genre_set]
+        # make sure genres are unique
+        genres = list(set(genres))
+        full_records.append(
+            {
+                **record,
+                "music": "",
+                "midi": record["midi"],
+                "path": record["md5"],
+                "md5": record["md5"],
+                "genre": genres
+            }
+        )
+
+    # save
+    torch.save(full_records, f"{ds_path}/{split_shorthands[split]}_midi_records_full.pt")
+
     #%%
 
     def extract_loops(sample, target_bars):
@@ -144,7 +178,7 @@ for split in split_shorthands.keys():
         # print tpq
         # print(f"TPQ: {sample['midi'].tpq}")
 
-        genres = record["genres_scraped"] if record["genres_scraped"] is not None else []
+        genres = sample["genres_scraped"] if sample["genres_scraped"] is not None else []
         # keep only genres in genre_list
         genres = [genre for genre in genres if genre in genre_set]
         # make sure genres are unique
@@ -201,23 +235,23 @@ for split in split_shorthands.keys():
         return loop_records
 
     import random
-    random_idx = random.randint(0, len(records))
-    record = records[random_idx]
+    # random_idx = random.randint(0, len(records))
+    # record = records[random_idx]
 
-    # preview sm
-    preview_sm(record["midi"])
-    # print record keys and items for thigs where items are strings
-    for key, item in record.items():
-        if isinstance(item, str):
-            print(f"{key}: {item}")
-    # test to extract loops from first record
-    loops = extract_loops(record, 4)
-    print(f"Number of loops: {len(loops)}")
+    # # preview sm
+    # preview_sm(record["midi"])
+    # # print record keys and items for thigs where items are strings
+    # for key, item in record.items():
+    #     if isinstance(item, str):
+    #         print(f"{key}: {item}")
+    # # test to extract loops from first record
+    # loops = extract_loops(record, 4)
+    # print(f"Number of loops: {len(loops)}")
 
-    # preview the loops
-    for loop in loops:
-        looped = loop_sm(loop["midi"], 4, 2)
-        preview_sm(looped)
+    # # preview the loops
+    # for loop in loops:
+    #     looped = loop_sm(loop["midi"], 4, 2)
+    #     preview_sm(looped)
 
     #%%
 
@@ -239,4 +273,4 @@ for split in split_shorthands.keys():
     print(pd.Series(instrument_categories).value_counts())
 
     # save 
-    torch.save(loop_records, f"{ds_path}/{split_shorthands[split]}_midi_records.pt")
+    torch.save(loop_records, f"{ds_path}/{split_shorthands[split]}_midi_records_loops.pt")
