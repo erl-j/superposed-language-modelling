@@ -99,10 +99,13 @@ ec = lambda: MusicalEventConstraint(model.tokenizer)
 
 # just drums
 def drums(e, ec, n_events):
-    e = [ec().intersect({"instrument": {"Drums"}}).force_active() for i in range(30)]
+    # add 20 bass notes
+    e=[]
+    e += [ec().intersect({"instrument": {"Bass"}}).force_active() for _ in range(20)]
+    e += [ec().intersect({"instrument": {"Drums"}}).force_active() for i in range(80)]
     e += [ec().force_inactive() for _ in range(n_events - len(e))]
     # set tag to metal
-    # e = [ev.intersect({"tag": {"pop", "-"}}) for ev in e]
+    e = [ev.intersect({"tag": {"rock", "-"}}) for ev in e]
     # set tempo to 120
     e = [ev.intersect(ec().tempo_constraint
                       (120)) for ev in e]
