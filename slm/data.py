@@ -116,7 +116,7 @@ class RandomCropMidiDataset(torch.utils.data.Dataset):
                     midi_type = "random_crop"
                 )
             ),
-            "n_loops_in_parent_song": -1,
+            "n_loops_in_parent_song": torch.tensor([-1]),
         }
 
 class MidiDataset(torch.utils.data.Dataset):

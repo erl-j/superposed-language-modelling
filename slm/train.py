@@ -393,7 +393,7 @@ if __name__ == "__main__":
         tag_list = open(f"./data/{DATASET}/tags.txt").read().splitlines()
 
         tokenizer_config = {
-            "ticks_per_beat": 96 if "md_loops" in DATASET or DATASET == "harmonic" else 48,
+            "ticks_per_beat": 24 if "md_loops" in DATASET or DATASET == "harmonic" else 48,
             "time_hierarchy": "tick",
             "pitch_range": [0, 128],
             "max_beats": 4 * N_BARS,
@@ -427,7 +427,6 @@ if __name__ == "__main__":
             "midi_types": ["loop", "random_crop"] if USE_RANDOM_CROPS else [],
         }
 
-        BATCH_SIZE = 60 if tokenizer_config["ticks_per_beat"] == 24 else 30
 
 
         USE_RANDOM_SHIFT = False
@@ -461,9 +460,12 @@ if __name__ == "__main__":
     else:
         training_wrapper = TrainingWrapper.load_from_checkpoint(checkpoint)
         tokenizer_config = training_wrapper.model.tokenizer.config
+
         tokenizer = Tokenizer(tokenizer_config)
         tag_list = tokenizer_config["tags"]
         USE_RANDOM_SHIFT = False
+
+    BATCH_SIZE = 60 if tokenizer_config["ticks_per_beat"] == 24 else 30
 
     mmd_4bar_filter_fn = lambda x: f"n_bars={N_BARS}" in x
 

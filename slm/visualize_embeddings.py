@@ -37,7 +37,9 @@ from paper_checkpoints import CHECKPOINTS
 
 model = TrainingWrapper.load_from_checkpoint(
     # CHECKPOINTS["mlm_not_norm_first"],
-    CHECKPOINTS["slm_full_150epochs"],
+    # CHECKPOINTS["slm_full_150epochs"],
+    "../checkpoints/sage-snowball-747/last.ckpt",
+    # "../checkpoints/lucky-wildflower-748/last.ckpt",
     # CHECKPOINTS["mlm_w_mixed_superposition"],
     map_location="cpu",
 )
