@@ -382,9 +382,9 @@ if __name__ == "__main__":
 
     torch.manual_seed(SEED)
 
-    DATASET = "gmd_loops"
+    DATASET = "gmd_loops_2"
 
-    USE_RANDOM_CROPS = True
+    USE_RANDOM_CROPS = False
 
     N_BARS = 4 if DATASET == "harmonic" else 4
 
@@ -393,7 +393,7 @@ if __name__ == "__main__":
         tag_list = open(f"./data/{DATASET}/tags.txt").read().splitlines()
 
         tokenizer_config = {
-            "ticks_per_beat": 24 if "md_loops" in DATASET or DATASET == "harmonic" else 48,
+            "ticks_per_beat": 96 if "md_loops" in DATASET or DATASET == "harmonic" else 48,
             "time_hierarchy": "tick",
             "pitch_range": [0, 128],
             "max_beats": 4 * N_BARS,
@@ -480,7 +480,7 @@ if __name__ == "__main__":
 
     val_ds = MidiDataset(
         n_bars = N_BARS,
-        cache_path=f"./data/{DATASET}/val_midi_records.pt" if not USE_RANDOM_CROPS else f"./data/{DATASET}/val_midi_records_loops.pt",
+        cache_path=f"./data/{DATASET}/val_midi_records_loops.pt" if not USE_RANDOM_CROPS else f"./data/{DATASET}/val_midi_records_loops.pt",
         path_filter_fn=mmd_4bar_filter_fn if "md_loops" in DATASET  else None,
         genre_list=tag_list,
         tokenizer=tokenizer,
@@ -503,7 +503,7 @@ if __name__ == "__main__":
 
     trn_ds = MidiDataset(
         n_bars = N_BARS,
-        cache_path=f"./data/{DATASET}/trn_midi_records.pt" if not USE_RANDOM_CROPS else f"./data/{DATASET}/trn_midi_records_loops.pt",
+        cache_path=f"./data/{DATASET}/trn_midi_records_loops.pt" if not USE_RANDOM_CROPS else f"./data/{DATASET}/trn_midi_records_loops.pt",
         path_filter_fn=mmd_4bar_filter_fn if "md_loops" in DATASET else None,
         genre_list=tag_list,
         tokenizer=tokenizer,
