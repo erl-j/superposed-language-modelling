@@ -157,18 +157,29 @@ def generate_from_constraints(e, sampling_params={}):
 
 ec = lambda: MusicalEventConstraint(model.tokenizer)
 
-e = [ ec().intersect({"instrument": {"Piano", "-"}}) for _ in range(N_EVENTS) ]
+#%%
 
-mask = model.tokenizer.event_constraints_to_mask(e).to(DEVICE)
-print(mask.shape)
-# %%
-# filter data by constraint. 
-follows_constraint = (one_hot * mask).sum(dim=-1) > 0
-# check that it is true across event and attribute dimensions
-follows_constraint = follows_constraint.all(dim=[1, 2])
-print(follows_constraint.shape)
+tpq = model.tokenizer.config["ticks_per_beat"]
+n_beats = 16
+constraints = {
+    "piano" : [ ec().intersect({"instrument": {"Piano", "-"}}) for _ in range(N_EVENTS) ],
+    "drum_and_bass_and_guitar" : [ ec().intersect({"instrument": {"Drums", "Bass", "Guitar","-"}}) for _ in range(N_EVENTS) ],
+    "drum_and_bass" : [ ec().intersect({"instrument": {"Drums", "Bass","-"}}) for _ in range(N_EVENTS) ],
+    "1/2 notes" : [ ec().intersect({"onset/global_tick": {str(t) for t in range(0, n_beats*tpq, tpq//2)} | {"-"} }) for _ in range(N_EVENTS) ],
+    "1/4 notes" : [ ec().intersect({"onset/global_tick": {str(t) for t in range(0, n_beats*tpq, tpq//4)} | {"-"} }) for _ in range(N_EVENTS) ],
+    "1/8 notes" : [ ec().intersect({"onset/global_tick": {str(t) for t in range(0, n_beats*tpq, tpq//8)} | {"-"} }) for _ in range(N_EVENTS) ],
+    "1/16 notes" : [ ec().intersect({"onset/global_tick": {str(t) for t in range(0, n_beats*tpq, tpq//16)} | {"-"} }) for _ in range(N_EVENTS) ],
+    "c major pitch set" : [ ec().intersect({"pitch": ec().pitch_in_scale_constraint("C major", (10, 127))["pitch"] | {"-"} }) for _ in range(N_EVENTS) ],
+    "c pentatonic" : [ ec().intersect({"pitch": ec().pitch_in_scale_constraint("C pentatonic", (10, 127))["pitch"] | {"-"} }) for _ in range(N_EVENTS) ],
+}
 
-print(follows_constraint.sum())
+for constraint_name, e in constraints.items():
+    mask = model.tokenizer.event_constraints_to_mask(e).to(DEVICE)
+    # filter data by constraint. 
+    follows_constraint = (one_hot * mask).sum(dim=-1) > 0
+    # check that it is true across event and attribute dimensions
+    follows_constraint = follows_constraint.all(dim=[1, 2])
 
-print(follows_constraint)
+    print(follows_constraint.sum())
+
 # %%
