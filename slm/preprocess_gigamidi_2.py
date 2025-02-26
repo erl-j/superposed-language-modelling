@@ -303,8 +303,12 @@ for split in ["validation", "test", "train"]:
         if estimated_bars <= target_bars:
             # if estimated bars divides target bars, we can use the loop, we crop it and tile it
             if target_bars % estimated_bars == 0:
-                crop_sm(sample["midi"], estimated_bars, 4)
-                loop_midi = loop_sm(sample["midi"], estimated_bars, target_bars // estimated_bars)
+                loop_midi = crop_sm(sample["midi"], estimated_bars, 4)
+                loop_midi = loop_sm(loop_midi, estimated_bars, target_bars // estimated_bars)
+                # set tempos to last of the original midi
+                loop_midi.tempos = sample["midi"].tempos
+                # set time signatures to last of the original midi
+                loop_midi.time_signatures = sample["midi"].time_signatures
                 loops.append(loop_midi)
         else:
             # now we look for loops
@@ -329,6 +333,10 @@ for split in ["validation", "test", "train"]:
                         # crop
                         loop_midi = crop_sm(loop_midi, n_bars, 4)
                         loop_midi = loop_sm(loop_midi, n_bars, target_bars // n_bars)
+                        # set tempos to last of the original midi
+                        loop_midi.tempos = sample["midi"].tempos
+                        # set time signatures to last of the original midi
+                        loop_midi.time_signatures = sample["midi"].time_signatures
                         loops.append(loop_midi)
         # filter out loops that have less than 2 notes
         loops = [loop for loop in loops if loop.note_num() >= 2]
