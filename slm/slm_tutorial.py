@@ -37,9 +37,12 @@ DEVICE = "cuda:2"
 model = TrainingWrapper.load_from_checkpoint(
     # CHECKPOINTS["slm_mixed_150epochs"],
     # "../checkpoints/iconic-firefly-751/last.ckpt",
-    "../checkpoints/playful-wood-749/last.ckpt",
+    # "../checkpoints/playful-wood-749/last.ckpt",
     # "../checkpoints/lucky-wildflower-748/last.ckpt",
     # "../checkpoints/swept-night-752/epoch=25-step=133432-val/loss_epoch=0.12887.ckpt",
+    # "../checkpoints/trim-dawn-754/last.ckpt",
+    # "../checkpoints/effortless-sun-758/last.ckpt",
+    "../checkpoints/usual-flower-759/last.ckpt",
     map_location=DEVICE,
 )
 
@@ -102,8 +105,8 @@ ec = lambda: MusicalEventConstraint(model.tokenizer)
 def drums(e, ec, n_events):
     # add 20 bass notes
     e=[]
-    # e += [ec().intersect({"instrument": {"Bass"}}).force_active() for _ in range(20)]
-    e += [ec().intersect({"instrument": {"Piano"}}).force_active() for i in range(30)]
+    e += [ec().intersect({"instrument": {"Piano"}}).force_active() for _ in range(60)]
+    # e += [ec().intersect({"instrument": {"Bass"}}).force_active() for i in range(30)]
     e += [ec().force_inactive() for _ in range(n_events - len(e))]
     # set tag to metal
     # e = [ev.intersect({"tag": {"metal", "-"}}) for ev in e]
@@ -111,13 +114,14 @@ def drums(e, ec, n_events):
     e = [ev.intersect(ec().tempo_constraint
                       (120)) for ev in e]
     # restrict to c major
-    # e = [ev.intersect(ec().pitch_in_scale_constraint("C major", (38, 101))) for ev in e]
-    if model.tokenizer.config["midi_types"] is not None:
+    e = [ev.intersect(ec().pitch_in_scale_constraint("C major", (38, 101))) for ev in e]
+    print(model.tokenizer.config["midi_types"])
+    if model.tokenizer.config["midi_types"] is not []:
         e = [ev.intersect({"midi_type": {"loop", "-"}}) for ev in e]
     return e
 
 e = drums([], ec, N_EVENTS)
-sm = generate_from_constraints(e, {"topp": 0.95})
+sm = generate_from_constraints(e, {"topp": 1.0})
 preview_sm(loop_sm(sm, 4, 4))
 
 

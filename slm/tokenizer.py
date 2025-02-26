@@ -676,7 +676,6 @@ class Tokenizer():
                 "program": program,
                 "tempo": tempo,
                 "tag": tag,
-                "midi_type": midi_type
             })
         if len(note_recs) > 0:
             tempo = note_recs[0]["tempo"]

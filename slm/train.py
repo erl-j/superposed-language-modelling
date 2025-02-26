@@ -384,7 +384,7 @@ if __name__ == "__main__":
 
     DATASET = "gmd_loops_2"
 
-    USE_RANDOM_CROPS = False
+    USE_RANDOM_CROPS = True
 
     N_BARS = 4 if DATASET == "harmonic" else 4
 
@@ -393,7 +393,7 @@ if __name__ == "__main__":
         tag_list = open(f"./data/{DATASET}/tags.txt").read().splitlines()
 
         tokenizer_config = {
-            "ticks_per_beat": 96 if "md_loops" in DATASET or DATASET == "harmonic" else 48,
+            "ticks_per_beat": 24 if "md_loops" in DATASET or DATASET == "harmonic" else 48,
             "time_hierarchy": "tick",
             "pitch_range": [0, 128],
             "max_beats": 4 * N_BARS,

@@ -71,7 +71,7 @@ def load_test_dataset(tokenizer):
     tempo_filter_fn = lambda sm: len(sm.tempos) > 0
 
     test_ds = MidiDataset(
-        cache_path="../data/gmd_loops/tst_midi_records_loops.pt",
+        cache_path="../data/gmd_loops_2/val_midi_records_loops.pt",
         n_bars = 4,
         path_filter_fn=mmd_4bar_filter_fn,
         genre_list=tokenizer.config["tags"],
@@ -84,6 +84,8 @@ def load_test_dataset(tokenizer):
     )
     return test_ds
 
+#%%
+# len of test_ds
 
 # Set device
 DEVICE = f"cuda:3"
@@ -95,6 +97,22 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 print("\nInitializing with first available model...")
 first_model = setup_model(next(iter(CHECKPOINTS.values())), DEVICE)
 test_dataset = load_test_dataset(first_model.tokenizer)
+
+#%% look at len of test_ds
+print(len(test_dataset))
+
+#%%
+
+dl = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=True)
+
+#%%
+
+# preview 10 samples
+for i in range(10):
+    token_ids = next(iter(dl))["token_ids"].squeeze().to(DEVICE)
+    sm = first_model.tokenizer.decode(token_ids)
+    preview_sm(sm)
+
 
 #%%
 # load the dataset

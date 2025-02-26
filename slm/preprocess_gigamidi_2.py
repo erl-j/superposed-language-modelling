@@ -17,7 +17,9 @@ TARGET_TPQ = 96
 ds_path = "./data/gmd_loops_2"
 
 loop_df = pd.read_parquet(f"./data/loop_detection_results.parquet")
-
+loop_df["md5"] = loop_df["midi_file_path"].apply(lambda x: x.split("/")[-1].replace(".mid", ""))
+# take unique by md5
+loop_df = loop_df.drop_duplicates(subset="md5")
 
 genre_set = open(f"{ds_path}/tags.txt").read().splitlines()
 
@@ -27,39 +29,38 @@ split_shorthands = {
     "train": "trn"
 }
 
+#%%
 for split in ["validation", "test", "train"]:
-    #%%
+    print(f"Processing {split} split")
+
     dataset = load_dataset("Metacreation/GigaMIDI", split=split)
 
     #%%
-    # load data/loop_detection_results.parquet
 
-    # print 
-    print(len(loop_df))
-    # extract md5 by taking filename and dropping .mid
-    loop_df["md5"] = loop_df["midi_file_path"].apply(lambda x: x.split(".")[0])
 
-    # print first element
 
-    # take unique by md5
-    loop_df = loop_df.drop_duplicates(subset="md5")
+    # get dataset as pandas dataframe
+    dataset_df = dataset.to_pandas()
 
-    print(len(loop_df))
-    #%%
-    # get dict of md5 to candidate loops
-    md5_to_candidate_loops = {}
-    loop_df.apply(lambda x: md5_to_candidate_loops.update({x["md5"]: x["candidate_loops"]}), axis=1)
-    # merge dataset with loop_detection_results in a fast way
+    # join on md5
+    dataset_df = dataset_df.merge(loop_df, on="md5", how="left")
+
+    # replace nan dataset df with empty list
+    dataset_df["candidate_loops"] = dataset_df["candidate_loops"].apply(lambda x: [] if isinstance(x, float) and pd.isna(x) else x)
+    # Now verify the change
+    print(f"Number of pieces with loops: {len(dataset_df[dataset_df['candidate_loops'].apply(len) > 0])}")
 
     #%%
+
 
     # get length of dataset
-    ds_len = len(dataset)
+    ds_len = len(dataset_df)
 
     print(f"Dataset length: {ds_len} pieces")
 
     records = []
-    for sample in tqdm(dataset, total=len(dataset)):
+    for sample in tqdm(dataset_df.iterrows(), total=ds_len):
+        sample = sample[1]
         try:
             midi = symusic.Score.from_midi(sample["music"])
             records.append(
@@ -69,6 +70,11 @@ for split in ["validation", "test", "train"]:
             continue
 
     print(f"Pieces that loaded: {len(records)}")
+
+    records_with_candidate_loops = [record for record in records if len(record["candidate_loops"]) > 0]
+
+    print(f"Number of records with candidate loops: {len(records_with_candidate_loops)}")
+
 
     #%%
     print("Filter out pieces that don't have tempo")
@@ -209,19 +215,42 @@ for split in ["validation", "test", "train"]:
 
     records_with_expressive_solo_piano = [record for record in records if is_expressive_solo_piano(record)]
 
+    #%% 
+    # play some examples
+    for record in records_with_expressive_solo_piano[:5]:
+        preview_sm(record["midi"])
+
+    #%%
+
     print(f"Number of expressive solo piano: {len(records_with_expressive_solo_piano)}")
 
+    records = [record for record in records if not is_expressive_solo_piano(record)]
+
+    print(f"Pieces remaining: {len(records)}")
 
     #%%
-    #%%
 
-        
+    # has drums outside of range
+    def has_drums_outside_range(score, min_pitch=35, max_pitch=81):
+        for track in score.tracks:
+            if track.is_drum:
+                for note in track.notes:
+                    if note.pitch < min_pitch or note.pitch > max_pitch:
+                        return True
+        return False
 
-    #%%
+    # check how many have drums outside of range
+    print("Check how many have drums outside of range")
+    records_with_drums_outside_range = [record for record in records if has_drums_outside_range(record["midi"])]
+
+    print(f"Number of pieces with drums outside of range: {len(records_with_drums_outside_range)}")
+    # remove
+    records = [record for record in records if not has_drums_outside_range(record["midi"])]
+
+    print(f"Pieces remaining: {len(records)}")
     #%%
     # make histogram of number of bars
     pd.Series([record["n_bars"] for record in records]).hist(bins=10, range=(0, 32))
-
 
     #%%
 
@@ -248,6 +277,9 @@ for split in ["validation", "test", "train"]:
     # save
     torch.save(full_records, f"{ds_path}/{split_shorthands[split]}_midi_records_full.pt")
 
+
+    #%%
+    print(records[0])
     #%%
 
     def extract_loops(sample, target_bars):
@@ -256,6 +288,8 @@ for split in ["validation", "test", "train"]:
         # we round to the nearest bar
         loops = []
         estimated_bars = round(sample["n_bars"])
+
+        print(f"Estimated bars: {estimated_bars}")
 
         # print tpq
         # print(f"TPQ: {sample['midi'].tpq}")
@@ -274,15 +308,10 @@ for split in ["validation", "test", "train"]:
                 loops.append(loop_midi)
         else:
             # now we look for loops
-            loops = loop_df[loop_df["md5"] == sample["md5"]]["candidate_loops"].values
-            if len(loops) > 0:
-                loops = loops[0]
-            # print(f"len of loop points: {len(loop_points)}")
-            # get unique loop points
-            # print(f"len of unique loop points : {len(loop_points)}")
-            for loop in loops:
+
+            for loop in sample["candidate_loops"]:
                 # check if n_bars is less or equal to target_bars
-                n_bars =  loop["n_bars"]
+                n_bars =  int(loop["n_bars"])
                 start_tick = loop["start_tick"]
                 end_tick = loop["end_tick"]
 
@@ -300,7 +329,6 @@ for split in ["validation", "test", "train"]:
                         # crop
                         loop_midi = crop_sm(loop_midi, n_bars, 4)
                         loop_midi = loop_sm(loop_midi, n_bars, target_bars // n_bars)
-                        loop_midi = loop_midi.resample(TARGET_TPQ, min_dur=0)
                         loops.append(loop_midi)
         # filter out loops that have less than 2 notes
         loops = [loop for loop in loops if loop.note_num() >= 2]
@@ -318,9 +346,14 @@ for split in ["validation", "test", "train"]:
             )
         return loop_records
 
-    import random
-    # random_idx = random.randint(0, len(records))
-    # record = records[random_idx]
+    # # records with candidate loops
+    # records_with_candidate_loops = [record for record in records if len(record["candidate_loops"]) > 0]
+
+    # print(f"Number of records with candidate loops: {len(records_with_candidate_loops)}")
+
+    # import random
+    # random_idx = random.randint(0, len(records_with_candidate_loops) - 1)
+    # record = records_with_candidate_loops[random_idx]
 
     # # preview sm
     # preview_sm(record["midi"])
@@ -334,8 +367,12 @@ for split in ["validation", "test", "train"]:
 
     # # preview the loops
     # for loop in loops:
+    #     print(f"genre: {loop['genre']}")
     #     looped = loop_sm(loop["midi"], 4, 2)
+    #     # resample
+    #     looped = looped.resample(24, min_dur=0)
     #     preview_sm(looped)
+
 
     #%%
 
