@@ -147,6 +147,8 @@ class MidiDataset(torch.utils.data.Dataset):
                 {**x, "genre": [g for g in x["genre"] if g in genre_list]}
                 for x in self.records[i]
             ]
+            # print how many genres are left
+            # print(f"Genres: {len(self.records[i][0]['genre'])}")
             # remove midi with less than min_notes
             self.records[i] = [
                 x

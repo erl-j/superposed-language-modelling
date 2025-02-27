@@ -118,7 +118,7 @@ def preview_sm(x_sm):
     rand_int = np.random.randint(0, 1000000)
     tmp_file_path = "sm_preview_" + str(rand_int) + ".mid"
     x_sm.dump_midi(tmp_file_path)
-    ipd.display(MIDIPlayer(tmp_file_path, 200, styler=cifka_advanced, title='My Player'))
+    ipd.display(MIDIPlayer(tmp_file_path, 400, styler=cifka_advanced, title='My Player'))
     # delete file
     os.remove(tmp_file_path)
 
