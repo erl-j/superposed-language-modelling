@@ -137,7 +137,8 @@ model = TrainingWrapper.load_from_checkpoint(
     # "./checkpoints/different-firefly-705/last.ckpt",
     # "./checkpoints/logical-butterfly-710/every25/epoch=149",
     # "./checkpoints/stoic-jazz-706/last.ckpt",
-    CHECKPOINTS["slm_mixed_150epochs"],
+    # CHECKPOINTS["slm_mixed_150epochs"],
+    "./checkpoints/azure-darkness-763/last.ckpt",
     map_location=device,
 )
 

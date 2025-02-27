@@ -305,6 +305,7 @@ for i in range(1):
     sm = first_model.tokenizer.decode(token_ids)
     preview_sm(sm)
     detail_plot(sm)
+    
 
 # print(loops_in_parent_song)
 
