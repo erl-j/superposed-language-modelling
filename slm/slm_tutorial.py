@@ -132,20 +132,20 @@ preview_sm(loop_sm(sm, 4, 2))
 def bass_and_drums(e, ec, n_events):
     e = []
     # force 1 bass note
-    e += [ec().intersect({"instrument": {"Bass"}}).force_active() for _ in range(3)]
+    e += [ec().intersect({"instrument": {"Bass"}}).force_active() for _ in range(10)]
     # force 1 drums note
-    e += [ec().intersect({"instrument": {"Drums"}}).force_active() for _ in range(3)]
+    e += [ec().intersect({"instrument": {"Drums"}}).force_active() for _ in range(32)]
     # add 40 piano notes
-    e += [ec().intersect({"instrument": {"Piano"}}).force_active() for _ in range(20)]
+    e += [ec().intersect({"instrument": {"Guitar"}}).force_active() for _ in range(35)]
 
     # constrain instrument to be only bass and drums
-    e += [ec().intersect({"instrument": {"Bass", "Drums"}}).force_active() for i in range(50)]
+    e += [ec().intersect({"instrument": {"Bass", "Drums"}}).force_active() for i in range(30)]
 
     # add 50 optional bass and drums
-    e += [ec().intersect({"instrument": {"Bass", "Drums", "-"}}) for i in range(50)]
+    e += [ec().intersect({"instrument": {"Bass", "Drums", "-"}}) for i in range(30)]
     # pad
     # set tag to pop
-    e = [ev.intersect({"tag": {"funk", "-"}}) for ev in e]
+    e = [ev.intersect({"tag": {"pop", "-"}}) for ev in e]
     # set tempo to 120
     e += [ec().force_inactive() for _ in range(n_events - len(e))]
 
@@ -156,7 +156,7 @@ def bass_and_drums(e, ec, n_events):
     return e
 
 e = bass_and_drums([], ec, N_EVENTS)
-preview_sm(generate_from_constraints(e))
+preview_sm(generate_from_constraints(e, {"topp": 1.0}))
 # %%
 # now we'll create a pentatonic chromatic percussion loop
 

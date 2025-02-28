@@ -20,6 +20,12 @@ with open(scores_path,"r") as f:
 # merge records and scores by index
 records = [{**record, **score} for record, score in zip(records, scores)]
 
+# save audio records with scores with pandas
+import pandas as pd
+df = pd.DataFrame(records)
+df.to_csv("../artefacts/audio/aba_records.csv")
+
+
 # load audio with soundfile 
 sample_rate = 44100
 
@@ -40,6 +46,8 @@ records = [
     }
     for record in tqdm(records)
 ]
+
+# 
 
 # show distribution of "CE", "CU", "PC", "PQ"
 import pandas as pd
