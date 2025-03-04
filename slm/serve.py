@@ -10,12 +10,11 @@ import symusic
 
 sys.path.append("slm/")
 # from slm.train_old import EncoderOnlyModel
-from slm.train2_old import SuperposedLanguageModel
 from slm.train import TrainingWrapper
 from util import preview_sm, sm_fix_overlap_notes, loop_sm
 from slm.tokenizer import instrument_class_to_selected_program_nr
 import util
-from paper_checkpoints import CHECKPOINTS
+from slm.PAPER_CHECKPOINTS import CHECKPOINTS
 from constraints.addx import *
 from constraints.re import *
 from constraints.templates import *
@@ -49,48 +48,6 @@ OUTPUT_DIR = ROOT_DIR + "artefacts/examples_4"
 TMP_DIR = ROOT_DIR + "artefacts/tmp"
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-
-# model = (
-#     EncoderOnlyModel.load_from_checkpoint(
-#         ROOT_DIR + checkpoints[MODEL],
-#         map_location=device,
-#     )
-#     .to(device)
-#     .eval()
-# )
-
-# model = SuperposedLanguageModel.load_from_checkpoint(
-#     # "./checkpoints/zesty-dawn-376/last.ckpt",
-#     # "./checkpoints/faithful-wave-417/last.ckpt",
-#     # "./checkpoints/vibrant-paper-422/last.ckpt",
-#     # "./checkpoints/desert-dust-401/last.ckpt",
-#     # "./checkpoints/smart-wood-419/last.ckpt",
-#     # "./checkpoints/unique-tree-426/last.ckpt",
-#     # "./checkpoints/bumbling-dream-427/last.ckpt",
-#     # "./checkpoints/lively-flower-428/last.ckpt",
-#     # "./checkpoints/sparkling-dust-435/last.ckpt",
-#     # "./checkpoints/pretty-smoke-437/last.ckpt",
-#     # "./checkpoints/desert-dragon-439/last.ckpt",
-#     # "./checkpoints/efficient-flower-443/last.ckpt",
-#     # "./checkpoints/sparkling-dust-435/epoch=271-step=1175856-val/loss_epoch=0.16102.ckpt",
-#     # "./checkpoints/misunderstood-eon-449/last.ckpt",
-#     # "./checkpoints/chocolate-river-450/last.ckpt",
-#     # "./checkpoints/fragrant-dew-452/last.ckpt",
-#     # "./checkpoints/lilac-feather-455/last.ckpt",
-#     # "./checkpoints/copper-monkey-456/last.ckpt",
-#     # "./checkpoints/fragrant-dew-452/last.ckpt",
-#     # "./checkpoints/ruby-glade-461/last.ckpt",
-#     # "./checkpoints/prime-cosmos-462/last.ckpt",
-#     # "./checkpoints/drawn-universe-463/last.ckpt",
-#     # "./checkpoints/dulcet-jazz-464/last.ckpt",
-#     # "./checkpoints/clean-oath-465/last.ckpt",
-#     "./checkpoints/stoic-capybara-480/last.ckpt",
-#     # "./checkpoints/stoic-capybara-480/epoch=34-step=99260-val/loss_epoch=1.11820.ckpt",
-#     map_location=device,
-# )
-
-# print(model.tokenizer.vocab)
 
 model = TrainingWrapper.load_from_checkpoint(
     # "./checkpoints/effortless-sound-516/last.ckpt",

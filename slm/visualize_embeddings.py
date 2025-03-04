@@ -33,7 +33,7 @@ from train import TrainingWrapper
 #     map_location="cpu",
 # )
 
-from paper_checkpoints import CHECKPOINTS
+from slm.PAPER_CHECKPOINTS import CHECKPOINTS
 
 model = TrainingWrapper.load_from_checkpoint(
     # CHECKPOINTS["mlm_not_norm_first"],

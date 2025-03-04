@@ -13,7 +13,7 @@ from train import TrainingWrapper
 from util import preview_sm, sm_fix_overlap_notes, loop_sm
 from tokenizer import instrument_class_to_selected_program_nr
 import util
-from paper_checkpoints import CHECKPOINTS
+from slm.PAPER_CHECKPOINTS import CHECKPOINTS
 from constraints.addx import *
 from constraints.re import *
 from constraints.templates import *

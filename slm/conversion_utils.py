@@ -52,7 +52,7 @@ def looprep_to_sm(looprep, tpq):
 
 def sm_to_events(x_sm, tag, tokenizer):
     ec = lambda : MusicalEventConstraint(tokenizer)
-    x = tokenizer.encode(x_sm, tag=tag)
+    x = tokenizer.encode(x_sm, tag=tag, midi_type="loop" if len(tokenizer.config["midi_types"]) > 1 else None)
     if not tokenizer.config["fold_event_attributes"]:
         x = einops.rearrange(x, "event attribute -> (event attribute)")
     tokens = tokenizer.indices_to_tokens(x)

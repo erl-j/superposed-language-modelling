@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from train import TrainingWrapper
 from data import MidiDataset
 import pandas as pd
-from paper_checkpoints import CHECKPOINTS
+from slm.PAPER_CHECKPOINTS import CHECKPOINTS
 from tqdm import tqdm
 from masking import random_superposition
 

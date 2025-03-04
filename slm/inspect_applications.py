@@ -17,7 +17,7 @@ def filter_models(df):
     # remove models with "100epochs"
     models_to_keep = [model for model in df.model.unique() if "100epochs" not in model]
     # filter out "full", and "sparse" models
-    models_to_keep = [model for model in models_to_keep if "full" not in model and "sparse" not in model]
+    # models_to_keep = [model for model in models_to_keep if "full" not in model and "sparse" not in model]
     return df[df.model.isin(models_to_keep)]
 
 def rename_models(df):
@@ -47,7 +47,7 @@ def preprocess(df):
     return df
 
 # Load ground truth examples
-base_path = Path("../artefacts/applications_250e")
+base_path = Path("../artefacts/applications_250h")
 csv_paths = glob.glob(str(base_path / "**/*records.csv"), recursive=True)
 
 print(f"Found {len(csv_paths)} records.csv files")
@@ -67,6 +67,8 @@ df = df.sort_values(by=["model", "task"])
 # plot mean log likelhood for each model and task
 models = df.model.unique()
 tasks = df.task.unique()
+print(f"Discovered models: {models}")
+print(f"Discovered tasks: {tasks}")
 
 for task in tasks:
     for model in models:
@@ -99,6 +101,10 @@ fmd_results = pd.read_json(base_path / "fmd_results.json")
 df = pd.DataFrame(fmd_results)
 df = preprocess(df)
 
+tasks = df.task.unique()
+
+
+
 # sort by model and task
 df = df.sort_values(by=["model", "task"])
 
@@ -130,6 +136,7 @@ for model in model_colors.keys():
         task_scores.append(score)
     mean_scores.append((model, task_scores))
 
+print(tasks)
 # Plot lines for each model
 for model, scores in mean_scores:
     plt.plot(tasks, scores, 
@@ -207,21 +214,21 @@ records.extend(
 df = pd.DataFrame(records)
 df = preprocess(df)
 
-for metric_name in [
-    "scale_consistency",
-    "polyphony_rate", 
-    "pitch_class_entropy",
-    "polyphony",
-    "n_pitches_used",
-    "n_pitch_classes_used",
-    "pitch_entropy"
-]:
-    df[f"metric/{metric_name}"] = df.apply(
-        lambda row: getattr(muspy.metrics, metric_name)(
-            muspy.read_midi(row["path"])
-        ),
-        axis=1
-    )
+# for metric_name in [
+#     "scale_consistency",
+#     "polyphony_rate", 
+#     "pitch_class_entropy",
+#     "polyphony",
+#     "n_pitches_used",
+#     "n_pitch_classes_used",
+#     "pitch_entropy"
+# ]:
+#     df[f"metric/{metric_name}"] = df.apply(
+#         lambda row: getattr(muspy.metrics, metric_name)(
+#             muspy.read_midi(row["path"])
+#         ),
+#         axis=1
+#     )
 
 # Add number of instruments separately since it uses a different access pattern
 df["metric/n_instruments"] = df.apply(
@@ -229,7 +236,14 @@ df["metric/n_instruments"] = df.apply(
     axis=1
 )
 
+# add number of notes
+df["metric/n_notes"] = df.apply(
+    lambda row: sum([len(track.notes) for track in row["midi"].tracks]),
+    axis=1
+)
+
 print(f"Processed {len(records)} records")
+
 
 
 #%%

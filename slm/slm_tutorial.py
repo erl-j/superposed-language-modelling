@@ -4,8 +4,6 @@ import socket
 import os
 import random
 import torch
-from flask import Flask, jsonify, request
-from flask_cors import CORS
 import symusic
 sys.path.append("slm/")
 # from slm.train_old import EncoderOnlyModel
@@ -13,7 +11,7 @@ from train import TrainingWrapper
 from util import preview_sm, sm_fix_overlap_notes, loop_sm
 from tokenizer import instrument_class_to_selected_program_nr
 import util
-from paper_checkpoints import CHECKPOINTS
+from PAPER_CHECKPOINTS import CHECKPOINTS
 from constraints.addx import *
 from constraints.re import *
 from constraints.templates import *
@@ -44,8 +42,11 @@ model = TrainingWrapper.load_from_checkpoint(
     # "../checkpoints/effortless-sun-758/last.ckpt",
     # "../checkpoints/usual-flower-759/last.ckpt",
     # "../checkpoints/devout-terrain-760/last.ckpt",
-    "../checkpoints/azure-darkness-763/last.ckpt",
+    # "../checkpoints/azure-darkness-763/last.ckpt",
     # "../checkpoints/snowy-gorge-764/last.ckpt",
+    CHECKPOINTS["slm_mixed_150epochs"],
+    # CHECKPOINTS["mlm_150epochs"],
+    # "../checkpoints/comfy-bush-766/last.ckpt",
     map_location=DEVICE,
 )
 
@@ -86,6 +87,9 @@ if USE_FP16:
 N_EVENTS = model.tokenizer.config["max_notes"]
 
 
+def sm_to_constraint(sm, tag="other"):
+    return sm_to_events(sm, tag, tokenizer=model.tokenizer)
+
 def generate_from_constraints(e, sampling_params={}):
     mask = model.tokenizer.event_constraints_to_mask(e).to(DEVICE)
     x = generate(
@@ -98,33 +102,93 @@ def generate_from_constraints(e, sampling_params={}):
         order=sampling_params.get("order", "random"),
     )
     x_sm = model.tokenizer.decode(x)
+    notes_before_removing_overlap = x_sm.note_num()
     x_sm = util.sm_fix_overlap_notes(x_sm)
+    notes_after_removing_overlap = x_sm.note_num()
+    print(f"Number of overlapping notes: {notes_before_removing_overlap - notes_after_removing_overlap}")
     return x_sm
 
 ec = lambda: MusicalEventConstraint(model.tokenizer)
 #%%
 
 # just drums
-def drums(e, ec, n_events):
+def piano(e, ec, n_events):
     # add 20 bass notes
     e=[]
-    e += [ec().intersect({"instrument": {"Drums", "Guitar","Bass"}}).force_active() for _ in range(60)]
-    # e += [ec().intersect({"instrument": {"Bass"}}).force_active() for i in range(30)]
+    e += [ec().intersect({"instrument": {"Piano", "-"}}) for _ in range(64)]
+    e += [ec().intersect({"instrument": {"Piano"}}).force_active() for i in range(30)]
     e += [ec().force_inactive() for _ in range(n_events - len(e))]
     # set tag to metal
-    # e = [ev.intersect({"tag": {"metal", "-"}}) for ev in e]
+    e = [ev.intersect({"tag": {"classical", "-"}}) for ev in e]
     # set tempo to 120
     e = [ev.intersect(ec().tempo_constraint
-                      (120)) for ev in e]
+                      (140)) for ev in e]
     # restrict to c major
-    # e = [ev.intersect(ec().pitch_in_scale_constraint("C major", (38, 101))) for ev in e]
+    e = [ev.intersect(ec().pitch_in_scale_constraint("C major", (38, 101))) for ev in e]
     print(model.tokenizer.config["midi_types"])
     if "loop" in model.tokenizer.config["midi_types"]:
         e = [ev.intersect({"midi_type": {"loop", "-"}}) for ev in e]
     return e
 
-e = drums([], ec, N_EVENTS)
-sm = generate_from_constraints(e, {"topp": 1.0})
+e = piano([], ec, N_EVENTS)
+sm = generate_from_constraints(e, {"temperature": 1.2})
+print(sm.note_num())
+preview_sm(loop_sm(sm, 4, 2))
+
+#%% 
+def drum_beat_with_syncopation(e, ec, n_events):
+    e = []
+    # add 32 drums
+    e += [ec().intersect({"instrument": {"Drums"}}).force_active() for i in range(52)]
+    tpq = 24
+    n_beats = 16
+    # add optional drums on 8th note upbeats, snares or kicks
+    e += [ec().intersect({"instrument": {"Drums"},
+                          "pitch": {"36 (Drums)"},
+                          "onset/global_tick" : {str(t) for t in range(tpq//4, tpq*n_beats, tpq)}}
+                          ).force_active() for i in range(8)]                     
+    
+    # set tempo to 140
+    e = [ev.intersect(ec().tempo_constraint(140)) for ev in e]
+    # pad
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
+    return e
+
+e = drum_beat_with_syncopation([], ec, N_EVENTS)
+sm = generate_from_constraints(e, {"temperature": 1.0})
+print(sm.note_num())
+preview_sm(loop_sm(sm, 4, 2))
+
+def add_locked_in_bass_line(e, ec, n_events):
+
+    print(f"n_events: {n_events}")
+    # remove inactive bass notes
+    e = [ev for ev in e if ev.is_active()]
+    print(f"n_events: {len(e)}")
+    # add bass notes with bass line
+    # get drum onsets
+    drum_onsets = set()
+    for ev in e:
+        if "Drums" in ev["instrument"] and "36 (Drums)" in ev["pitch"]:
+            drum_onsets.update(ev["onset/global_tick"])
+
+    print(drum_onsets)
+
+    # now add a bass note on every drum onset
+    e += [ec().intersect({"instrument": {"Bass"}, 
+                          "onset/global_tick": drum_onsets
+                          }
+                          ).force_active() for i in range(20)]
+    
+    # pad with inactive notes
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
+
+    return e
+
+e = sm_to_constraint(sm)
+e = add_locked_in_bass_line(e, ec, N_EVENTS)
+sm = generate_from_constraints(e, {"temperature": 1.0})
+print(sm.note_num())
 preview_sm(loop_sm(sm, 4, 2))
 
 
@@ -136,7 +200,7 @@ def bass_and_drums(e, ec, n_events):
     # force 1 drums note
     e += [ec().intersect({"instrument": {"Drums"}}).force_active() for _ in range(32)]
     # add 40 piano notes
-    e += [ec().intersect({"instrument": {"Guitar"}}).force_active() for _ in range(35)]
+    e += [ec().intersect({"instrument": {"Piano"}}).force_active() for _ in range(40)]
 
     # constrain instrument to be only bass and drums
     e += [ec().intersect({"instrument": {"Bass", "Drums"}}).force_active() for i in range(30)]
@@ -145,7 +209,7 @@ def bass_and_drums(e, ec, n_events):
     e += [ec().intersect({"instrument": {"Bass", "Drums", "-"}}) for i in range(30)]
     # pad
     # set tag to pop
-    e = [ev.intersect({"tag": {"pop", "-"}}) for ev in e]
+    e = [ev.intersect({"tag": {"rock", "-"}}) for ev in e]
     # set tempo to 120
     e += [ec().force_inactive() for _ in range(n_events - len(e))]
 
@@ -156,7 +220,7 @@ def bass_and_drums(e, ec, n_events):
     return e
 
 e = bass_and_drums([], ec, N_EVENTS)
-preview_sm(generate_from_constraints(e, {"topp": 1.0}))
+preview_sm(generate_from_constraints(e, {"temperature": 0.8}))
 # %%
 # now we'll create a pentatonic chromatic percussion loop
 
@@ -177,6 +241,30 @@ def chromatic_percussion(e, ec, n_events):
 
 e = chromatic_percussion([], ec, N_EVENTS)
 preview_sm(generate_from_constraints(e))
+
+
+#%%
+
+# piano
+
+def piano(e, ec, n_events):
+
+    e = [
+        ec().intersect({"instrument": {"Piano"}, "duration": {"1/8"}})
+        .intersect(ec().pitch_in_scale_constraint("C major", (60, 108)))
+        .force_active() for i in range(50)
+    ]
+
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
+
+    if len(model.tokenizer.config["midi_types"]) > 0:
+        e = [ev.intersect({"midi_type": {"loop", "-"}}) for ev in e]
+
+    return e
+
+e = piano([], ec, N_EVENTS)
+preview_sm(generate_from_constraints(e))
+
 
 #%%
 # now we'll create a drum loop with lots of cowbells

@@ -2,7 +2,6 @@ import torch
 import einops
 import random
 
-
 def simple_superposition(x, syntax_mask, superpositions = ["full","sparse"], schedule_fn=lambda x:x, attribute_masking_rate=0.05):
     """
     Applies superposition masking scheme to a batch of one-hot encoded tensors.

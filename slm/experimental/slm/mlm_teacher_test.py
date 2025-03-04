@@ -7,7 +7,7 @@ from slm.train_old import EncoderOnlyModel
 from util import piano_roll
 import os
 import IPython.display as ipd
-from paper_checkpoints import SLM_CKPT_PTH, MLM_CKPT_PTH
+from slm.PAPER_CHECKPOINTS import SLM_CKPT_PTH, MLM_CKPT_PTH
 
 
 device = "cuda:7"

@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from train import TrainingWrapper
 from data import MidiDataset
-from paper_checkpoints import CHECKPOINTS
+from slm.PAPER_CHECKPOINTS import CHECKPOINTS
 from tqdm import tqdm
 
 # set seed

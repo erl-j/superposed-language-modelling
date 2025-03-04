@@ -8,7 +8,7 @@ from slm.train_old import EncoderOnlyModel
 from util import preview
 import os
 import IPython.display as ipd
-from paper_checkpoints import checkpoints
+from slm.PAPER_CHECKPOINTS import checkpoints
 import torch
 
 device = "cuda:4"

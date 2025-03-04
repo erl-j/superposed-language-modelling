@@ -20,8 +20,6 @@ from masking import (
     simple_superposition,
 )
 from model import SuperposedLanguageModel
-from mdlm import LogLinearNoise
-
 
 class TrainingWrapper(pl.LightningModule):
     def __init__(
@@ -384,7 +382,7 @@ if __name__ == "__main__":
 
     DATASET = "gmd_loops_2"
 
-    USE_RANDOM_CROPS = True
+    USE_RANDOM_CROPS = False
 
     N_BARS = 4 if DATASET == "harmonic" else 4
 

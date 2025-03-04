@@ -7,7 +7,7 @@ from slm.train_old import EncoderOnlyModel
 from util import preview, render_directory_with_fluidsynth
 import os
 import IPython.display as ipd
-from paper_checkpoints import checkpoints
+from slm.PAPER_CHECKPOINTS import checkpoints
 from tqdm import tqdm
 import torch
 

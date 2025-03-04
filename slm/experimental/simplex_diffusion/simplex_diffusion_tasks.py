@@ -15,7 +15,7 @@ from data import MidiDataset
 from util import preview, render_directory_with_fluidsynth, has_drum, has_harmonic, get_sm_pitch_range, load_merged_models, sm_fix_overlap_notes
 import os
 import IPython.display as ipd
-from paper_checkpoints import checkpoints
+from slm.PAPER_CHECKPOINTS import checkpoints
 from tqdm import tqdm
 import torch
 import einops

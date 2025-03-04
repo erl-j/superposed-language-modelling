@@ -15,10 +15,12 @@ def find_midi_dirs(base_path):
            midi_dirs.append(root)
    return midi_dirs
 
-base_path = "artefacts/applications_250e_4x"
+base_path = "artefacts/applications_250h"
 ground_truth_path = f"{base_path}/ground_truth"
 test_dirs = find_midi_dirs(base_path)
+truth_dirs = find_midi_dirs(ground_truth_path)
 
+clear_cache()
 
 for feature_extractor in ['clamp2']:
     metric = FrechetMusicDistance(feature_extractor=feature_extractor, gaussian_estimator='mle', verbose=True)
@@ -26,16 +28,28 @@ for feature_extractor in ['clamp2']:
     results = []
     individual_results = []
     for test_dir in test_dirs:
-        if test_dir != ground_truth_path:
-            score = metric.score(
-                reference_path=ground_truth_path,
-                test_path=test_dir
-            )
             
+
             # try to read model and task from path
             task = test_dir.split("/")[-1]
             model = test_dir.split("/")[-2]
 
+            if model == "ground_truth":
+                continue
+
+            truth_dir = test_dir.replace(model, "ground_truth")
+            # check if truth dir exists
+            if truth_dir not in truth_dirs:
+                print(f"Truth dir {truth_dir} not found")
+                truth_dir = truth_dir.replace(task, "reference")
+
+            print(f"Comparing {test_dir} with reference {truth_dir}")
+            
+            score = metric.score(
+                reference_path=truth_dir,
+                test_path=test_dir
+            )
+            
             # if task is ground_truth, set model to ground_truth
             if task == "ground_truth":
                 model = "ground_truth"

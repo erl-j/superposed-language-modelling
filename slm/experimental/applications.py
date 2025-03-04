@@ -11,7 +11,7 @@ from slm.train2_old import SuperposedLanguageModel
 from util import preview_sm, sm_fix_overlap_notes, loop_sm
 from slm.tokenizer import instrument_class_to_selected_program_nr
 import util
-from paper_checkpoints import checkpoints
+from slm.PAPER_CHECKPOINTS import checkpoints
 from constraints.addx import *
 from constraints.re import *
 from constraints.templates import *

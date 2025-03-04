@@ -7,7 +7,7 @@ from util import get_scale
 import einops
 import matplotlib.pyplot as plt
 from constraints.core import MusicalEventConstraint
-from constants import instrument_class_to_selected_program_nr
+from CONSTANTS import instrument_class_to_selected_program_nr
 
 class Tokenizer():
     def __init__(self, config):
