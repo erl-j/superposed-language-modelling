@@ -6,11 +6,11 @@ import argparse
 import pandas as pd
 import numpy as np
 import time
-from slm.train import TrainingWrapper
+from train import TrainingWrapper
 from data import MidiDataset
 from conversion_utils import sm_to_events
 from constraints.core import MusicalEventConstraint
-from slm.PAPER_CHECKPOINTS import CHECKPOINTS
+from PAPER_CHECKPOINTS import CHECKPOINTS
 from util import sm_set_track_order, sm_fix_overlap_notes
 from tqdm import tqdm
 import os
@@ -59,15 +59,17 @@ def main():
     random.seed(SEED)
     np.random.seed(SEED)
 
+    DEVICES = [2,3,4,5]
+    FILTER_DEVICE = DEVICES[0]
+
     models = ["slm_mixed_150epochs", "slm_sparse_150epochs", "slm_full_150epochs", "mlm_150epochs"]
 
     # Create output directory if it doesn't exist
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-
     # Load the test dataset using first available model's tokenizer
     # Load the specified model
-    first_model = setup_model(models[0], "cpu")
+    first_model = setup_model(CHECKPOINTS[models[0]], "cpu")
 
     test_dataset = load_test_dataset(first_model.tokenizer)
   
@@ -107,20 +109,30 @@ def main():
     constraint_records = {c:[] for c in constraints.keys()}
 
     for batch in tqdm(dl):
-        token_ids = batch["token_ids"]
+        token_ids = batch["token_ids"].to(FILTER_DEVICE)
         one_hot = torch.nn.functional.one_hot(token_ids, len(tokenizer.vocab))
 
         for constraint_name, e in constraints.items():
-            mask = tokenizer.event_constraints_to_mask(e)
+            mask = tokenizer.event_constraints_to_mask(e).to(FILTER_DEVICE)
             follows_constraint = (one_hot * mask).sum(dim=-1) > 0
             follows_constraint = follows_constraint.all(dim=[1, 2])
+            print(token_ids[follows_constraint].shape)
             # get examples that follow the constraint and add to records
-            constraint_records[constraint_name].extend(token_ids[follows_constraint].split(0))
+            if len(token_ids[follows_constraint]) > 0:
+                constraint_records[constraint_name].extend(token_ids[follows_constraint].cpu().split(1))
 
     # show statistics
     for constraint_name, examples in constraint_records.items():
         print(f"Found {len(examples)} examples for constraint {constraint_name}")
 
+    # save found examples as midi
+    for constraint_name, examples in constraint_records.items():
+        os.makedirs(ground_truth_dir / constraint_name, exist_ok=True)
+        print(f"Rendering {constraint_name}")
+        for i, example in tqdm(enumerate(examples)):
+            # remove 0 dimension on first axis
+            example_sm = first_model.tokenizer.decode(example[0])
+            sm_set_track_order(example_sm).dump_midi(ground_truth_dir / f"{constraint_name}/{i}.mid")
 
             
 

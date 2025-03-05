@@ -131,7 +131,7 @@ def piano(e, ec, n_events):
     return e
 
 e = piano([], ec, N_EVENTS)
-sm = generate_from_constraints(e, {"temperature": 1.2})
+sm = generate_from_constraints(e, {"temperature": 1.0})
 print(sm.note_num())
 preview_sm(loop_sm(sm, 4, 2))
 
@@ -178,7 +178,7 @@ def add_locked_in_bass_line(e, ec, n_events):
     e += [ec().intersect({"instrument": {"Bass"}, 
                           "onset/global_tick": drum_onsets
                           }
-                          ).force_active() for i in range(20)]
+                          ).force_active() for i in range(10)]
     
     # pad with inactive notes
     e += [ec().force_inactive() for _ in range(n_events - len(e))]
@@ -200,7 +200,7 @@ def bass_and_drums(e, ec, n_events):
     # force 1 drums note
     e += [ec().intersect({"instrument": {"Drums"}}).force_active() for _ in range(32)]
     # add 40 piano notes
-    e += [ec().intersect({"instrument": {"Piano"}}).force_active() for _ in range(40)]
+    # e += [ec().intersect({"instrument": {"Piano"}}).force_active() for _ in range(40)]
 
     # constrain instrument to be only bass and drums
     e += [ec().intersect({"instrument": {"Bass", "Drums"}}).force_active() for i in range(30)]
@@ -314,23 +314,23 @@ def drum_triplets(e, ec, n_events):
     # one drum note every 12th note
 
     e = [
-        ec().intersect({"instrument": {"Drums"}, "onset/global_tick": {str(onset_tick)}}).force_active() for onset_tick in range(0, 24*12, 8)
+        ec().intersect({"instrument": {"Drums"}, "onset/global_tick": {str(onset_tick)}}).force_active() for onset_tick in range(0, 24*16, 8)
     ]
 
     # add 32 more drums
     e += [ec().intersect({"instrument": {"Drums"}}).force_active() for i in range(32)]
 
     # add bass 10 bass notes on any triplet
-    triplet_ticks = {str(t) for t in range(0, 24*12, 8)}
+    triplet_ticks = {str(t) for t in range(0, 24*16, 8)}
 
     e += [
         ec().intersect({"instrument": {"Bass"}, "onset/global_tick": triplet_ticks}).force_active() for i in range(12)
     ]
 
     # add guitar on any triplet
-    e += [
-        ec().intersect({"instrument": {"Guitar"}, "onset/global_tick": triplet_ticks}).force_active() for i in range(12)
-    ]
+    # e += [
+    #     ec().intersect({"instrument": {"Guitar"}, "onset/global_tick": triplet_ticks}).force_active() for i in range(12)
+    # ]
 
     # set tempo to 120 bpm
     e = [ev.intersect(ec().tempo_constraint(140)) for ev in e]
@@ -341,7 +341,7 @@ def drum_triplets(e, ec, n_events):
 
 e = drum_triplets([], ec, N_EVENTS)
 
-sm = generate_from_constraints(e, {"temperature": 0.95})
+sm = generate_from_constraints(e, {"temperature": 1.0})
 # preview loop
 preview_sm(loop_sm(sm, 4, 2))
 
