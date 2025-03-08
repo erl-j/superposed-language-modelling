@@ -44,9 +44,9 @@ model = TrainingWrapper.load_from_checkpoint(
     # "../checkpoints/devout-terrain-760/last.ckpt",
     # "../checkpoints/azure-darkness-763/last.ckpt",
     # "../checkpoints/snowy-gorge-764/last.ckpt",
-    CHECKPOINTS["slm_mixed_150epochs"],
+    # CHECKPOINTS["slm_mixed_150epochs"],
     # CHECKPOINTS["mlm_150epochs"],
-    # "../checkpoints/comfy-bush-766/last.ckpt",
+    "../checkpoints/comfy-bush-766/last.ckpt",
     map_location=DEVICE,
 )
 
@@ -115,8 +115,8 @@ ec = lambda: MusicalEventConstraint(model.tokenizer)
 def piano(e, ec, n_events):
     # add 20 bass notes
     e=[]
-    e += [ec().intersect({"instrument": {"Piano", "-"}}) for _ in range(64)]
-    e += [ec().intersect({"instrument": {"Piano"}}).force_active() for i in range(30)]
+    e += [ec().intersect({"instrument": {"Piano", "-"}}).force_active() for _ in range(50)]
+    # e += [ec().intersect({"instrument": {"Piano"}}).force_active() for i in range(30)]
     e += [ec().force_inactive() for _ in range(n_events - len(e))]
     # set tag to metal
     e = [ev.intersect({"tag": {"classical", "-"}}) for ev in e]
@@ -128,6 +128,7 @@ def piano(e, ec, n_events):
     print(model.tokenizer.config["midi_types"])
     if "loop" in model.tokenizer.config["midi_types"]:
         e = [ev.intersect({"midi_type": {"loop", "-"}}) for ev in e]
+
     return e
 
 e = piano([], ec, N_EVENTS)
@@ -220,7 +221,7 @@ def bass_and_drums(e, ec, n_events):
     return e
 
 e = bass_and_drums([], ec, N_EVENTS)
-preview_sm(generate_from_constraints(e, {"temperature": 0.8}))
+preview_sm(generate_from_constraints(e, {"temperature": 1.0}))
 # %%
 # now we'll create a pentatonic chromatic percussion loop
 
@@ -264,6 +265,24 @@ def piano(e, ec, n_events):
 
 e = piano([], ec, N_EVENTS)
 preview_sm(generate_from_constraints(e))
+
+# %%
+# now piano, just everything piano
+
+def piano(e, ec, n_events):
+    
+    e = [
+        ec().intersect({"instrument": {"Drums", "-"}}) for i in range(N_EVENTS)
+    ]
+    if len(model.tokenizer.config["midi_types"]) > 0:
+        e = [ev.intersect({"midi_type": {"loop", "-"}}) for ev in e]
+
+    return e
+
+e = piano([], ec, N_EVENTS)
+sm = generate_from_constraints(e, {"temperature": 1.0})
+print(sm.note_num())
+preview_sm(sm)
 
 
 #%%

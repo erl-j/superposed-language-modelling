@@ -362,6 +362,7 @@ class SuperposedLanguageModel(torch.nn.Module):
         order="random",
         attribute_temperature=None,
         tokens_per_step=1,
+        collapse_duplicates=False,
     ):
         """
         Generate completions using Superposed Language Model (SLM) or Masked Language Model (MLM).
@@ -497,6 +498,7 @@ class SuperposedLanguageModel(torch.nn.Module):
                     # x = self.tokenizer.sanitize_mask(
                     #     x, event_indices=updated_event_indices
                     # )
+                    x = self.tokenizer.collapse_duplicates(x, constraint)
 
                     # masekd tokens after
                     masked_tokens_after = (x.sum(-1) > 1).sum().int().item()

@@ -14,6 +14,8 @@ from PAPER_CHECKPOINTS import CHECKPOINTS
 from util import sm_set_track_order, sm_fix_overlap_notes
 from tqdm import tqdm
 import os
+import symusic
+from joblib import Parallel, delayed
 
 # Number of examples to generate per task
 N_EXAMPLES = 25
@@ -64,14 +66,14 @@ def main():
 
     models = ["slm_mixed_150epochs", "slm_sparse_150epochs", "slm_full_150epochs", "mlm_150epochs"]
 
+    RENDER_GROUND_TRUTH = False
+
     # Create output directory if it doesn't exist
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     # Load the test dataset using first available model's tokenizer
     # Load the specified model
     first_model = setup_model(CHECKPOINTS[models[0]], "cpu")
-
-    test_dataset = load_test_dataset(first_model.tokenizer)
   
     # Create and save ground truth examples
     ground_truth_dir = OUTPUT_DIR / "ground_truth"
@@ -83,6 +85,9 @@ def main():
     N_EVENTS = tokenizer.config["max_notes"]
     n_beats = 16
     tpq = tokenizer.config["ticks_per_beat"]
+
+    TEMPERATURE = 0.95
+    ORDER = "random"
 
     constraints = {
         "piano" : [ ec().intersect({"instrument": {"Piano", "-"}}) for _ in range(N_EVENTS) ],
@@ -96,210 +101,149 @@ def main():
         "c pentatonic" : [ ec().intersect({"pitch": ec().pitch_in_scale_constraint("C pentatonic", (10, 127))["pitch"] | {"-"} }) for _ in range(N_EVENTS) ],
     }
 
-    filter_batch_size = 100
+    if RENDER_GROUND_TRUTH:
 
-    dl = torch.utils.data.DataLoader(
-        test_dataset,
-        batch_size=filter_batch_size,
-        shuffle=False,
-        num_workers=0,
-        drop_last=False,
-    )
+        test_dataset = load_test_dataset(first_model.tokenizer)
 
-    constraint_records = {c:[] for c in constraints.keys()}
+        filter_batch_size = 100
 
-    for batch in tqdm(dl):
-        token_ids = batch["token_ids"].to(FILTER_DEVICE)
-        one_hot = torch.nn.functional.one_hot(token_ids, len(tokenizer.vocab))
+        dl = torch.utils.data.DataLoader(
+            test_dataset,
+            batch_size=filter_batch_size,
+            shuffle=False,
+            num_workers=0,
+            drop_last=False,
+        )
+
+        constraint_records = {c:[] for c in constraints.keys()}
+
+        for batch in tqdm(dl):
+            token_ids = batch["token_ids"].to(FILTER_DEVICE)
+            one_hot = torch.nn.functional.one_hot(token_ids, len(tokenizer.vocab))
+
+            for constraint_name, e in constraints.items():
+                mask = tokenizer.event_constraints_to_mask(e).to(FILTER_DEVICE)
+                follows_constraint = (one_hot * mask).sum(dim=-1) > 0
+                follows_constraint = follows_constraint.all(dim=[1, 2])
+                print(token_ids[follows_constraint].shape)
+                # get examples that follow the constraint and add to records
+                if len(token_ids[follows_constraint]) > 0:
+                    constraint_records[constraint_name].extend(token_ids[follows_constraint].cpu().split(1))
+
+        # show statistics
+        for constraint_name, examples in constraint_records.items():
+            print(f"Found {len(examples)} examples for constraint {constraint_name}")
+
+        # save found examples as midi
+        for constraint_name, examples in constraint_records.items():
+            os.makedirs(ground_truth_dir / constraint_name, exist_ok=True)
+            print(f"Rendering {constraint_name}")
+            for i, example in tqdm(enumerate(examples)):
+                # remove 0 dimension on first axis
+                example_sm = first_model.tokenizer.decode(example[0])
+                sm_set_track_order(example_sm).dump_midi(ground_truth_dir / f"{constraint_name}/{i}.mid")
+
+        # for each constraint, load midi
+        gt_records = []
 
         for constraint_name, e in constraints.items():
-            mask = tokenizer.event_constraints_to_mask(e).to(FILTER_DEVICE)
-            follows_constraint = (one_hot * mask).sum(dim=-1) > 0
-            follows_constraint = follows_constraint.all(dim=[1, 2])
-            print(token_ids[follows_constraint].shape)
-            # get examples that follow the constraint and add to records
-            if len(token_ids[follows_constraint]) > 0:
-                constraint_records[constraint_name].extend(token_ids[follows_constraint].cpu().split(1))
-
-    # show statistics
-    for constraint_name, examples in constraint_records.items():
-        print(f"Found {len(examples)} examples for constraint {constraint_name}")
-
-    # save found examples as midi
-    for constraint_name, examples in constraint_records.items():
-        os.makedirs(ground_truth_dir / constraint_name, exist_ok=True)
-        print(f"Rendering {constraint_name}")
-        for i, example in tqdm(enumerate(examples)):
-            # remove 0 dimension on first axis
-            example_sm = first_model.tokenizer.decode(example[0])
-            sm_set_track_order(example_sm).dump_midi(ground_truth_dir / f"{constraint_name}/{i}.mid")
-
-            
-
-
-    # # constraint_records = {}
-    # # for constraint_name, e in constraints.items():
-    # #     mask = tokenizer.event_constraints_to_mask(e)
-    # #     # get test data examples that respect the constraint
-    # #     # filter data by constraint.
-    # #     natural_examples = []
-    # #     n_found_examples = 0
-    # #     for batch in dl:
-    # #         token_ids = batch["token_ids"]
-    # #         one_hot = torch.nn.functional.one_hot(token_ids, len(model.tokenizer.vocab))
-    # #         follows_constraint = (one_hot * mask).sum(dim=-1) > 0
-    # #         follows_constraint = follows_constraint.all(dim=[1, 2])
-
-    # #         # get examples that follow the constraint
-    # #         # pick examples that follow the constraint
-    # #         for i in range(len(follows_constraint)):
-    # #             if follows_constraint[i]:
-    # #                 natural_examples.append(token_ids[i])
-    # #                 n_found_examples += 1
-    # #     # save how many examples we found
-    # #     constraint_records[constraint_name] = {
-    # #         "constraint": constraint_name,
-    # #         "n_found_examples": n_found_examples,
-    # #         "natural_examples": natural_examples[:N_EXAMPLES],
-    # #     }
-
-    #     # save found examples in ground truth dir as text file
-    #     # # Save records for this model
-    #     # df = pd.DataFrame(constraint_records)
-    #     # df.to_csv(f"{str(ground_truth_dir)}/constraint_records.csv", index=False)
-
-    # constraint_to_n_notes = {}
-    # for constraint_name, e in constraints.items():
-    #     mask = model.tokenizer.event_constraints_to_mask(e)
-
-    #     n_found_examples = constraint_records[constraint_name]["n_found_examples"]
-    
-    #     # count how many examples we found
-    #     print(f"Found {n_found_examples} examples for constraint {constraint_name}")
-
-    #     # crop to N_EXAMPLES
-    #     natural_examples = constraint_records[constraint_name]["natural_examples"]
-
-    #     # save n found examples in ground truth dir as text file
-    #     if args.render_ground_truth:
-    #         with open(ground_truth_dir / f"{constraint_name}_n_found_examples.txt", "w") as f:
-    #             f.write(f"{n_found_examples}\n")
-
-
-    #     os.makedirs(ground_truth_dir / constraint_name, exist_ok=True)
-    #     # render examples
-    #     constraint_to_n_notes[constraint_name] = []
-    #     for i, example in enumerate(natural_examples):
-    #         example_sm = first_model.tokenizer.decode(example)
-    #         constraint_to_n_notes[constraint_name].append(example_sm.note_num())
-
-    #         if args.render_ground_truth:
-    #             sm_set_track_order(example_sm).dump_midi(ground_truth_dir / f"{constraint_name}/{i}.mid")
-
-    #     if False:
-    #         # now generate examples
-    #         task_dir = Path(checkpoint_dir) / constraint_name
-    #         task_dir.mkdir(parents=True, exist_ok=True)
-
-    #         records = []
-
-    #         min_notes = min(constraint_to_n_notes[constraint_name])
-    #         max_notes = max(constraint_to_n_notes[constraint_name])
-
-    #         e_bis = []
-    #         e_bis += [e[0].copy().force_active() for i in range(min_notes)]
-    #         e_bis += [e[0].copy() for i in range(max_notes - min_notes)]
-    #         e_bis += [e[0].copy().force_inactive() for i in range(N_EVENTS - max_notes)]
-    #         e = e_bis
-    #         for i in range(N_EXAMPLES):
-            
-    #             print(f"Generating example {i+1}/{N_EXAMPLES}")
-    #             mask = model.tokenizer.event_constraints_to_mask(e).to(device)
-    #             x = model.generate(
-    #                 mask,
-    #                 temperature=1.0,
-    #                 top_p=1.0,
-    #                 top_k=0,
-    #                 tokens_per_step=1,
-    #                 order=ORDER,
-    #             )[0].argmax(-1)
-    #             x_sm = model.tokenizer.decode(x)
-    #             x_sm = sm_fix_overlap_notes(x_sm)
-    #             sm_set_track_order(x_sm).dump_midi(task_dir / f"generated_{i}.mid")
-
-    #             records.append({
-    #                 "model": args.model,
-    #                 "task": constraint_name,
-    #                 "example": i,
-    #             })
-
-    #         # Save records for this model
-    #         df = pd.DataFrame(records)
-    #         df.to_csv(f"{str(task_dir)}/records.csv", index=False)
-    # # Process each task
-    # for task_name, task_config in TASKS.items():
-    #     records = []
-    #     print(f"\nProcessing task: {task_name}")
-    #     task_dir = Path(checkpoint_dir) / task_name
-    #     task_dir.mkdir(parents=True, exist_ok=True)
-
-    #     for i, idx in enumerate(ground_truth_indices):
-    #         print(f"Generating example {i+1}/{N_EXAMPLES}")
-            
-    #         # Get example from test set
-    #         test_example = ground_truth_examples[i]["token_ids"]
-    #         test_sm = first_model.tokenizer.decode(test_example)
-    #         test_events = sm_to_events(test_sm, "pop", model.tokenizer)
-            
-    #         # Apply task function
-    #         tic = time.time()
-    #         task_events = task_config["fn"](
-    #             test_events,
-    #             lambda: MusicalEventConstraint(model.tokenizer),
-    #             model.tokenizer.config["max_notes"],
-    #             task_config["tick_range"],
-    #             task_config["pitch_range"],
-    #             task_config["drums"],
-    #             task_config["tag"],
-    #             task_config["tempo"],
-    #         )
-    #         toc = time.time()
-    #         print(f"Time taken to apply task function: {toc-tic}")
-
-    #         # Convert to mask and get conditional likelihood
-    #         task_mask = model.tokenizer.event_constraints_to_mask(task_events)
-    #         with torch.no_grad():
-    #             model.eval()
-    #             test_mask = model.tokenizer.event_constraints_to_mask(test_events)
-    #             log_probs = model.model.conditional_log_likelihood(
-    #                 test_mask.to(device), task_mask.to(device)
-    #             )
-    #             print(f"Log probs: {log_probs.item()}")
+            ground_truth_midi_dir = ground_truth_dir / constraint_name
+            midi_files = list(ground_truth_midi_dir.glob("*.mid"))
+            for i, midi_file in tqdm(enumerate(midi_files)):
+                # load midi file
+                sm = symusic.Score(midi_file)
+                n_notes = sm.note_num()
+                # get number of overlapping notes
+                sm_wo_overlap = sm_fix_overlap_notes(sm)
+                n_notes_wo_overlap = sm_wo_overlap.note_num()
+                n_overlapping_notes = n_notes - n_notes_wo_overlap
+                # add record
+                gt_records.append({
+                    "constraint": constraint_name,
+                    "midi_file_path": midi_file,
+                    "n_notes": n_notes,
+                    "n_notes_wo_overlap": n_notes_wo_overlap,
+                    "n_overlap": n_overlapping_notes,
+                })
                 
-    #             records.append({
-    #                 "model": args.model,
-    #                 "task": task_name,
-    #                 "log_probs": log_probs.item(),
-    #                 "example": i,
-    #             })
-                
-    #             if GENERATE:
-    #                 output_mask = model.generate(
-    #                     task_mask,
-    #                     **task_config["sampling_settings"],
-    #                     order=ORDER,
-    #                 )[0].argmax(dim=-1)
-                    
-    #                 try:
-    #                     output_sm = model.tokenizer.decode(output_mask)
-    #                     output_sm = sm_fix_overlap_notes(output_sm)
-    #                     sm_set_track_order(output_sm).dump_midi(task_dir / f"generated_{i}.mid")
-    #                 except Exception as e:
-    #                     print(f"Error decoding MIDI: {e}")
+        # compute for each constraint the number of examples, min max mean and median for n_notes, n_notes_wo_overlap and n_overlap
+        gt_records_df = pd.DataFrame(gt_records)
+        gt_records_df.to_csv(ground_truth_dir / "ground_truth_records.csv", index=False)
 
-    #     # Save records for this model
-    #     df = pd.DataFrame(records)
-    #     df.to_csv(f"{str(task_dir)}/records.csv", index=False)
+    # load records
+    gt_records_df = pd.read_csv(ground_truth_dir / "ground_truth_records.csv")
+
+    for constraint in constraints.keys():
+        constraint_records = gt_records_df[gt_records_df["constraint"] == constraint]
+        n_notes = constraint_records["n_notes"]
+        n_notes_wo_overlap = constraint_records["n_notes_wo_overlap"]
+        n_overlap = constraint_records["n_overlap"]
+
+        print(f"Constraint: {constraint}")
+        print(f"Number of examples: {len(constraint_records)}")
+        print(f"n_notes: min={n_notes.min()}, max={n_notes.max()}, mean={n_notes.mean()}, median={n_notes.median()}")
+        print(f"n_notes_wo_overlap: min={n_notes_wo_overlap.min()}, max={n_notes_wo_overlap.max()}, mean={n_notes_wo_overlap.mean()}, median={n_notes_wo_overlap.median()}")
+        print(f"n_overlap: min={n_overlap.min()}, max={n_overlap.max()}, mean={n_overlap.mean()}, median={n_overlap.median()}")
+        print()
+
+    # now render examples with each model
+
+    def render_examples_with_model(model_name, constraints, output_dir, n_examples, device):
+        # for each constraint, generate examples and save under model/contraint_name directory
+        model = setup_model(CHECKPOINTS[model_name], device)
+        system_name = f"{model_name}_order={ORDER}_t={TEMPERATURE}"
+        generation_records = []
+        for constraint_name, e in constraints.items():
+            task_dir = output_dir / system_name / constraint_name
+            task_dir.mkdir(parents=True, exist_ok=True)
+
+            for i in tqdm(range(n_examples)):
+                print(f"Generating example {i+1}/{n_examples}")
+                mask = model.tokenizer.event_constraints_to_mask(e).to(device)
+                x = model.generate(
+                    mask,
+                    temperature=TEMPERATURE,
+                    top_p=1.0,
+                    top_k=0,
+                    tokens_per_step=1,
+                    order=ORDER,
+                )[0].argmax(-1)
+                x_sm = model.tokenizer.decode(x)
+                n_notes_w_overlap = x_sm.note_num()
+                x_sm = sm_fix_overlap_notes(x_sm)
+                n_notes_wo_overlap = x_sm.note_num()
+                sm_set_track_order(x_sm).dump_midi(task_dir / f"generated_{i}.mid")
+                generation_records.append({
+                    "model": model_name,
+                    "system_name": system_name,
+                    "constraint": constraint_name,
+                    "example_index": i,
+                    "n_notes_w_overlap": n_notes_w_overlap,
+                    "n_notes_wo_overlap": n_notes_wo_overlap,
+                    "n_overlap": n_notes_w_overlap - n_notes_wo_overlap,
+                })
+            # write generation records
+            df = pd.DataFrame(generation_records)
+            df.to_csv(task_dir / "generation_records.csv", index=False)
+            
+    GENERATE = True
+    # Generate examples for each model
+    if GENERATE:
+        # Create arguments for each job
+        args = [
+            (model, constraints, OUTPUT_DIR, N_EXAMPLES, f"cuda:{DEVICES[i % len(DEVICES)]}")
+            for i, model in enumerate(models)
+        ]
+
+        # Run jobs in parallel
+        Parallel(n_jobs=len(models), prefer="threads")(
+            delayed(render_examples_with_model)(model, constraints, OUTPUT_DIR, N_EXAMPLES, device)
+            for i, (model, constraints, OUTPUT_DIR, N_EXAMPLES, device) in enumerate(args)
+        )
+
+        print("All model generation complete!")
+
 
 if __name__ == "__main__":
     main()
+# %%

@@ -534,8 +534,60 @@ class Tokenizer():
         x1h = einops.rearrange(x1h, "b n a v -> b (n a) v")
 
         return x1h
-
     
+    def collapse_duplicates(self, x1h, constraint):
+        batch, events, attributes, vocab = x1h.shape
+
+        is_known = torch.isclose(x1h.sum(dim=-1), torch.tensor(1.0, device=x1h.device))
+        is_known = torch.all(is_known, dim=-1)
+        # get unique events
+
+        # check whether there are any events that are duplicates
+        # if so, we need to set all except one to undefined
+        argmax = x1h.argmax(dim=-1)
+
+        is_first_occurence = []
+        seen_events = set()
+        for i in range(events):
+            frame_hash = argmax[0, i].cpu().numpy().tostring()
+            if frame_hash in seen_events:
+                is_first_occurence.append(False)
+            else:
+                is_first_occurence.append(True)
+                seen_events.add(frame_hash)
+
+        is_first_occurence = torch.tensor(is_first_occurence, device=x1h.device)[None, ...]
+   
+        undefined_tokens = [attribute + ":-" for attribute in self.note_attribute_order]
+        undefined_token_idx = [self.token2idx[token] for token in undefined_tokens]
+        undefined_token_1h = torch.nn.functional.one_hot(torch.tensor(undefined_token_idx,device=x1h.device), num_classes=len(self.vocab))
+
+        # find forced active tokens by checking
+        forced_active = ((undefined_token_1h[None,None,...] * constraint).sum(dim=-1)==0).any(dim=-1)
+
+        # how many are forced active
+        print("Forced active", forced_active.sum().item())
+
+        is_known = is_known[...,None, None]
+        is_first_occurence = is_first_occurence[...,None,None]
+        
+
+        # if a token is known and not the first occurence, we will replcae it.
+        # if the token to be replaced is forced active, we replace it with the constraint.
+        # otherwise we replace it with the undefined token
+
+        # for known tokens, set every non first occurence to undefined.
+        x1h = torch.where((is_known>0) & (~is_first_occurence) & (~forced_active[...,None,None]), undefined_token_1h, x1h)
+
+        x1h = torch.where((is_known>0) & (~is_first_occurence) & (forced_active[...,None,None]), constraint, x1h)
+
+
+        return x1h
+
+
+
+
+
     def collapse_undefined_attributes(self, x1h):
 
         if not self.config["fold_event_attributes"]:
