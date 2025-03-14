@@ -566,7 +566,6 @@ class Tokenizer():
         forced_active = ((undefined_token_1h[None,None,...] * constraint).sum(dim=-1)==0).any(dim=-1)
 
         # how many are forced active
-        print("Forced active", forced_active.sum().item())
 
         is_known = is_known[...,None, None]
         is_first_occurence = is_first_occurence[...,None,None]
@@ -579,7 +578,7 @@ class Tokenizer():
         # for known tokens, set every non first occurence to undefined.
         x1h = torch.where((is_known>0) & (~is_first_occurence) & (~forced_active[...,None,None]), undefined_token_1h, x1h)
 
-        x1h = torch.where((is_known>0) & (~is_first_occurence) & (forced_active[...,None,None]), constraint, x1h)
+        # x1h = torch.where((is_known>0) & (~is_first_occurence) & (forced_active[...,None,None]), constraint, x1h)
 
 
         return x1h

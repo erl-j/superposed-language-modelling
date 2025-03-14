@@ -21,6 +21,7 @@ class SuperposedLanguageModel(torch.nn.Module):
         activation,
         dropout,
         use_mlm,
+        conditioners={} #= {"clamp3": {"input_shape": (1, 768), "dropout":0.5}},
     ):
         super().__init__()
         self.use_mlm = use_mlm
@@ -47,6 +48,17 @@ class SuperposedLanguageModel(torch.nn.Module):
         self.unembedding_layer = nn.Linear(hidden_size, self.vocab_size, bias=False)
         self.enforce_constraint_in_forward = enforce_constraint_in_forward
         self.eps = 1e-9
+
+        self.conditioner_projections = nn.ModuleDict()
+        self.conditioners = conditioners
+        for conditioner_name, conditioner_config in conditioners.items():
+            input_shape = conditioner_config["input_shape"]
+            dropout = conditioner_config["dropout"]
+            self.conditioner_projections[conditioner_name] = nn.Sequential(
+                nn.Linear(input_shape[1], hidden_size),
+                activation,
+                nn.Dropout(dropout),
+            )
         
     def convert_mlm_to_slm(self):
         """
@@ -63,7 +75,7 @@ class SuperposedLanguageModel(torch.nn.Module):
         print(self.embedding_layer.weight.shape)
 
 
-    def forward(self, x, return_activations=False):
+    def forward(self, x, return_activations=False, conditioning=None):
         if self.use_mlm:
             return self.mlm_forward(x, return_activations)
         else:
@@ -498,7 +510,8 @@ class SuperposedLanguageModel(torch.nn.Module):
                     # x = self.tokenizer.sanitize_mask(
                     #     x, event_indices=updated_event_indices
                     # )
-                    x = self.tokenizer.collapse_duplicates(x, constraint)
+                    if collapse_duplicates:
+                        x = self.tokenizer.collapse_duplicates(x, constraint)
 
                     # masekd tokens after
                     masked_tokens_after = (x.sum(-1) > 1).sum().int().item()

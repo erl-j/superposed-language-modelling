@@ -302,6 +302,7 @@ class TrainingWrapper(pl.LightningModule):
         order="random",
         attribute_temperature=None,
         tokens_per_step=None,
+        collapse_duplicates=True
     ):
         return self.model.generate(
             x,
@@ -312,6 +313,7 @@ class TrainingWrapper(pl.LightningModule):
             order,
             attribute_temperature,
             tokens_per_step,
+            collapse_duplicates=collapse_duplicates
         )
 
     def convert_mlm_to_slm(self):

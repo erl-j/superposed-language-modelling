@@ -84,6 +84,9 @@ class MusicalEventConstraint(EventConstraint):
         super().__init__(blank_event_dict)
         self.tokenizer = tokenizer
 
+    def get_n_events(self):
+        return self.tokenizer.config["max_notes"]
+
     def copy(self):
         return MusicalEventConstraint(self.tokenizer).intersect(self.a)
 
@@ -203,3 +206,5 @@ PERCUSSION_PITCHES = {
     f"{pitch} (Drums)"
     for pitch in range(54, 82)
 }
+
+RIDE_PITCHES = {f"{pitch} (Drums)" for pitch in ["51", "59"]}

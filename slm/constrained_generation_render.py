@@ -18,11 +18,13 @@ import symusic
 from joblib import Parallel, delayed
 
 # Number of examples to generate per task
-N_EXAMPLES = 25
+N_EXAMPLES = 250
 GENERATE = True
 ORDER = "random"
+RENDER_GROUND_TRUTH = False
 
-OUTPUT_DIR = Path("./artefacts/constrained_generation")
+
+OUTPUT_DIR = Path("./artefacts/constrained_generation_2")
 
 def setup_model(checkpoint_path, device):
     """Load and set up the model."""
@@ -66,7 +68,6 @@ def main():
 
     models = ["slm_mixed_150epochs", "slm_sparse_150epochs", "slm_full_150epochs", "mlm_150epochs"]
 
-    RENDER_GROUND_TRUTH = False
 
     # Create output directory if it doesn't exist
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -86,13 +87,17 @@ def main():
     n_beats = 16
     tpq = tokenizer.config["ticks_per_beat"]
 
-    TEMPERATURE = 0.95
+    TEMPERATURE = 1.0
+    COLLAPSE_DUPLICATES = True
     ORDER = "random"
 
     constraints = {
         "piano" : [ ec().intersect({"instrument": {"Piano", "-"}}) for _ in range(N_EVENTS) ],
         "drum_and_bass_and_guitar" : [ ec().intersect({"instrument": {"Drums", "Bass", "Guitar","-"}}) for _ in range(N_EVENTS) ],
+        "drum_and_bass_and_piano" : [ ec().intersect({"instrument": {"Drums", "Bass", "Piano","-"}}) for _ in range(N_EVENTS) ],
         "drum_and_bass" : [ ec().intersect({"instrument": {"Drums", "Bass","-"}}) for _ in range(N_EVENTS) ],
+        "guitar" : [ ec().intersect({"instrument": {"Guitar","-"}}) for _ in range(N_EVENTS) ],
+        "drums" : [ ec().intersect({"instrument": {"Drums","-"}}) for _ in range(N_EVENTS) ],
         "1 d 2 notes" : [ ec().intersect({"onset/global_tick": {str(t) for t in range(0, n_beats*tpq, 4 * tpq//2)} | {"-"} }) for _ in range(N_EVENTS) ],
         "1 d 4 notes" : [ ec().intersect({"onset/global_tick": {str(t) for t in range(0, n_beats*tpq, 4 * tpq//4)} | {"-"} }) for _ in range(N_EVENTS) ],
         "1 d 8 notes" : [ ec().intersect({"onset/global_tick": {str(t) for t in range(0, n_beats*tpq, 4 * tpq//8)} | {"-"} }) for _ in range(N_EVENTS) ],
@@ -110,8 +115,8 @@ def main():
         dl = torch.utils.data.DataLoader(
             test_dataset,
             batch_size=filter_batch_size,
-            shuffle=False,
-            num_workers=0,
+            shuffle=True,
+            num_workers=4,
             drop_last=False,
         )
 
@@ -154,16 +159,11 @@ def main():
                 sm = symusic.Score(midi_file)
                 n_notes = sm.note_num()
                 # get number of overlapping notes
-                sm_wo_overlap = sm_fix_overlap_notes(sm)
-                n_notes_wo_overlap = sm_wo_overlap.note_num()
-                n_overlapping_notes = n_notes - n_notes_wo_overlap
                 # add record
                 gt_records.append({
                     "constraint": constraint_name,
                     "midi_file_path": midi_file,
                     "n_notes": n_notes,
-                    "n_notes_wo_overlap": n_notes_wo_overlap,
-                    "n_overlap": n_overlapping_notes,
                 })
                 
         # compute for each constraint the number of examples, min max mean and median for n_notes, n_notes_wo_overlap and n_overlap
@@ -173,18 +173,18 @@ def main():
     # load records
     gt_records_df = pd.read_csv(ground_truth_dir / "ground_truth_records.csv")
 
-    for constraint in constraints.keys():
-        constraint_records = gt_records_df[gt_records_df["constraint"] == constraint]
-        n_notes = constraint_records["n_notes"]
-        n_notes_wo_overlap = constraint_records["n_notes_wo_overlap"]
-        n_overlap = constraint_records["n_overlap"]
+    # for constraint in constraints.keys():
+    #     constraint_records = gt_records_df[gt_records_df["constraint"] == constraint]
+    #     n_notes = constraint_records["n_notes"]
+    #     n_notes_wo_overlap = constraint_records["n_notes_wo_overlap"]
+    #     n_overlap = constraint_records["n_overlap"]
 
-        print(f"Constraint: {constraint}")
-        print(f"Number of examples: {len(constraint_records)}")
-        print(f"n_notes: min={n_notes.min()}, max={n_notes.max()}, mean={n_notes.mean()}, median={n_notes.median()}")
-        print(f"n_notes_wo_overlap: min={n_notes_wo_overlap.min()}, max={n_notes_wo_overlap.max()}, mean={n_notes_wo_overlap.mean()}, median={n_notes_wo_overlap.median()}")
-        print(f"n_overlap: min={n_overlap.min()}, max={n_overlap.max()}, mean={n_overlap.mean()}, median={n_overlap.median()}")
-        print()
+    #     print(f"Constraint: {constraint}")
+    #     print(f"Number of examples: {len(constraint_records)}")
+    #     print(f"n_notes: min={n_notes.min()}, max={n_notes.max()}, mean={n_notes.mean()}, median={n_notes.median()}")
+    #     print(f"n_notes_wo_overlap: min={n_notes_wo_overlap.min()}, max={n_notes_wo_overlap.max()}, mean={n_notes_wo_overlap.mean()}, median={n_notes_wo_overlap.median()}")
+    #     print(f"n_overlap: min={n_overlap.min()}, max={n_overlap.max()}, mean={n_overlap.mean()}, median={n_overlap.median()}")
+    #     print()
 
     # now render examples with each model
 
@@ -192,36 +192,41 @@ def main():
         # for each constraint, generate examples and save under model/contraint_name directory
         model = setup_model(CHECKPOINTS[model_name], device)
         system_name = f"{model_name}_order={ORDER}_t={TEMPERATURE}"
-        generation_records = []
         for constraint_name, e in constraints.items():
             task_dir = output_dir / system_name / constraint_name
             task_dir.mkdir(parents=True, exist_ok=True)
-
+            # get list of ground_truth example midi files
+            n_note_per_example = gt_records_df[gt_records_df["constraint"] == constraint_name]["n_notes"].tolist()
+            generation_records = []
             for i in tqdm(range(n_examples)):
-                print(f"Generating example {i+1}/{n_examples}")
-                mask = model.tokenizer.event_constraints_to_mask(e).to(device)
-                x = model.generate(
-                    mask,
-                    temperature=TEMPERATURE,
-                    top_p=1.0,
-                    top_k=0,
-                    tokens_per_step=1,
-                    order=ORDER,
-                )[0].argmax(-1)
-                x_sm = model.tokenizer.decode(x)
-                n_notes_w_overlap = x_sm.note_num()
-                x_sm = sm_fix_overlap_notes(x_sm)
-                n_notes_wo_overlap = x_sm.note_num()
-                sm_set_track_order(x_sm).dump_midi(task_dir / f"generated_{i}.mid")
-                generation_records.append({
-                    "model": model_name,
-                    "system_name": system_name,
-                    "constraint": constraint_name,
-                    "example_index": i,
-                    "n_notes_w_overlap": n_notes_w_overlap,
-                    "n_notes_wo_overlap": n_notes_wo_overlap,
-                    "n_overlap": n_notes_w_overlap - n_notes_wo_overlap,
-                })
+                try:
+                    # get n_notes from gt records for constraint
+                    n_events = 300
+                    n_notes = n_note_per_example[i]
+                    e_bis = [e[0].copy().force_active() for _ in range(n_notes)]
+                    e_bis += [e[1].copy().force_inactive() for _ in range(n_events - len(e_bis))]
+                    print(f"Generating example {i+1}/{n_examples}")
+                    mask = model.tokenizer.event_constraints_to_mask(e_bis).to(device)
+                    x = model.generate(
+                        mask,
+                        temperature=TEMPERATURE,
+                        top_p=1.0,
+                        top_k=0,
+                        tokens_per_step=1,
+                        order=ORDER,
+                        collapse_duplicates=COLLAPSE_DUPLICATES,
+                    )[0].argmax(-1)
+                    x_sm = model.tokenizer.decode(x)
+                    sm_set_track_order(x_sm).dump_midi(task_dir / f"generated_{i}.mid")
+                    generation_records.append({
+                        "model": model_name,
+                        "system_name": system_name,
+                        "constraint": constraint_name,
+                        "example_index": i,
+                    })
+                except Exception as error:
+                    print(f"Error: {error}")
+                    print(f"Generating example {i+1}/{n_examples} failed for {model_name} with constraint {constraint_name}")
             # write generation records
             df = pd.DataFrame(generation_records)
             df.to_csv(task_dir / "generation_records.csv", index=False)
