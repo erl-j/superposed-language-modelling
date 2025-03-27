@@ -427,8 +427,6 @@ if __name__ == "__main__":
             "midi_types": ["loop", "random_crop"] if USE_RANDOM_CROPS else [],
         }
 
-
-
         USE_RANDOM_SHIFT = False
         tokenizer = Tokenizer(tokenizer_config)
 

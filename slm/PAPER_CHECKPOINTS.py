@@ -35,7 +35,10 @@ CHECKPOINTS = {
     # "slm_mixed_ratio_w_shared": "checkpoints/lilac-paper-676/last.ckpt"
     # "slm_sparse_sup_50":"checkpoints/different-firefly-705/every25/epoch=49-step=189050-val/accuracy@1=0.94235.ckpt",
     # "slm_sparse_sup_150": "checkpoints/different-firefly-705/every25/epoch=149-step=567150-val/accuracy@1=0.94588.ckpt"
+
 }
+
+
 
 import glob
 # if checkpoints is in parent directory, change checkpoints to ../checkpoints

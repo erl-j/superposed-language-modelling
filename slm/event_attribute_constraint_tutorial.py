@@ -117,6 +117,29 @@ random.seed(SEED)
 torch.manual_seed(SEED)
 torch.cuda.manual_seed_all(SEED)
 
+#%%
+
+# 2 Constrained generation
+# 2.1 unconditional
+# 2.2 global information
+# 2.3 instrumentation
+# 2.4 pitch
+# 2.5 rhythm
+# 2.6 duration
+# 2.7 velocity
+# 2.8 combining constraints across multiple attributes
+# 2.9 Using attribute specific sampling parameters
+# 3 Editing
+# 3.1 Replace notes in time
+# 3.2 Replace notes in a pitch range
+# 3.3 Replace notes in a box
+# 3.4 Adding dynamics
+# 3.5 Modifying timing
+# 3.6 Replacing pitches
+# 3.7 How weird is a constraint?
+
+# 
+
 
 #%% Drums bass and guitar
 
@@ -139,6 +162,33 @@ e = create_constraint([], ec)
 
 sm = generate_from_constraints(e, {"topp":0.95})
 
+print(f"Number of notes: {sm.note_num()}")
+preview_sm(sm)
+
+#%%
+
+def create_constraint(e, ec):
+
+    # add 12 kicks
+    e = [ec().intersect({"instrument": {"Drums"}, "pitch": {"36 (Drums)"}}).force_active() for i in range(12)]
+    # add 4 snares
+    e += [ec().intersect({"instrument": {"Drums"}, "pitch": {"38 (Drums)"}}).force_active() for i in range(4)]
+    # add some low velocity hihats
+    e += [ec().intersect({"instrument": {"Drums"}, "pitch": HIHAT_PITCHES}).intersect(ec().velocity_constraint(30)).force_active() for i in range(8)]
+    # add some high velocity hihats
+    e += [ec().intersect({"instrument": {"Drums"}, "pitch": HIHAT_PITCHES}).intersect(ec().velocity_constraint(100)).force_active() for i in range(8)]
+    # add 4 toms
+    e += [ec().intersect({"instrument": {"Drums"}, "pitch": TOM_PITCHES}).force_active() for i in range(4)]
+    
+    # set tempo to 130
+    e = [ev.intersect(ec().tempo_constraint(130)) for ev in e]
+
+    # pad with inactive notes
+    e += [ec().force_inactive() for _ in range(N_EVENTS - len(e))]
+    return e
+
+e = create_constraint([], ec)
+sm = generate_from_constraints(e, {"temperature": 1.0})
 print(f"Number of notes: {sm.note_num()}")
 preview_sm(sm)
 
@@ -255,6 +305,28 @@ preview_sm(sm)
 
 #%%
 
+# create 4 on the floor
+def create_constraint(e, ec):
+    # kicks on every beat
+    kick_onset_ticks = {str(t) for t in range(0, 24*16, 24)}
+    e = [ec().intersect({"instrument": {"Drums"}, "pitch": {"36 (Drums)"}, "onset/global_tick": kick_onset_ticks}).force_active() for i in range(16)]
+    # add 32 hihats
+    e += [ec().intersect({"instrument": {"Drums"}, "pitch": HIHAT_PITCHES}).force_active() for i in range(32)]
+    # add 16 snares
+    e += [ec().intersect({"instrument": {"Drums"}, "pitch": {"38 (Drums)"}}).force_active() for i in range(16)]
+    # pad with inactive notes
+    e += [ec().force_inactive() for _ in range(N_EVENTS - len(e))]
+    return e
+
+e = create_constraint([], ec)
+sm = generate_from_constraints(e, {"temperature": 1.0})
+print(f"Number of notes: {sm.note_num()}")
+preview_sm(sm)
+
+
+
+#%%
+
 def create_constraint(e, ec):
     # lets make some muted guitar lines
     n_events = ec().get_n_events()
@@ -330,8 +402,6 @@ print(f"Number of notes: {sm.note_num()}")
 preview_sm(sm)
                                          
 
-
-
 #%% Drums bass and guitar with duration control
 
 def create_constraint(e, ec):
@@ -406,7 +476,7 @@ def create_constraint(e, ec):
 
 e = create_constraint([], ec)
 
-sm = generate_from_constraints(e, {"temperature": 1.2})
+sm = generate_from_constraints(e, {"temperature": 0.95})
 
 print(f"Number of notes: {sm.note_num()}")
 preview_sm(sm)

@@ -20,8 +20,10 @@ from joblib import Parallel, delayed
 # Number of examples to generate per task
 N_EXAMPLES = 250
 GENERATE = True
-ORDER = "random"
+ORDER = "left_to_right_reverse"
 RENDER_GROUND_TRUTH = False
+SET_N_NOTES = True
+DEVICES = [4,4,4,4]
 
 
 OUTPUT_DIR = Path("./artefacts/constrained_generation_2")
@@ -63,7 +65,6 @@ def main():
     random.seed(SEED)
     np.random.seed(SEED)
 
-    DEVICES = [2,3,4,5]
     FILTER_DEVICE = DEVICES[0]
 
     models = ["slm_mixed_150epochs", "slm_sparse_150epochs", "slm_full_150epochs", "mlm_150epochs"]
@@ -89,7 +90,6 @@ def main():
 
     TEMPERATURE = 1.0
     COLLAPSE_DUPLICATES = True
-    ORDER = "random"
 
     constraints = {
         "piano" : [ ec().intersect({"instrument": {"Piano", "-"}}) for _ in range(N_EVENTS) ],
@@ -191,7 +191,7 @@ def main():
     def render_examples_with_model(model_name, constraints, output_dir, n_examples, device):
         # for each constraint, generate examples and save under model/contraint_name directory
         model = setup_model(CHECKPOINTS[model_name], device)
-        system_name = f"{model_name}_order={ORDER}_t={TEMPERATURE}"
+        system_name = f"{model_name}_order={ORDER}_t={TEMPERATURE}_set_n_notes={SET_N_NOTES}"
         for constraint_name, e in constraints.items():
             task_dir = output_dir / system_name / constraint_name
             task_dir.mkdir(parents=True, exist_ok=True)
@@ -201,10 +201,13 @@ def main():
             for i in tqdm(range(n_examples)):
                 try:
                     # get n_notes from gt records for constraint
-                    n_events = 300
-                    n_notes = n_note_per_example[i]
-                    e_bis = [e[0].copy().force_active() for _ in range(n_notes)]
-                    e_bis += [e[1].copy().force_inactive() for _ in range(n_events - len(e_bis))]
+                    if SET_N_NOTES:
+                        n_events = 300
+                        n_notes = n_note_per_example[i]
+                        e_bis = [e[0].copy().force_active() for _ in range(n_notes)]
+                        e_bis += [e[1].copy().force_inactive() for _ in range(n_events - len(e_bis))]
+                    else:
+                        e_bis = e
                     print(f"Generating example {i+1}/{n_examples}")
                     mask = model.tokenizer.event_constraints_to_mask(e_bis).to(device)
                     x = model.generate(

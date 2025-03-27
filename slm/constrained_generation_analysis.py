@@ -7,7 +7,8 @@ import rich
 import os
 from tqdm import tqdm
 import pandas as pd
-
+import matplotlib.pyplot as plt
+import seaborn as sns
 #%%
 path = "../artefacts/constrained_generation_2"
 midi_paths = glob.glob(f"{path}/**/*.mid", recursive=True)
@@ -58,7 +59,7 @@ if COMPUTE_FMD:
 
     fmd_df = pd.DataFrame(fmd_records)
     # save the dataframe
-    fmd_df.to_csv(f"{path}/fmd.csv", index=False)
+    fmd_df.to_csv(f"{path}/fmd2.csv", index=False)
 
 
 #%%
@@ -67,10 +68,10 @@ if COMPUTE_FMD:
 
 #%%
 # load csv
-fmd_df = pd.read_csv(f"{path}/fmd.csv")
+fmd_df = pd.read_csv(f"{path}/fmd2.csv")
 
 # Optional: filter systems if you want to uncomment this
-fmd_df = fmd_df[fmd_df["system_name"].str.contains("mlm|slm_mixed")]
+
 
 # Identify ground truth examples - assuming they're marked by "ground_truth" in system_name
 ground_truth_df = df[df["system_name"] == "ground_truth"]
@@ -101,23 +102,111 @@ n_tasks = len(fmd_df["task_name"].unique())
 # show line plot of fmd for each system across tasks, with tasks sorted by example count
 plt.figure(figsize=(20, 5))
 
-# Use sorted_tasks for the order parameter to control task ordering on x-axis
-sns.lineplot(
-    data=fmd_df, 
-    x="task_name", 
+# # Use sorted_tasks for the order parameter to control task ordering on x-axis
+# sns.lineplot(
+#     data=fmd_df, 
+#     x="task_name", 
+#     y="fmd", 
+#     hue="system_name", 
+# )
+
+# plt.title("FMD by System and Task (Tasks Sorted by Ground Truth Example Count)")
+# plt.xticks(rotation=45)
+# plt.tight_layout()
+# plt.show()
+
+
+#%%
+
+task_name_to_display_name = {
+    "c major pitch set": "pitch: C major",
+    "c pentatonic": "pitch: C pentatonic",
+    "1 d 16 notes": "onset: 16th notes",
+    "1 d 8 notes": "onset: 8th notes",
+    "1 d 4 notes": "onset: quarter notes",
+    "1 d 2 notes": "onset: half notes",
+    "guitar": "instr: guitar",
+    "piano": "instr: piano",
+    "drum_and_bass": "instr: drum and bass",
+    "drum_and_bass_and_guitar": "instr: drums, bass, guitar",
+    "drum_and_bass_and_piano": "instr: drum and bass and piano and guitar",
+    "drums": "instr: drums",
+}
+
+fmd_df["display_task_name"] = fmd_df["task_name"].apply(lambda x: task_name_to_display_name[x])
+fmd_df["task_type"] = fmd_df["display_task_name"].apply(lambda x: x.split(":")[0])
+
+
+#%%
+
+
+
+# show bar plot of fmd for each system across tasks, with tasks sorted by task type and example count
+plt.figure(figsize=(20, 5))
+
+fmd_df = fmd_df.sort_values(by=["system_name","task_type" ], ascending=[True, False])
+
+# only consider systems that have mlm or mixed in their name
+fmd_df = fmd_df[fmd_df["system_name"].str.contains("mlm|mixed")]
+
+# filter away rows where system_name contains "set_n_notes"
+fmd_df_set_n_notes = fmd_df[~fmd_df["system_name"].str.contains("set_n_notes")]
+
+
+
+
+sns.barplot(
+    data=fmd_df_set_n_notes, 
+    x="display_task_name", 
     y="fmd", 
     hue="system_name", 
 )
-
-plt.title("FMD by System and Task (Tasks Sorted by Ground Truth Example Count)")
+plt.title("FMD w.r.t. to ground truth, fixed number of active events")
 plt.xticks(rotation=45)
 plt.tight_layout()
 plt.show()
 
+# now filter away rows where system_name does not contain "set_n_notes"
+fmd_df_not_set_n_notes = fmd_df[fmd_df["system_name"].str.contains("set_n_notes")]
+
+plt.figure(figsize=(20, 5))
+sns.barplot(
+    data=fmd_df_not_set_n_notes, 
+    x="display_task_name", 
+    y="fmd", 
+    hue="system_name", 
+)
+plt.title("FMD w.r.t. to ground truth, no fixed number of active events")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+
 #%%
 
-# add task type to fmd_df
+# print unique tasks
+print(fmd_df["task_name"].unique())
 
+#%%
+
+task_types = fmd_df["task_type"].unique()
+n_task_types = len(task_types)
+
+plt.figure(figsize=(20, 5))
+
+for i, task_type in enumerate(task_types):
+    plt.subplot(1, n_task_types, i+1)
+    data = fmd_df[fmd_df["task_type"] == task_type]
+    sns.lineplot(
+        data=data, 
+        x="display_task_name", 
+        y="fmd", 
+        hue="system_name", 
+    )
+    plt.title(task_type)
+    plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
 
 #%% print scatter plot with x being fmd, y being how many ground truth examples exist for that task
 # colour denotes system
@@ -128,12 +217,16 @@ import seaborn as sns
 task_to_count = {task: count for task, count in zip(sorted_tasks, [task_counts[task] for task in sorted_tasks])}
 fmd_df["n_ground_truth"] = fmd_df["task_name"].apply(lambda x: task_to_count[x])
 
+import math
+fmd_df["log_n_ground_truth"] = fmd_df["n_ground_truth"].apply(lambda x: math.log(x))
+# log scale for x-axis
 plt.figure(figsize=(10, 10))
 sns.scatterplot(
     data=fmd_df, 
     y="fmd", 
-    x="n_ground_truth", 
-    hue="system_name"
+    x="log_n_ground_truth", 
+    hue="system_name",
+
 )
 plt.title("FMD vs Number of Ground Truth Examples")
 plt.show()
