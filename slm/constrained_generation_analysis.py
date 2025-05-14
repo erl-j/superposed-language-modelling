@@ -18,8 +18,6 @@ records = [{"path": path, "score": symusic.Score(path)} for path in tqdm(midi_pa
 
 df = pd.DataFrame(records)
 
-
-
 # %%
 # print first path
 # split the path by '/'. <system_name>/<task_name>/<midi_file_name>
@@ -46,6 +44,19 @@ if COMPUTE_FMD:
     for system in df["system_name"].unique():
         for task in df["task_name"].unique():
             print(f"System: {system}, Task: {task}")
+
+            # check if test path has .mid files
+            # Check if test path has .mid files
+            test_path = f"{path}/{system}/{task}"
+            if not os.path.exists(test_path):
+                print(f"Skipping {test_path} - path does not exist")
+                continue
+                
+            test_midi_files = glob.glob(f"{test_path}/*.mid")
+            if len(test_midi_files) == 0:
+                print(f"Skipping {test_path} - no MIDI files found")
+                continue
+            
             score = metric.score(
                 reference_path=f"{path}/ground_truth/{task}",
                 test_path=f"{path}/{system}/{task}"
@@ -59,41 +70,40 @@ if COMPUTE_FMD:
 
     fmd_df = pd.DataFrame(fmd_records)
     # save the dataframe
-    fmd_df.to_csv(f"{path}/fmd2.csv", index=False)
-
-
-#%%
-# save the fmd records to a dataframe
-
+    fmd_df.to_csv(f"{path}/fmd3.csv", index=False)
 
 #%%
 # load csv
-fmd_df = pd.read_csv(f"{path}/fmd2.csv")
+fmd_df = pd.read_csv(f"{path}/fmd3.csv")
+
+# print columns
+print(fmd_df.columns)
+#%%
 
 # Optional: filter systems if you want to uncomment this
 
 
-# Identify ground truth examples - assuming they're marked by "ground_truth" in system_name
-ground_truth_df = df[df["system_name"] == "ground_truth"]
+# # Identify ground truth examples - assuming they're marked by "ground_truth" in system_name
+# ground_truth_df = df[df["system_name"] == "ground_truth"]
 
-# Count examples per task
-# how many ground truth examples exist for each task
-task_counts = ground_truth_df["task_name"].value_counts().to_dict()
+# # Count examples per task
+# # how many ground truth examples exist for each task
+# task_counts = ground_truth_df["task_name"].value_counts().to_dict()
 
-print(task_counts)
+# print(task_counts)
 
 
-# Get task names sorted by their count in ground truth
-sorted_tasks = sorted(task_counts.keys(), key=lambda x: task_counts[x], reverse=True)
+# # Get task names sorted by their count in ground truth
+# sorted_tasks = sorted(task_counts.keys(), key=lambda x: task_counts[x], reverse=True)
 
 ## sort the fmd_df by the sorted tasks
-fmd_df = fmd_df.set_index("task_name").loc[sorted_tasks].reset_index()
+# fmd_df = fmd_df.set_index("task_name").loc[sorted_tasks].reset_index()
 
 
 
-# For debugging: print tasks and their counts
-for task in sorted_tasks:
-    print(f"Task: {task}, Count: {task_counts[task]}")
+# # For debugging: print tasks and their counts
+# for task in sorted_tasks:
+#     print(f"Task: {task}, Count: {task_counts[task]}")
 
 # Use these sorted tasks for the plot
 n_systems = len(fmd_df["system_name"].unique())
@@ -116,7 +126,6 @@ plt.figure(figsize=(20, 5))
 # plt.show()
 
 
-#%%
 
 task_name_to_display_name = {
     "c major pitch set": "pitch: C major",
@@ -137,7 +146,8 @@ fmd_df["display_task_name"] = fmd_df["task_name"].apply(lambda x: task_name_to_d
 fmd_df["task_type"] = fmd_df["display_task_name"].apply(lambda x: x.split(":")[0])
 
 
-#%%
+
+
 
 
 
@@ -148,6 +158,12 @@ fmd_df = fmd_df.sort_values(by=["system_name","task_type" ], ascending=[True, Fa
 
 # only consider systems that have mlm or mixed in their name
 fmd_df = fmd_df[fmd_df["system_name"].str.contains("mlm|mixed")]
+# filter away systems that have =False in them
+fmd_df = fmd_df[~fmd_df["system_name"].str.contains("=False")]
+# print unique system names
+print("Unique system names:")
+print(fmd_df["system_name"].unique())
+
 
 # filter away rows where system_name contains "set_n_notes"
 fmd_df_set_n_notes = fmd_df[~fmd_df["system_name"].str.contains("set_n_notes")]

@@ -18,20 +18,21 @@ import symusic
 from joblib import Parallel, delayed
 
 # Number of examples to generate per task
-N_EXAMPLES = 10
+N_EXAMPLES = 1000
 GENERATE = True
-ORDER = "left_to_right_reverse"
+# List of sampling orders to iterate over
+SAMPLING_ORDERS = ["left_to_right", "left_to_right_reverse", "random"]
+# List of SET_N_NOTES values to iterate over
+SET_N_NOTES_VALUES = [True, False]
 RENDER_GROUND_TRUTH = True
-SET_N_NOTES = True
-DEVICES = [4,4,4,4]
+DEVICES = [4,5,6,7]
 
-
-OUTPUT_DIR = Path("./artefacts/constrained_generation_3")
+OUTPUT_DIR = Path("./artefacts/constrained_generation_4")
 
 def setup_model(checkpoint_path, device):
     """Load and set up the model."""
     print(f"Loading model from {checkpoint_path}...")
-    model = TrainingWrapper.load_from_checkpoint(checkpoint_path, map_location=device)
+    model = TrainingWrapper.load_from_checkpoint(checkpoint_path, map_location=device, weights_only=False)
     model.eval()
     return model
 
@@ -69,6 +70,8 @@ def main():
 
     models = ["slm_mixed_150epochs", "slm_sparse_150epochs", "slm_full_150epochs", "mlm_150epochs"]
 
+    TEMPERATURE = 1.0
+    COLLAPSE_DUPLICATES = True
 
     # Create output directory if it doesn't exist
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -88,9 +91,6 @@ def main():
     n_beats = 16
     tpq = tokenizer.config["ticks_per_beat"]
 
-    TEMPERATURE = 1.0
-    COLLAPSE_DUPLICATES = True
-
     constraints = {
         "piano" : [ ec().intersect({"instrument": {"Piano", "-"}}) for _ in range(N_EVENTS) ],
         "drum_and_bass_and_guitar" : [ ec().intersect({"instrument": {"Drums", "Bass", "Guitar","-"}}) for _ in range(N_EVENTS) ],
@@ -107,7 +107,6 @@ def main():
     }
 
     if RENDER_GROUND_TRUTH:
-
         test_dataset = load_test_dataset(first_model.tokenizer)
 
         filter_batch_size = 100
@@ -158,40 +157,25 @@ def main():
                 # load midi file
                 sm = symusic.Score(midi_file)
                 n_notes = sm.note_num()
-                # get number of overlapping notes
                 # add record
                 gt_records.append({
                     "constraint": constraint_name,
-                    "midi_file_path": midi_file,
+                    "midi_file_path": str(midi_file),
                     "n_notes": n_notes,
                 })
                 
-        # compute for each constraint the number of examples, min max mean and median for n_notes, n_notes_wo_overlap and n_overlap
+        # compute for each constraint the number of examples, min max mean and median for n_notes
         gt_records_df = pd.DataFrame(gt_records)
         gt_records_df.to_csv(ground_truth_dir / "ground_truth_records.csv", index=False)
 
     # load records
     gt_records_df = pd.read_csv(ground_truth_dir / "ground_truth_records.csv")
 
-    # for constraint in constraints.keys():
-    #     constraint_records = gt_records_df[gt_records_df["constraint"] == constraint]
-    #     n_notes = constraint_records["n_notes"]
-    #     n_notes_wo_overlap = constraint_records["n_notes_wo_overlap"]
-    #     n_overlap = constraint_records["n_overlap"]
-
-    #     print(f"Constraint: {constraint}")
-    #     print(f"Number of examples: {len(constraint_records)}")
-    #     print(f"n_notes: min={n_notes.min()}, max={n_notes.max()}, mean={n_notes.mean()}, median={n_notes.median()}")
-    #     print(f"n_notes_wo_overlap: min={n_notes_wo_overlap.min()}, max={n_notes_wo_overlap.max()}, mean={n_notes_wo_overlap.mean()}, median={n_notes_wo_overlap.median()}")
-    #     print(f"n_overlap: min={n_overlap.min()}, max={n_overlap.max()}, mean={n_overlap.mean()}, median={n_overlap.median()}")
-    #     print()
-
-    # now render examples with each model
-
-    def render_examples_with_model(model_name, constraints, output_dir, n_examples, device):
-        # for each constraint, generate examples and save under model/contraint_name directory
+    # now render examples with each model, sampling order, and SET_N_NOTES setting
+    def render_examples_with_model(model_name, constraints, output_dir, n_examples, device, order, set_n_notes):
+        # for each constraint, generate examples and save under model/constraint_name directory
         model = setup_model(CHECKPOINTS[model_name], device)
-        system_name = f"{model_name}_order={ORDER}_t={TEMPERATURE}_set_n_notes={SET_N_NOTES}"
+        system_name = f"{model_name}_order={order}_t={TEMPERATURE}_set_n_notes={set_n_notes}"
         for constraint_name, e in constraints.items():
             task_dir = output_dir / system_name / constraint_name
             task_dir.mkdir(parents=True, exist_ok=True)
@@ -201,14 +185,14 @@ def main():
             for i in tqdm(range(n_examples)):
                 try:
                     # get n_notes from gt records for constraint
-                    if SET_N_NOTES:
+                    if set_n_notes and i < len(n_note_per_example):
                         n_events = 300
                         n_notes = n_note_per_example[i]
                         e_bis = [e[0].copy().force_active() for _ in range(n_notes)]
                         e_bis += [e[1].copy().force_inactive() for _ in range(n_events - len(e_bis))]
                     else:
                         e_bis = e
-                    print(f"Generating example {i+1}/{n_examples}")
+                    print(f"Generating example {i+1}/{n_examples} for {model_name}, order={order}, set_n_notes={set_n_notes}, constraint={constraint_name}")
                     mask = model.tokenizer.event_constraints_to_mask(e_bis).to(device)
                     x = model.generate(
                         mask,
@@ -216,7 +200,7 @@ def main():
                         top_p=1.0,
                         top_k=0,
                         tokens_per_step=1,
-                        order=ORDER,
+                        order=order,
                         collapse_duplicates=COLLAPSE_DUPLICATES,
                     )[0].argmax(-1)
                     x_sm = model.tokenizer.decode(x)
@@ -226,6 +210,8 @@ def main():
                         "system_name": system_name,
                         "constraint": constraint_name,
                         "example_index": i,
+                        "order": order,
+                        "set_n_notes": set_n_notes
                     })
                 except Exception as error:
                     print(f"Error: {error}")
@@ -234,24 +220,44 @@ def main():
             df = pd.DataFrame(generation_records)
             df.to_csv(task_dir / "generation_records.csv", index=False)
             
-    GENERATE = True
-    # Generate examples for each model
+    # Generate examples for each model, sampling order, and SET_N_NOTES setting
     if GENERATE:
         # Create arguments for each job
-        args = [
-            (model, constraints, OUTPUT_DIR, N_EXAMPLES, f"cuda:{DEVICES[i % len(DEVICES)]}")
-            for i, model in enumerate(models)
-        ]
+        args = []
+        job_idx = 0
+        for model in models:
+            for order in SAMPLING_ORDERS:
+                for set_n_notes in SET_N_NOTES_VALUES:
+                    args.append((model, constraints, OUTPUT_DIR, N_EXAMPLES, 
+                                f"cuda:{DEVICES[job_idx % len(DEVICES)]}", order, set_n_notes))
+                    job_idx += 1
 
-        # Run jobs in parallel
-        Parallel(n_jobs=len(models), prefer="threads")(
-            delayed(render_examples_with_model)(model, constraints, OUTPUT_DIR, N_EXAMPLES, device)
-            for i, (model, constraints, OUTPUT_DIR, N_EXAMPLES, device) in enumerate(args)
+        # Run jobs in parallel with a limited number of jobs at once to prevent GPU memory issues
+        n_parallel_jobs = len(DEVICES)  # Adjust based on available GPU memory
+        Parallel(n_jobs=n_parallel_jobs, prefer="threads")(
+            delayed(render_examples_with_model)(model, constraints, OUTPUT_DIR, N_EXAMPLES, device, order, set_n_notes)
+            for model, constraints, OUTPUT_DIR, N_EXAMPLES, device, order, set_n_notes in args
         )
 
         print("All model generation complete!")
 
+        # Create a summary DataFrame of all configurations
+        all_records = []
+        for root, dirs, files in os.walk(OUTPUT_DIR):
+            for file in files:
+                if file == "generation_records.csv":
+                    file_path = os.path.join(root, file)
+                    try:
+                        df = pd.read_csv(file_path)
+                        all_records.append(df)
+                    except Exception as e:
+                        print(f"Error reading {file_path}: {e}")
+
+        if all_records:
+            combined_df = pd.concat(all_records, ignore_index=True)
+            combined_df.to_csv(OUTPUT_DIR / "all_generation_records.csv", index=False)
+            print(f"Summary report saved to {OUTPUT_DIR / 'all_generation_records.csv'}")
+
 
 if __name__ == "__main__":
     main()
-# %%

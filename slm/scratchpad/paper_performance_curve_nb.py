@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 from data import MidiDataset
-from slm.train_old import EncoderOnlyModel
+from model import SuperposedLanguageModel
 from util import preview
 import os
 import IPython.display as ipd
@@ -11,13 +11,10 @@ from slm.PAPER_CHECKPOINTS import checkpoints
 import torch
 import einops
 import random
-
 device = "cuda:3"
 ROOT_DIR = "../"
-
-
 mlm = (
-    EncoderOnlyModel.load_from_checkpoint(
+    SuperposedLanguageModel.load_from_checkpoint(
         ROOT_DIR + checkpoints["mlm"],
         map_location=device,
     )
@@ -25,18 +22,14 @@ mlm = (
     .eval()
 )
 mlm.enforce_constraint_in_forward = True
-
-
 slm = (
-    EncoderOnlyModel.load_from_checkpoint(
+    SuperposedLanguageModel.load_from_checkpoint(
         ROOT_DIR + checkpoints["slm"],
         map_location=device,
     )
     .to(device)
     .eval()
 )
-
-
 #%%
 N_BARS = 4
 # Load the dataset

@@ -87,8 +87,8 @@ class SuperposedLanguageModel(torch.nn.Module):
         Input:
             x: Input tensor of shape (batch_size, events, attributes, vocab_size)
         """
-        # first, if more than 1 non zero token is present
-        mask = (x.sum(-1) > 1).float()
+        # check if more than 1 non value is present in last dimension
+        mask = ((x > 0).sum(dim=-1) > 1).float()
         # multiply with x
         x_masked = x * (1 - mask[..., None])
         # add mask channel at the end
@@ -96,7 +96,7 @@ class SuperposedLanguageModel(torch.nn.Module):
         # assert that every column sums to one
         assert torch.allclose(x_masked.sum(-1), torch.ones_like(x_masked[..., 0]))
         # pass through transformer
-        logits = self(x_masked)
+        logits = self.mlm_forward(x_masked)
         return logits
     
     def get_device(self):
@@ -104,7 +104,7 @@ class SuperposedLanguageModel(torch.nn.Module):
     
     @torch.no_grad()
     @torch.inference_mode()
-    def conditional_log_likelihood(self, target, constraint):
+    def conditional_log_likelihood(self, target, constraint, enforce_constraint=True):
         """
         Compute conditional likelihood of a sequence given a constraint.
         Input:
@@ -115,7 +115,7 @@ class SuperposedLanguageModel(torch.nn.Module):
         target = target.to(self.get_device())
         constraint = constraint.to(self.get_device())
         # collapse undefined attributes
-        constraint = self.tokenizer.collapse_undefined_attributes(constraint)
+        # constraint = self.tokenizer.collapse_undefined_attributes(constraint)
         # normalize constraint
         constraint = constraint / constraint.sum(dim=-1, keepdim=True)
         with torch.no_grad():
@@ -123,22 +123,14 @@ class SuperposedLanguageModel(torch.nn.Module):
                 logits = self.mlm_forward_from_constraint(constraint)
             else:
                 logits = self.slm_forward(constraint)
-        # target logits
-        target_logits = (target * logits).sum(dim=-1)
         probs = F.softmax(logits, dim=-1)
-        # add epsilon to avoid log(0)
-        # add eps
-        probs = probs * constraint
+        if enforce_constraint:
+            probs = probs * constraint
         probs = probs / probs.sum(dim=-1, keepdim=True)
-        # add eps
-        # get log likelihood
         target_probs = (target * probs).sum(dim=-1)
-        # assert that target probs sums to one 
-        # count zeros in target probs
-        n_zeros = torch.sum(target_probs == 0)
-        # mean prob
-        # add eps
-        log_likelihood = torch.log(target_probs + self.eps).sum()
+        is_known = (target > 0).sum(dim=-1) > 0
+
+        log_likelihood = torch.log(target_probs + self.eps).mean()
         return log_likelihood
 
     @torch.no_grad()

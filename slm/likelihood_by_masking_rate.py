@@ -6,23 +6,24 @@ import matplotlib.pyplot as plt
 from train import TrainingWrapper
 from data import MidiDataset
 import pandas as pd
-from slm.PAPER_CHECKPOINTS import CHECKPOINTS
+from PAPER_CHECKPOINTS import CHECKPOINTS
 from tqdm import tqdm
-from masking import random_superposition
+from masking import simple_superposition,random_superposition
 
 # Configuration
 DEVICE = "cuda:2" if torch.cuda.is_available() else "cpu"
-SEED = 42
+SEED = 0
 
+ENFORCE_CONSTRAINT = True
 # Analysis parameters
-N_EXAMPLES = 40  # Number of examples to analyze
-SUPERPOSITION_RATIOS = [0.0, 0.25, 0.5, 0.75, 1.0]  # Levels of superposition to test
+N_EXAMPLES = 60  # Number of examples to analyze
+SUPERPOSITION_RATIOS = [0.0, 0.5, 0.9, ]  # Levels of superposition to test
 N_MASKING_RATIOS = 21  # Number of masking ratio points (0% to 100%)
-OUTPUT_DIR = Path("./analysis_results")
+OUTPUT_DIR = Path("./analysis_results_3")
 
 
 def setup_model(checkpoint_path):
-    model = TrainingWrapper.load_from_checkpoint(checkpoint_path, map_location=DEVICE)
+    model = TrainingWrapper.load_from_checkpoint(checkpoint_path, map_location=DEVICE, weights_only=False)
     model.eval()
     return model
 
@@ -43,6 +44,7 @@ def load_test_dataset(tokenizer):
         max_notes=tokenizer.config["max_notes"],
         use_random_shift=False,
         sm_filter_fn=sm_filter_fn,
+        n_bars=4,
     )
     return test_ds
 
@@ -51,11 +53,13 @@ def analyze_model(model_name, checkpoint_path, x):
 
     # Setup
     model = setup_model(checkpoint_path)
-    masking_ratios = np.linspace(0, 1, N_MASKING_RATIOS)  # 0% to 100%
+    masking_ratios = np.linspace(0, 1.0, N_MASKING_RATIOS)  # 0% to 100%
 
     x = torch.nn.functional.one_hot(x, model.model.vocab_size).float()
     # Move to device
     x = x.to(DEVICE)
+
+    print(x.shape)
 
     results = []
 
@@ -66,20 +70,17 @@ def analyze_model(model_name, checkpoint_path, x):
         for superposition_ratio in tqdm(
             SUPERPOSITION_RATIOS, desc="Superposition ratios"
         ):  
-            
+            print(superposition_ratio)
             # set random seed
             torch.manual_seed(SEED)
             # Create superposition mask
-            superposition_mask = random_superposition(x, syntax_mask = model.syntax_mask, ratio=superposition_ratio)
-
-            # Initialize position mask (where we'll progressively add ones)
-            position_mask = torch.zeros(
-                batch_size, n_events, n_attributes, 1, device=DEVICE
-            )
+            
+            superposition_mask = random_superposition(x, syntax_mask = model.syntax_mask, mode="variable_rate", ratio=superposition_ratio)
 
             for masking_ratio in tqdm(
                 masking_ratios, desc="Masking ratios", leave=False
             ):
+                print(f"Masking ratio: {masking_ratio}")
                 # Update position mask
                 position_mask = torch.rand(
                     batch_size, n_events, n_attributes, 1, device=DEVICE
@@ -89,10 +90,13 @@ def analyze_model(model_name, checkpoint_path, x):
 
                 prior = torch.clamp(x + position_mask * superposition_mask, 0, 1)
 
+                # average ones per column
+                print(prior.sum(dim=-1, keepdim=True).mean())
+
                 prior = prior / prior.sum(dim=-1, keepdim=True)
 
                 # Calculate log likelihood
-                log_probs = model.model.conditional_log_likelihood(x, prior)
+                log_probs = model.model.conditional_log_likelihood(x.clone(), prior, enforce_constraint=ENFORCE_CONSTRAINT)
 
                 # Store results for each example in batch
                 results.append(
@@ -149,7 +153,7 @@ def plot_results(results_df, output_dir):
 
         # Save plot
         plt.savefig(
-            output_dir / f"superposition_{sup_ratio:.2f}_analysis.png",
+            output_dir / f"superposition_{sup_ratio:.2f}_{'enforced' if ENFORCE_CONSTRAINT else 'not_enforced'}_analysis.png",
             dpi=300,
             bbox_inches="tight",
         )
@@ -157,6 +161,14 @@ def plot_results(results_df, output_dir):
 
 
 def main():
+
+    checkpoints_to_include = [
+        "mlm_150epochs",
+    "slm_sparse_150epochs",
+    "slm_mixed_150epochs",
+    "slm_full_150epochs",
+    ]
+    checkpoints = {k: CHECKPOINTS[k] for k in checkpoints_to_include}
     # Set random seed
     torch.manual_seed(SEED)
     random.seed(SEED)
@@ -166,7 +178,7 @@ def main():
     OUTPUT_DIR.mkdir(exist_ok=True)
 
     # Load first model to get tokenizer and dataset
-    first_model = setup_model(next(iter(CHECKPOINTS.values())))
+    first_model = setup_model(next(iter(checkpoints.values())))
     test_dataset = load_test_dataset(first_model.tokenizer)
 
     # Get random examples
@@ -178,7 +190,7 @@ def main():
 
     # Analyze each model
     all_results = []
-    for model_name, checkpoint_path in CHECKPOINTS.items():
+    for model_name, checkpoint_path in checkpoints.items():
         results = analyze_model(model_name, checkpoint_path, x)
         all_results.extend(results)
 
