@@ -104,7 +104,7 @@ class SuperposedLanguageModel(torch.nn.Module):
     
     @torch.no_grad()
     @torch.inference_mode()
-    def conditional_log_likelihood(self, target, constraint, enforce_constraint=True):
+    def conditional_log_likelihood(self, target, constraint, enforce_constraint=True, collapse_undefined_attributes=False):
         """
         Compute conditional likelihood of a sequence given a constraint.
         Input:
@@ -115,7 +115,8 @@ class SuperposedLanguageModel(torch.nn.Module):
         target = target.to(self.get_device())
         constraint = constraint.to(self.get_device())
         # collapse undefined attributes
-        # constraint = self.tokenizer.collapse_undefined_attributes(constraint)
+        if collapse_undefined_attributes:
+            constraint = self.tokenizer.collapse_undefined_attributes(constraint)
         # normalize constraint
         constraint = constraint / constraint.sum(dim=-1, keepdim=True)
         with torch.no_grad():
@@ -128,9 +129,13 @@ class SuperposedLanguageModel(torch.nn.Module):
             probs = probs * constraint
         probs = probs / probs.sum(dim=-1, keepdim=True)
         target_probs = (target * probs).sum(dim=-1)
-        is_known = (target > 0).sum(dim=-1) > 0
+        # get isunkown 
+        is_unknown = (constraint > 0).sum(dim=-1) > 1
+        # print average of is known
+        print(f"Average of is known: {is_unknown.float().mean().item()}")
 
-        log_likelihood = torch.log(target_probs + self.eps).mean()
+        # get log likelihood of known tokens
+        log_likelihood = (torch.log(target_probs) * is_unknown / is_unknown.sum()).mean()
         return log_likelihood
 
     @torch.no_grad()

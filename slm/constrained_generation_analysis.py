@@ -10,7 +10,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 #%%
-path = "../artefacts/constrained_generation_2"
+path = "../artefacts/constrained_generation_5"
 midi_paths = glob.glob(f"{path}/**/*.mid", recursive=True)
 midi_paths = sorted(midi_paths)
 
@@ -27,7 +27,7 @@ df["task_name"] = df["path"].apply(lambda x: x.split("/")[-2])
 df["n_notes"] = df["score"].apply(lambda x: x.note_num())
 
 #%%
-COMPUTE_FMD = False
+COMPUTE_FMD = True
 if COMPUTE_FMD:
     from frechet_music_distance import FrechetMusicDistance
     from frechet_music_distance.utils import clear_cache
@@ -70,11 +70,11 @@ if COMPUTE_FMD:
 
     fmd_df = pd.DataFrame(fmd_records)
     # save the dataframe
-    fmd_df.to_csv(f"{path}/fmd3.csv", index=False)
+    fmd_df.to_csv(f"{path}/fmd5.csv", index=False)
 
 #%%
 # load csv
-fmd_df = pd.read_csv(f"{path}/fmd3.csv")
+fmd_df = pd.read_csv(f"{path}/fmd5.csv")
 
 # print columns
 print(fmd_df.columns)
@@ -169,8 +169,6 @@ print(fmd_df["system_name"].unique())
 fmd_df_set_n_notes = fmd_df[~fmd_df["system_name"].str.contains("set_n_notes")]
 
 
-
-
 sns.barplot(
     data=fmd_df_set_n_notes, 
     x="display_task_name", 
@@ -192,7 +190,7 @@ sns.barplot(
     y="fmd", 
     hue="system_name", 
 )
-plt.title("FMD w.r.t. to ground truth, no fixed number of active events")
+# plt.title("FMD w.r.t. to ground truth, no fixed number of active events")
 plt.xticks(rotation=45)
 plt.tight_layout()
 plt.show()

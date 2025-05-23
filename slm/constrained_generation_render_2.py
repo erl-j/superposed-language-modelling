@@ -18,16 +18,16 @@ import symusic
 from joblib import Parallel, delayed
 
 # Number of examples to generate per task
-N_EXAMPLES = 1000
+N_EXAMPLES = 50
 GENERATE = True
 # List of sampling orders to iterate over
 SAMPLING_ORDERS = ["left_to_right", "left_to_right_reverse", "random"]
 # List of SET_N_NOTES values to iterate over
 SET_N_NOTES_VALUES = [True, False]
 RENDER_GROUND_TRUTH = True
-DEVICES = [4,5,6,7]
+DEVICES = [3,3,3,3]
 
-OUTPUT_DIR = Path("./artefacts/constrained_generation_4")
+OUTPUT_DIR = Path("./artefacts/constrained_generation_5")
 
 def setup_model(checkpoint_path, device):
     """Load and set up the model."""
@@ -71,7 +71,7 @@ def main():
     models = ["slm_mixed_150epochs", "slm_sparse_150epochs", "slm_full_150epochs", "mlm_150epochs"]
 
     TEMPERATURE = 1.0
-    COLLAPSE_DUPLICATES = True
+    COLLAPSE_DUPLICATES = False
 
     # Create output directory if it doesn't exist
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

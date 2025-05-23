@@ -94,10 +94,10 @@ def random_superposition(x, syntax_mask, mode="variable_rate", ratio=None):
     confounders = sup_base >= sup_rate
     output = torch.clamp(x + confounders, 0, 1)
     # # assert that outputs is between 0 and 1
-    # assert (output >= 0).all()
-    # # assert than sums are between 1 and len(tokenizer.vocab)
-    # assert (output.sum(dim=-1) >= 1).all()
-    # assert (output.sum(dim=-1) <= vocab_size).all()
+    assert (output >= 0).all()
+    # assert than sums are between 1 and len(tokenizer.vocab)
+    assert (output.sum(dim=-1) >=1).all()
+    assert (output.sum(dim=-1) <= vocab_size).all()
     return output
 
 def position_mask(batch_size,n_positions, schedule_fn, device):
