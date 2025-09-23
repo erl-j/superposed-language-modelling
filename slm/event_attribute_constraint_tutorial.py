@@ -143,22 +143,20 @@ torch.cuda.manual_seed_all(SEED)
 
 #%% Drums bass and guitar
 
-def create_constraint(e, ec):
+def drum_bass_and_guitar(C, c):
     # add 64 drum notes
-    e = [ec().intersect({"instrument": {"Drums"}}).force_active() for i in range(64)]
-    # add 20 bass notes
-    e += [ec().intersect({"instrument": {"Bass"}}).force_active() for i in range(16)]
+    C = [c().intersect({"instrument": {"Drums"}}).force_active() for i in range(64)]
+    # add 16 bass notes
+    C += [c().intersect({"instrument": {"Bass"}}).force_active() for i in range(16)]
     # add 40 guitar notes
-    e += [ec().intersect({"instrument": {"Guitar"}}).force_active() for i in range(32)]
+    C += [c().intersect({"instrument": {"Guitar"}}).force_active() for i in range(32)]
     # pad with inactive notes
-    e += [ec().force_inactive() for _ in range(N_EVENTS - len(e))]
-    # set tempo to 130
-    e = [ev.intersect(ec().tempo_constraint(140)) for ev in e]
-    # set tag to rock
-    # e = [ev.intersect({"tag": {"rock", "-"}}) for ev in e]
+    C += [c().force_inactive() for _ in range(N_EVENTS - len(e))]
+    # set tempo to 140
+    C = [c.intersect(ec().tempo_constraint(140)) for c in C]
     return e
 
-e = create_constraint([], ec)
+e = drum_bass_and_guitar([], ec)
 
 sm = generate_from_constraints(e, {"topp":0.95})
 
@@ -168,7 +166,6 @@ preview_sm(sm)
 #%%
 
 def create_constraint(e, ec):
-
     # add 12 kicks
     e = [ec().intersect({"instrument": {"Drums"}, "pitch": {"36 (Drums)"}}).force_active() for i in range(12)]
     # add 4 snares
@@ -194,28 +191,28 @@ preview_sm(sm)
 
 #%% Drum beat with kit piece control
 
-def create_constraint(e, ec):
+def drum_beat_constraint(C, zc):
     # add 16 kicks
-    e = [ec().intersect({"instrument": {"Drums"}, "pitch": {"36 (Drums)"}}).force_active() for i in range(12)]
+    C = [zc().intersect({"instrument": {"Drums"}, "pitch": {"36 (Drums)"}}).force_active() for i in range(12)]
     # add 4 snares
-    e += [ec().intersect({"instrument": {"Drums"}, "pitch": {"38 (Drums)"}}).force_active() for i in range(4)]
+    C += [zc().intersect({"instrument": {"Drums"}, "pitch": {"38 (Drums)"}}).force_active() for i in range(4)]
     # add 16 low velocity Ride cymbals
-    e += [ec().intersect({"instrument": {"Drums"}, "pitch": {"51 (Drums)"}}).intersect(ec().velocity_constraint(50)).force_active() for i in range(16)]
+    C += [zc().intersect({"instrument": {"Drums"}, "pitch": {"51 (Drums)"}}).intersect(zc().velocity_constraint(50)).force_active() for i in range(16)]
     # add 16 high velocity Ride cymbals
-    e += [ec().intersect({"instrument": {"Drums"}, "pitch": {"51 (Drums)"}}).intersect(ec().velocity_constraint(127)).force_active() for i in range(16)]
+    C += [zc().intersect({"instrument": {"Drums"}, "pitch": {"51 (Drums)"}}).intersect(zc().velocity_constraint(127)).force_active() for i in range(16)]
     # add some low velocity toms
-    e += [ec().intersect({"instrument": {"Drums"}, "pitch": TOM_PITCHES}).intersect(ec().velocity_constraint(50)).force_active() for i in range(8)]
+    C += [zc().intersect({"instrument": {"Drums"}, "pitch": TOM_PITCHES}).intersect(zc().velocity_constraint(50)).force_active() for i in range(8)]
     # add some high velocity toms
-    e += [ec().intersect({"instrument": {"Drums"}, "pitch": TOM_PITCHES}).intersect(ec().velocity_constraint(127)).force_active() for i in range(8)]
+    C += [zc().intersect({"instrument": {"Drums"}, "pitch": TOM_PITCHES}).intersect(zc().velocity_constraint(127)).force_active() for i in range(8)]
     # add 40 optional drums
-    e += [ec().intersect({"instrument": {"Drums", "-"}}) for i in range(40)]
+    C += [zc().intersect({"instrument": {"Drums", "-"}}) for i in range(40)]
     # pad with inactive notes
-    e += [ec().force_inactive() for _ in range(N_EVENTS - len(e))]
-    # set tempo to 130
-    e = [ev.intersect(ec().tempo_constraint(110)) for ev in e]
-    return e
+    C += [zc().force_inactive() for _ in range(N_EVENTS - len(e))]
+    # set tempo to 110
+    C = [ev.intersect(zc().tempo_constraint(110)) for ev in e]
+    return C
 
-e = create_constraint([], ec)
+e = drum_beat_constraint([], ec)
 sm = generate_from_constraints(e, {"temperature": 1.0})
 print(f"Number of notes: {sm.note_num()}")
 preview_sm(sm)

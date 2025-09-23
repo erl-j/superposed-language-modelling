@@ -150,21 +150,20 @@ os.makedirs("neighbour_constraints", exist_ok=True)
 # save figure
 plt.savefig("neighbour_constraints/neighbour_constraints.png")
 # %%
-
+# WARNING: MAKE SURE WE RPEEAT CONSTRIANT N_CONSTRINT TIMES!!!!
 def no_constraint():
     e = []
-    e += [ec()
-          .force_active()]
+    e += [ec().force_active()]
     e += [ec().force_active()]
     e += [ec().force_inactive() for _ in range(N_EVENTS - len(e))]
     return e
 
-def run_scale_experiment():
+def run_cf_experiment():
     """Test how C and F pitch constraint on event A affects pitch of event B"""
     e = []
     # Event A: Constrained to C and F notes
     e += [ec()
-          .intersect({"pitch": {"48", "53"}})  # C4 (60) and F4 (65)
+          .intersect({"pitch": {"49", "54"}})  # C4 (60) and F4 (65)
           .force_active()]
     
     # Event B: Unconstrained
@@ -179,7 +178,7 @@ def run_instrument_experiment():
     e = []
     # Event A: Constrained to strings/pipe
     e += [ec()
-          .intersect({"instrument": {"Strings", "Pipe"}})
+          .intersect({"instrument": {"Synth Lead", "Pipe", "Chromatic Percussion"}})
           .force_active()]
     
     # Event B: Unconstrained
@@ -190,7 +189,7 @@ def run_instrument_experiment():
     return e
 
 def run_pitch_experiment(low_range=True):
-    """Test how pitch range affects instrument choice of next event"""
+    """Test how pitch range affects instrument choice of same event"""
     e = []
     # Event A: Constrained to specific pitch range
     if low_range:
@@ -212,8 +211,10 @@ def run_pitch_experiment(low_range=True):
 
 # Run experiments
 experiments = {
-    "scale_constraint": run_scale_experiment(),
+    "cf_constraint": run_cf_experiment(),
     "instrument_constraint": run_instrument_experiment(),
+    "pitch_low": run_pitch_experiment(low_range=True),
+    "pitch_high": run_pitch_experiment(low_range=False),
 }
 
 # Plot results for each experiment
@@ -235,8 +236,15 @@ for exp_name, e in experiments.items():
     pitch_index = model.tokenizer.note_attribute_order.index("pitch")
     pitch_token_indices = [model.tokenizer.vocab.index(token) for token in pitch_vocab]
     
+    # Get instrument probabilities
+    instrument_vocab = [token for token in model.tokenizer.vocab if "instrument:" in token]
+    instrument_index = model.tokenizer.note_attribute_order.index("instrument")
+    instrument_token_indices = [model.tokenizer.vocab.index(token) for token in instrument_vocab]
+    
     # Process Event A probabilities
     pitch_probs_a = event_a_probs[pitch_index, pitch_token_indices].cpu().detach().numpy()
+    instrument_probs_a = event_a_probs[instrument_index, instrument_token_indices].cpu().detach().numpy()
+    
     keyboard_a = np.zeros((7, 12))
     for i, (token, prob) in enumerate(zip(pitch_vocab, pitch_probs_a)):
         pitch = int(token.split(':')[1])
@@ -247,6 +255,8 @@ for exp_name, e in experiments.items():
     
     # Process Event B probabilities
     pitch_probs_b = event_b_probs[pitch_index, pitch_token_indices].cpu().detach().numpy()
+    instrument_probs_b = event_b_probs[instrument_index, instrument_token_indices].cpu().detach().numpy()
+    
     keyboard_b = np.zeros((7, 12))
     for i, (token, prob) in enumerate(zip(pitch_vocab, pitch_probs_b)):
         pitch = int(token.split(':')[1])
@@ -257,7 +267,7 @@ for exp_name, e in experiments.items():
     
     # Add constraint information for Event A
     constraint_text = ""
-    if "scale" in exp_name:
+    if "cf" in exp_name:
         constraint_text = "Constraint: C and F notes"
     elif "instrument" in exp_name:
         constraint_text = "Constraint: Strings/Pipe"
@@ -277,6 +287,23 @@ for exp_name, e in experiments.items():
     save_path_b = os.path.join("neighbour_constraints", f"{exp_name}_event_b_visualization.png")
     print(f"Saving Event B plot to: {save_path_b}")
     fig_b.savefig(save_path_b, dpi=300, bbox_inches='tight')
-    plt.close(fig_b)
+    
+    # Plot instrument probabilities
+    plt.figure(figsize=(15, 6))
+    plt.subplot(1, 2, 1)
+    plt.bar(instrument_vocab, instrument_probs_a)
+    plt.title(f"Event A Instrument Probabilities\n{constraint_text}")
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
+    
+    plt.subplot(1, 2, 2)
+    plt.bar(instrument_vocab, instrument_probs_b)
+    plt.title(f"Event B Instrument Probabilities\nAfter {constraint_text}")
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
+    
+    save_path_instruments = os.path.join("neighbour_constraints", f"{exp_name}_instrument_probabilities.png")
+    plt.savefig(save_path_instruments, dpi=300, bbox_inches='tight')
+    plt.close()
 
 print("\nAll experiments completed. Check the neighbour_constraints directory for the plots.")

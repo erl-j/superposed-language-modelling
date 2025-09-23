@@ -21,6 +21,13 @@ N_CONFOUNDERS = [1, 2, 4, 8, 16, 32, 64, 128, 256, "full"]  # Number of confound
 N_MASKING_RATIOS = 21  # Number of masking ratio points (0% to 100%)
 OUTPUT_DIR = Path("./analysis_results_confounders")
 
+model_colours = {
+    "mlm_150epochs_w_constraint": "#E63946", # coral red
+    "mlm_150epochs_wo_constraint": "#808080", 
+    "slm_full_150epochs": "#FFB703", # warm yellow
+    "slm_mixed_150epochs": "#2A9D8F", # teal green  
+    "slm_sparse_150epochs": "#457B9D" # steel blue
+}
 
 def setup_model(checkpoint_path):
     model = TrainingWrapper.load_from_checkpoint(checkpoint_path, map_location=DEVICE, weights_only=False)
@@ -146,12 +153,15 @@ def plot_results(results_df, output_dir):
                 means.values,
                 marker="o",
                 label=f"{model_name}",
+                color=model_colours[model_name],
                 alpha=0.8,
             )
             plt.fill_between(
                 means.index * 100,
                 means.values - stds.values,
                 means.values + stds.values,
+                color=model_colours[model_name],
+
                 alpha=0.2,
             )
 
@@ -218,7 +228,7 @@ def plot_combined_results(results_df, output_dir):
                 means.values,
                 marker="o",
                 label=f"{model_name} (conf={n_conf})",
-                color=color,
+                color=model_colours[model_name],
                 linestyle=linestyle,
                 alpha=0.8,
             )
@@ -226,7 +236,7 @@ def plot_combined_results(results_df, output_dir):
                 means.index * 100,
                 means.values - stds.values,
                 means.values + stds.values,
-                color=color,
+                color=model_colours[model_name],
                 alpha=0.2,
             )
 
@@ -245,6 +255,12 @@ def plot_combined_results(results_df, output_dir):
     plt.close()
 
 def plot_subplot_results(results_df, output_dir):
+    print("\nDebug: Data overview")
+    print(f"Total rows in results_df: {len(results_df)}")
+    print(f"Unique models: {results_df['model'].unique()}")
+    print(f"Unique n_confounders: {results_df['n_confounders'].unique()}")
+    print(f"Unique masking ratios: {results_df['masking_ratio'].unique()}")
+    
     # Define color scheme
     mlm_color = '#1f77b4'  # Blue for MLM
     slm_colors = ['#ff7f0e', '#2ca02c', '#d62728', '#9467bd']  # Different colors for SLM variants
@@ -259,13 +275,11 @@ def plot_subplot_results(results_df, output_dir):
             return float('inf')
     
     n_confounders = sorted(results_df["n_confounders"].unique(), key=confounder_sort_key)
-    n_cols = (len(n_confounders) + 1) // 2  # Ceiling division
-    fig, axes = plt.subplots(2, n_cols, figsize=(5*n_cols, 10))
-    axes = axes.flatten()
+    print(f"\nDebug: Sorted confounders: {n_confounders}")
     
-    # Get global y-axis limits
-    y_min = results_df["log_likelihood"].min()
-    y_max = results_df["log_likelihood"].max()
+    # Create 3x4 grid
+    fig, axes = plt.subplots(3, 4, figsize=(20, 15))
+    axes = axes.flatten()
     
     # Create handles and labels for legend
     legend_handles = []
@@ -273,74 +287,94 @@ def plot_subplot_results(results_df, output_dir):
     
     # Plot each number of confounders in a subplot
     for idx, n_conf in enumerate(n_confounders):
+        if idx >= len(axes) - 1:  # Leave last subplot for legend
+            break
+            
         ax = axes[idx]
+        print(f"\nDebug: Processing confounder {n_conf}")
         
         # Plot MLM systems
         mlm_data = results_df[
             (results_df["model"].str.startswith("mlm"))
             & (results_df["n_confounders"] == n_conf)
         ]
-        for i, model_name in enumerate(mlm_data["model"].unique()):
-            model_subset = mlm_data[mlm_data["model"] == model_name]
-            grouped = model_subset.groupby("masking_ratio")["log_likelihood"]
-            means = grouped.mean()
-            stds = grouped.std()
-            
-            label = "MLM (w/ constraint)" if "w_constraint" in model_name else "MLM (w/o constraint)"
-            line = ax.plot(means.index * 100, means.values, 
-                   color=mlm_color, 
-                   marker='o',
-                   linestyle='-' if "w_constraint" in model_name else '--',
-                   alpha=0.8)
-            ax.fill_between(means.index * 100,
-                          means.values - stds.values,
-                          means.values + stds.values,
-                          color=mlm_color,
-                          alpha=0.2)
-            
-            if idx == 0:  # Only add to legend once
-                legend_handles.extend(line)
-                legend_labels.append(label)
+        print(f"Debug: MLM data rows for {n_conf}: {len(mlm_data)}")
+        
+        if not mlm_data.empty:  # Only plot if we have data
+            for i, model_name in enumerate(mlm_data["model"].unique()):
+                model_subset = mlm_data[mlm_data["model"] == model_name]
+                grouped = model_subset.groupby("masking_ratio")["log_likelihood"]
+                means = grouped.mean()
+                stds = grouped.std()
+                print(f"Debug: MLM {model_name} means: {means.values}")
+                
+                label = "MLM (w/ constraint)" if "w_constraint" in model_name else "MLM (w/o constraint)"
+                line = ax.plot(means.index * 100, means.values, 
+                       color=model_colours[model_name], 
+                       marker='o',
+                       linestyle='-' if "w_constraint" in model_name else '--',
+                       alpha=0.6)
+                ax.fill_between(means.index * 100,
+                              means.values - stds.values,
+                              means.values + stds.values,
+                              color=model_colours[model_name],
+                              alpha=0.1)
+                
+                if idx == 0:  # Only add to legend once
+                    legend_handles.extend(line)
+                    legend_labels.append(label)
         
         # Plot SLM systems
         slm_data = results_df[
             (results_df["model"].str.startswith("slm"))
             & (results_df["n_confounders"] == n_conf)
         ]
-        for i, model_name in enumerate(slm_data["model"].unique()):
-            model_subset = slm_data[slm_data["model"] == model_name]
-            grouped = model_subset.groupby("masking_ratio")["log_likelihood"]
-            means = grouped.mean()
-            stds = grouped.std()
-            
-            slm_type = model_name.replace("slm_", "").replace("_150epochs", "")
-            line = ax.plot(means.index * 100, means.values,
-                   color=slm_colors[i],
-                   marker='o',
-                   label=f"SLM ({slm_type})",
-                   alpha=0.8)
-            ax.fill_between(means.index * 100,
-                          means.values - stds.values,
-                          means.values + stds.values,
-                          color=slm_colors[i],
-                          alpha=0.2)
-            
-            if idx == 0:  # Only add to legend once
-                legend_handles.extend(line)
-                legend_labels.append(f"SLM ({slm_type})")
+        print(f"Debug: SLM data rows for {n_conf}: {len(slm_data)}")
         
+        if not slm_data.empty:  # Only plot if we have data
+            for i, model_name in enumerate(slm_data["model"].unique()):
+                model_subset = slm_data[slm_data["model"] == model_name]
+                grouped = model_subset.groupby("masking_ratio")["log_likelihood"]
+                means = grouped.mean()
+                stds = grouped.std()
+                print(f"Debug: SLM {model_name} means: {means.values}")
+                
+                slm_type = model_name.replace("slm_", "").replace("_150epochs", "")
+                line = ax.plot(means.index * 100, means.values,
+                       color=model_colours[model_name],
+                       marker='o',
+                       label=f"SLM ({slm_type})",
+                       alpha=0.6)
+                ax.fill_between(means.index * 100,
+                              means.values - stds.values,
+                              means.values + stds.values,
+                              color=model_colours[model_name],
+                              alpha=0.1)
+                
+                if idx == 0:  # Only add to legend once
+                    legend_handles.extend(line)
+                    legend_labels.append(f"SLM ({slm_type})")
+        
+        # Set up axes even if no data
         ax.set_xlabel("Masking Ratio (%)")
         ax.set_ylabel("Log Likelihood")
         ax.set_title(f"Number of Confounders: {n_conf}")
         ax.grid(True, which="both", linestyle="--", alpha=0.7)
-        ax.set_ylim(y_min, y_max)  # Set consistent y-axis limits
+        ax.set_ylim(-2.0e-5, 0.0)
+        
+        # Set x-axis limits to match data range
+        if not mlm_data.empty or not slm_data.empty:
+            ax.set_xlim(0, 100)  # Since masking ratio is from 0 to 100%
     
-    # Remove empty subplots if any
-    for idx in range(len(n_confounders), len(axes)):
+    # Remove empty subplots except the last one for legend
+    for idx in range(len(n_confounders), len(axes) - 1):
         fig.delaxes(axes[idx])
     
-    # Add single legend to the figure
-    fig.legend(legend_handles, legend_labels, bbox_to_anchor=(1.05, 0.5), loc='center left')
+    # Add legend to the last subplot
+    if legend_handles:  # Only add legend if we have handles
+        ax_legend = axes[-1]  # Use the last subplot
+        ax_legend.axis('off')  # Hide axes
+        ax_legend.legend(legend_handles, legend_labels, loc='center', fontsize='large')
     
     plt.tight_layout()
     plt.savefig(output_dir / "confounders_subplot_analysis.png", dpi=300, bbox_inches="tight")

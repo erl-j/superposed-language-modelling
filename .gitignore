@@ -1,5 +1,8 @@
 artefacts/
 paper_assets/
+slm/plots
+neighbour_constraints/
+analysis_results_confounders/
 wandb/
 bfn-checkpoints/
 checkpoints/

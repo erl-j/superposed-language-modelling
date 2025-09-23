@@ -1,4 +1,3 @@
-
 #%%
 import symusic
 import glob
@@ -27,7 +26,7 @@ df["task_name"] = df["path"].apply(lambda x: x.split("/")[-2])
 df["n_notes"] = df["score"].apply(lambda x: x.note_num())
 
 #%%
-COMPUTE_FMD = True
+COMPUTE_FMD = False
 if COMPUTE_FMD:
     from frechet_music_distance import FrechetMusicDistance
     from frechet_music_distance.utils import clear_cache
@@ -76,9 +75,225 @@ if COMPUTE_FMD:
 # load csv
 fmd_df = pd.read_csv(f"{path}/fmd5.csv")
 
-# print columns
-print(fmd_df.columns)
+# system name is like this:
+# slm_mixed_150epochs_order=left_to_right_reverse_t=1.0_set_n_notes=False
+# <model>_<n_epochs>_order=<order>_t=<t>_set_n_notes=<set_n_notes>
+# either "mlm_", "slm_mixed_" or "slm_full"
+# everything before "150epochs"
+# print unique system names
+print(fmd_df["system_name"].unique())
+fmd_df["model"] = fmd_df["system_name"].apply(lambda x: x.split("_150epochs")[0])
+fmd_df["order"] = fmd_df["system_name"].str.extract(r'order=(.*?)_t=')
+fmd_df["t"] = fmd_df["system_name"].str.extract(r't=(.*?)_set_n_notes=')
+fmd_df["set_n_notes"] = fmd_df["system_name"].str.extract(r'set_n_notes=(.*)')#%%
+
 #%%
+
+# make a bar plot of fmd by model and task
+# sort by task, order, model
+
+task_name_to_display_name = {
+    "c major pitch set": "a) pitch: C major",
+    "c pentatonic": "b) pitch: C pentatonic",
+    "1 d 16 notes": "c) onset: 16th notes",
+    "1 d 8 notes": "d) onset: 8th notes",
+    "1 d 4 notes": "e) onset: quarter notes",
+    # "1 d 2 notes": "f) onset: half notes",
+    "guitar": "f) instr: guitar",
+    "piano": "g) instr: piano",
+    "drum_and_bass": "h) instr: drum and bass",
+    "drum_and_bass_and_guitar": "i) instr: drums, bass, guitar",
+    "drum_and_bass_and_piano": "j) instr: drums, bass, piano, guitar",
+    "drums": "k) instr: drums",
+}
+
+# remove half notes
+fmd_df = fmd_df[fmd_df["task_name"] != "1 d 2 notes"]
+
+# model order is mlm, full, mixed sparse
+model_order = ["mlm", "slm_full", "slm_mixed", "slm_sparse"]
+
+fmd_df["display_task_name"] = fmd_df["task_name"].apply(lambda x: task_name_to_display_name[x])
+
+fmd_df = fmd_df.sort_values(by=["task_name"])
+
+# sort by model
+fmd_df = fmd_df.sort_values(by="model", key=lambda x: pd.Categorical(x, categories=model_order, ordered=True))
+fmd_df = fmd_df.sort_values(by="display_task_name")
+
+for set_n_notes in [True, False]:
+
+    # first for set_n_notes=True
+    fmd_df_set_n_notes = fmd_df[fmd_df["set_n_notes"] == str(set_n_notes)]
+
+    # sort in task name to display order
+    # let me pick colours for the models
+    model_colours = {
+        "mlm": "#E63946",      # coral red
+        "slm_full": "#FFB703", # warm yellow
+        "slm_mixed": "#2A9D8F", # teal green  
+        "slm_sparse": "#457B9D" # steel blue
+    }
+    # Plot for random sampling
+    data_random = fmd_df_set_n_notes[fmd_df_set_n_notes["order"] == "random"]
+    plt.figure(figsize=(20, 10))
+
+    ax = sns.barplot(
+        data=data_random,
+        x="display_task_name",
+        y="fmd",
+        hue="model", 
+        hue_order=model_order,
+        palette=model_colours,
+        alpha=1.0
+    )
+
+    # Add left-to-right and right-to-left values above bars
+    data_ltr = fmd_df_set_n_notes[fmd_df_set_n_notes["order"] == "left_to_right"]
+    data_rtl = fmd_df_set_n_notes[fmd_df_set_n_notes["order"] == "left_to_right_reverse"]
+
+    # Get bar positions and widths from the plot
+    bars = ax.patches
+    n_tasks = len(data_random["display_task_name"].unique())
+    n_models = len(model_order)
+    width = bars[0].get_width()
+
+    # Add arrows above bars
+    for i in range(n_tasks):
+        for j, model in enumerate(model_order):
+            # Get the bar index
+            idx = i * n_models + j
+            
+            # Get the bar center x-coordinate
+            x = bars[idx].get_x() + width/2
+            
+            # Get FMD values for different orders
+            ltr_vals = data_ltr[(data_ltr["display_task_name"]==data_random["display_task_name"].unique()[i]) & 
+                            (data_ltr["model"]==model)]["fmd"]
+            rtl_vals = data_rtl[(data_rtl["display_task_name"]==data_random["display_task_name"].unique()[i]) & 
+                            (data_rtl["model"]==model)]["fmd"]
+            
+            # Draw arrows at their actual FMD values if values exist
+            if len(ltr_vals) > 0:
+                plt.text(x-0.01, ltr_vals.iloc[0], "←", ha='center', va='bottom', fontsize=16)
+            if len(rtl_vals) > 0:
+                plt.text(x+0.01, rtl_vals.iloc[0], "→", ha='center', va='bottom', fontsize=16)
+
+    plt.xticks(rotation=45, ha='right')
+    plt.ylim(0, 500)  # Set y-axis limits from 0 to 300
+    plt.title(f"Fixed number of active events: {set_n_notes}")
+    plt.xlabel("")  # Remove x-axis label
+    plt.legend(bbox_to_anchor=(1.05, 1))
+    plt.tight_layout()
+    # save the plot
+    os.makedirs("plots", exist_ok=True)
+    plt.savefig(f"plots/fmd_plot_{set_n_notes}.png", dpi=300)
+    plt.show()
+
+
+
+#%% now a plot to compare the three sampling orders.
+plt.figure(figsize=(30, 10))
+
+# Create markers for each sampling order
+markers = {'left_to_right': '$→$', 'left_to_right_reverse': '$←$', 'random': '$⚄$'}
+
+data = fmd_df_set_n_notes
+unique_tasks = data['display_task_name'].unique()
+task_indices = {task: idx for idx, task in enumerate(unique_tasks)}
+
+# Create a strip plot with custom markers
+for order_idx, order in enumerate(markers.keys()):
+    order_data = data[data['order'] == order]
+    for model_idx, model in enumerate(model_order):
+        model_data = order_data[order_data['model'] == model]
+        # Add horizontal offset based on order index and model index
+        x_positions = [task_indices[task] + (order_idx - 1) * 0.2 + model_idx * 0.5 for task in model_data['display_task_name']]
+        plt.scatter(
+            x_positions,
+            model_data['fmd'],
+            marker=markers[order],
+            c=[model_colours[model]], 
+            s=200,
+            label=f"{model} ({order})"
+        )
+plt.xticks(range(len(unique_tasks)), unique_tasks, rotation=45, ha='right')
+plt.ylim(0, 300)  # Set y-axis limits from 0 to 500
+plt.title("Sampling Order Comparison (Fixed number of active events)")
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.tight_layout()
+plt.show()
+
+#%% add sampling order to the plot
+# arrow left to right
+# arrow right to left
+# and dice
+
+
+
+# now we do variable number of active events
+fmd_df_not_set_n_notes = fmd_df[fmd_df["set_n_notes"] == "False"]
+
+# same plot as above
+plt.figure(figsize=(20, 5))
+data = fmd_df_not_set_n_notes[fmd_df_not_set_n_notes["order"] == "random"]
+sns.barplot(
+    data=data, 
+    x="display_task_name", 
+    y="fmd", 
+    hue="model",
+    hue_order=model_order,
+    palette=model_colours,
+)
+plt.xticks(rotation=45, ha='right')
+plt.title(f"Variable number of active events, random sampling order")
+plt.show()
+
+#%%
+#%%
+
+# make a barplot per sampling order
+for order in fmd_df_set_n_notes["order"].unique():
+    plt.figure(figsize=(20, 5))
+    data = fmd_df_set_n_notes[fmd_df_set_n_notes["order"] == order]
+    sns.barplot(
+        data=data, 
+        x="display_task_name", 
+        y="fmd", 
+        hue="model",
+        hue_order=model_order,
+        palette=model_colours,
+    )
+    plt.title(f"Sampling order: {order}, Fixed number of active events")
+    plt.show()
+
+# now for set_n_notes=False
+fmd_df_not_set_n_notes = fmd_df[fmd_df["set_n_notes"] == "False"]
+
+# make a barplot per sampling order
+
+
+for order in fmd_df_not_set_n_notes["order"].unique():
+    plt.figure(figsize=(20, 5))
+    data = fmd_df_not_set_n_notes[fmd_df_not_set_n_notes["order"] == order]
+    sns.barplot(
+        data=data, 
+        x="display_task_name", 
+        y="fmd", 
+        hue="model",
+    )
+    plt.title(f"Sampling order: {order}, Variable number of active events")
+    plt.show()
+
+#%%
+# then for set_n_notes=False
+fmd_df_not_set_n_notes = fmd_df[fmd_df["set_n_notes"] == "False"]
+
+
+
+#%%
+
+
 
 # Optional: filter systems if you want to uncomment this
 
@@ -126,21 +341,6 @@ plt.figure(figsize=(20, 5))
 # plt.show()
 
 
-
-task_name_to_display_name = {
-    "c major pitch set": "pitch: C major",
-    "c pentatonic": "pitch: C pentatonic",
-    "1 d 16 notes": "onset: 16th notes",
-    "1 d 8 notes": "onset: 8th notes",
-    "1 d 4 notes": "onset: quarter notes",
-    "1 d 2 notes": "onset: half notes",
-    "guitar": "instr: guitar",
-    "piano": "instr: piano",
-    "drum_and_bass": "instr: drum and bass",
-    "drum_and_bass_and_guitar": "instr: drums, bass, guitar",
-    "drum_and_bass_and_piano": "instr: drum and bass and piano and guitar",
-    "drums": "instr: drums",
-}
 
 fmd_df["display_task_name"] = fmd_df["task_name"].apply(lambda x: task_name_to_display_name[x])
 fmd_df["task_type"] = fmd_df["display_task_name"].apply(lambda x: x.split(":")[0])
