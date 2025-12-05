@@ -14,7 +14,7 @@ from slm.train import TrainingWrapper
 from util import preview_sm, sm_fix_overlap_notes, loop_sm
 from slm.tokenizer import instrument_class_to_selected_program_nr
 import util
-from slm.PAPER_CHECKPOINTS import CHECKPOINTS
+# from slm.PAPER_CHECKPOINTS import CHECKPOINTS
 from constraints.addx import *
 from constraints.re import *
 from constraints.templates import *
@@ -30,13 +30,13 @@ from transformers import pipeline
 import pretty_midi
 import time
 from conversion_utils import looprep_to_sm, sm_to_events, sm_to_looprep
+import fractions
 
 USE_FP16 = False
 
-
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
-device = "cuda:5"
-LLM_DEVICE = "cuda:5"
+device = "cuda:6"
+LLM_DEVICE = "cuda:6"
     
 USE_LOCAL_LLM = False
 
@@ -49,54 +49,12 @@ TMP_DIR = ROOT_DIR + "artefacts/tmp"
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+torch.serialization.add_safe_globals([fractions.Fraction])
+
 model = TrainingWrapper.load_from_checkpoint(
-    # "./checkpoints/effortless-sound-516/last.ckpt",
-    # "./checkpoints/misunderstood-plasma-522/last.ckpt",
-    # "./checkpoints/mild-snowball-531/last.ckpt",
-    # "./checkpoints/balmy-deluge-532/last.ckpt",
-    # "./checkpoints/misunderstood-monkey-520/last.ckpt",
-    # "./checkpoints/absurd-oath-525/last.ckpt",
-    # "./checkpoints/toasty-bush-529/last.ckpt",
-    # "./checkpoints/usual-fire-530/last.ckpt",
-    # "./checkpoints/pretty-armadillo-542/last.ckpt",
-    # "./checkpoints/rural-oath-549/last.ckpt",
-    # "./checkpoints/rural-oath-549/epoch=425-step=1208136-val/loss_epoch=0.14559.ckpt",
-    # "./checkpoints/colorful-sun-548/last.ckpt",
-    # "./checkpoints/lucky-puddle-550/last.ckpt",
-    # "./checkpoints/crimson-night-547/last.ckpt",
-    # "./checkpoints/smart-brook-552/last.ckpt",
-    # "./checkpoints/glad-surf-562/last.ckpt",
-    # "./checkpoints/floral-firefly-567/last.ckpt",
-    # "./checkpoints/golden-monkey-568/last.ckpt",
-    # "./checkpoints/glowing-snowball-572/last.ckpt",
-    # "./checkpoints/driven-planet-576/last.ckpt",
-    # "./checkpoints/fancy-paper-577/last.ckpt",
-    # "./checkpoints/helpful-sun-589/last.ckpt",
-    # "./checkpoints/helpful-sun-589/every25/epoch=124-step=354500-val/accuracy@1=0.95040.ckpt",
-    # "./checkpoints/helpful-sun-589/epoch=115-step=328976-val/loss_epoch=0.15271.ckpt",
-    # "./checkpoints/smooth-meadow-615/last.ckpt",
-    # "./checkpoints/crisp-paper-617/last.ckpt",
-    # "./checkpoints/smooth-meadow-615/every25/epoch=39-step=151240-val/accuracy@1=0.95662.ckpt",
-    # "./checkpoints/avid-smoke-622/last.ckpt",
-    # "./checkpoints/glowing-pine-634/last.ckpt",
-    # "./checkpoints/lucky-breeze-627/last.ckpt",
-    # "./checkpoints/laced-cherry-636/last.ckpt",
-    # "./checkpoints/eternal-dawn-640/last.ckpt",
-    # "./checkpoints/solar-capybara-693/last.ckpt",
-    # "./checkpoints/resilient-resonance-667/last.ckpt",
-    # "./checkpoints/dainty-moon-661/last.ckpt",
-    # "checkpoints/rose-water-669/last.ckpt",
-    # "./checkpoints/leafy-galaxy-677/last.ckpt",
-    # "./checkpoints/glamorous-aardvark-681/last.ckpt",
-    # "./checkpoints/fluent-salad-696/last.ckpt",
-    # "./checkpoints/drawn-breeze-701/last.ckpt",
-    # "./checkpoints/robust-glade-702/last.ckpt",
-    # "./checkpoints/different-firefly-705/last.ckpt",
-    # "./checkpoints/logical-butterfly-710/every25/epoch=149",
-    # "./checkpoints/stoic-jazz-706/last.ckpt",
-    # CHECKPOINTS["slm_mixed_150epochs"],
-    "./checkpoints/azure-darkness-763/last.ckpt",
+    "gold_checkpoints/slm_mixed_100epochs.ckpt",
     map_location=device,
+    weights_only=False,
 )
 
 def generate(
