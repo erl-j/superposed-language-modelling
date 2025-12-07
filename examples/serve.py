@@ -8,17 +8,17 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import symusic
 
-sys.path.append("slm/")
+# sys.path.append("slm/")
 # from slm.train_old import EncoderOnlyModel
 from slm.train import TrainingWrapper
-from util import preview_sm, sm_fix_overlap_notes, loop_sm
+from slm.util import preview_sm, sm_fix_overlap_notes, loop_sm
 from slm.tokenizer import instrument_class_to_selected_program_nr
-import util
+from slm import util
 # from slm.PAPER_CHECKPOINTS import CHECKPOINTS
-from constraints.addx import *
-from constraints.re import *
-from constraints.templates import *
-from constraints.core import (
+from slm.constraints.addx import *
+from slm.constraints.re import *
+from slm.constraints.templates import *
+from slm.constraints.core import (
     MusicalEventConstraint,
     DRUM_PITCHES,
     PERCUSSION_PITCHES,
@@ -29,7 +29,7 @@ from constraints.core import (
 from transformers import pipeline
 import pretty_midi
 import time
-from conversion_utils import looprep_to_sm, sm_to_events, sm_to_looprep
+from slm.conversion_utils import looprep_to_sm, sm_to_events, sm_to_looprep
 import fractions
 
 USE_FP16 = False

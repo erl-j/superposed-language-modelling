@@ -2,13 +2,13 @@ import logging
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
-from data import MidiDataset, RandomCropMidiDataset
+from .data import MidiDataset, RandomCropMidiDataset
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, RichProgressBar
 from pytorch_lightning.loggers import WandbLogger
-from tokenizer import Tokenizer
+from .tokenizer import Tokenizer
 import einops
 from fractions import Fraction
-from masking import (
+from .masking import (
     mlm_mask,
     random_add_masking_mml,
     random_add_masking_variable_superposition,
@@ -19,7 +19,7 @@ from masking import (
     ratio_superposition,
     simple_superposition,
 )
-from model import SuperposedLanguageModel
+from .model import SuperposedLanguageModel
 
 class TrainingWrapper(pl.LightningModule):
     def __init__(

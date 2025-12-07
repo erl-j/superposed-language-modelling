@@ -13,7 +13,7 @@ import IPython.display as ipd
 import math
 import glob
 from tqdm import tqdm
-from CONSTANTS import instrument_class_to_selected_program_nr
+from .CONSTANTS import instrument_class_to_selected_program_nr
 
 
 def detail_plot(sm):

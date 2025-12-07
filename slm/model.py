@@ -1,11 +1,11 @@
 
 import torch
 import torch.nn.functional as F
-from tokenizer import Tokenizer
+from .tokenizer import Tokenizer
 from torch import nn
 import einops
 from tqdm import tqdm
-from util import top_k_top_p_filtering
+from .util import top_k_top_p_filtering
 import math
 
 class SuperposedLanguageModel(torch.nn.Module):

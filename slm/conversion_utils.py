@@ -1,6 +1,6 @@
-from tokenizer import instrument_class_to_selected_program_nr
+from .tokenizer import instrument_class_to_selected_program_nr
 import symusic
-from constraints.core import MusicalEventConstraint
+from .constraints.core import MusicalEventConstraint
 import einops
 
 def looprep_to_sm(looprep, tpq):

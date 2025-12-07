@@ -1,4 +1,4 @@
-from util import get_scale
+from ..util import get_scale
 
 class EventConstraint:
     '''
