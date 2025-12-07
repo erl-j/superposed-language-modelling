@@ -8,5 +8,10 @@ wandb
 pydash
 einops
 pretty_midi
-muspy
-fadtk
+torch
+flask
+flask-cors
+transformers
+tqdm
+ipython
+midi-player
