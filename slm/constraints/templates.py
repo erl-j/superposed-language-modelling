@@ -4,6 +4,51 @@ def unconditional(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo):
     e = [ec() for _ in range(n_events)]
     return e
 
+def pentatonic_guitar(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo):
+    e = []
+    # add forced guitar notes with pentatonic scale constraint
+    e += [ec().intersect({"instrument": {"Guitar"}})
+    .intersect(ec().pitch_in_scale_constraint("C major pentatonic", (20, 100)))
+    .force_active() for _ in range(20)]
+    # add optional guitar notes with pentatonic scale constraint
+    e += [ec().intersect({"instrument": {"Guitar", "-"}})
+    .intersect(ec().pitch_in_scale_constraint("C major pentatonic", (20, 100)))
+    .force_active() for _ in range(60)]
+    # pad with empty notes
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
+    return e
+
+def extreme_drums(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo):
+    '''
+    # this constraint create an extreme drum beat with a lot of notes. 
+    # many kicks first of all
+    # some snares
+    # a lot of toms as well
+    # some cymbals as well
+    # set tag to metal
+    '''
+    e = []
+    # add many kicks
+    e += [ec().intersect({"pitch": {"36 (Drums)"}}).force_active() for _ in range(30)]
+    # add some snares
+    e += [ec().intersect({"pitch": {"38 (Drums)"}}).force_active() for _ in range(8)]
+    # add many toms
+    e += [ec().intersect({"pitch": TOM_PITCHES}).force_active() for _ in range(30)]
+    # add some rides
+    e += [ec().intersect({"pitch": CRASH_PITCHES}).force_active() for _ in range(10)]
+
+    # add 20 drums
+    e += [ec().intersect({"instrument": {"Drums"}}).force_active() for _ in range(32)]
+    # add 50 optional drums
+    e += [ec().intersect({"instrument": {"Drums"}}) for _ in range(32)]
+
+    # pad with empty notes
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
+    # set tempo to 120
+    e = [ev.intersect(ec().tempo_constraint(75)) for ev in e]
+    # add tag constraint
+    e = [ev.intersect({"tag": {"metal", "-"}}) for ev in e]
+    return e
 
 def ballad(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo,
 ):
@@ -51,10 +96,9 @@ def bass_and_drums(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo):
 def strings_and_flute(e, ec, n_events, beat_range, pitch_range, drums, tag, tempo):
     e = []
 
-    e += [ec().intersect({"instrument": {"Flute", "Strings"}}).force_active() for _ in range(80)]
+    e += [ec().intersect({"instrument": {"Flute", "Strings"}}) for _ in range(n_events)]
 
     e = [ev.intersect({"tag": {"classical", "-"}}) for ev in e]
-    e += [ec().force_inactive() for _ in range(n_events - len(e))]
     return e
 
 
@@ -304,6 +348,39 @@ def breakbeat(
     ]
     e = [ev.intersect({"tag": {"metal", "-"}}) for ev in e]
 
+    return e
+
+
+def triplet_drums(
+    e,
+    ec,
+    n_events,
+    beat_range,
+    pitch_range,
+    drums,
+    tag,
+    tempo,
+):
+    # one drum note every 8 ticks (triplet feel)
+    ticks_per_beat = ec().tokenizer.config["ticks_per_beat"]
+
+    n_beats = 16
+    triplet_ticks = {str(t) for t in range(0, ticks_per_beat * n_beats, ticks_per_beat // 3)}
+
+    e = [
+        ec().intersect({"instrument": {"Drums"}, "onset/global_tick": {str(onset_tick)}}).force_active() 
+        for onset_tick in range(0, ticks_per_beat * n_beats, ticks_per_beat // 3)
+    ]
+
+    # add 50 more drums on any triplet
+    e += [ec().intersect({"instrument": {"Drums"}, "onset/global_tick": triplet_ticks}).force_active() for _ in range(50)]
+    
+    # set tempo
+    e = [ev.intersect(ec().tempo_constraint(tempo)) for ev in e]
+    # set tag
+    e = [ev.intersect({"tag": {tag, "-"}}) for ev in e]
+    # pad
+    e += [ec().force_inactive() for _ in range(n_events - len(e))]
     return e
 
 
@@ -677,14 +754,14 @@ def fun_beat(
     e += [
         ec()
         .intersect({"instrument": {"Bass", "-"}})
-        .intersect(ec().scale_constraint("C pentatonic", (30, 50)))
+        .intersect(ec().pitch_in_scale_constraint("C pentatonic", (30, 50)))
         for _ in range(20)
     ]
     # add one bass note on first beat
     e += [
         ec()
         .intersect({"instrument": {"Bass"}})
-        .intersect(ec().scale_constraint("C pentatonic", (30, 50)))
+        .intersect(ec().pitch_in_scale_constraint("C pentatonic", (30, 50)))
         .force_active()
         for _ in range(10)
     ]
@@ -692,7 +769,7 @@ def fun_beat(
     # add 40 drums
 
     # constrain to major pitch set
-    e = [ev.intersect(ec().scale_constraint("C major", (20, 100))) for ev in e]
+    e = [ev.intersect(ec().pitch_in_scale_constraint("C major", (20, 100))) for ev in e]
     # pad with empty notes
     e += [
         ec()

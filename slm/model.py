@@ -264,7 +264,62 @@ class SuperposedLanguageModel(torch.nn.Module):
                     
         return x
 
-    def slm_forward(self, x, return_activations=False):
+    def cfg_forward(self, x, guidance_scale=1.5):
+        """
+        Classifier-free guidance forward pass.
+        
+        Simulates MLM-style masking for the unconditional path:
+        - Known positions (one-hot) stay as they are
+        - Unknown positions (multiple tokens possible) get replaced with syntax mask
+        
+        Combines: logits = uncond_logits + guidance_scale * (cond_logits - uncond_logits)
+        
+        Args:
+            x: Input tensor of shape (batch_size, events, attributes, vocab_size) with constraints
+            guidance_scale: CFG scale. 1.0 = no guidance, >1.0 = stronger constraint adherence
+        
+        Returns:
+            Combined logits of shape (batch_size, events, attributes, vocab_size)
+        """
+        if guidance_scale == 1.0:
+            return self.slm_forward(x, enforce_constraint=True)
+        b, e, a, v = x.shape
+        dtype = x.dtype
+        device = x.device
+        
+        # Conditional forward pass (with constraints)
+        cond_logits = self.slm_forward(x, enforce_constraint=False)
+        
+        # Create unconditional input (MLM-style: replace unknown positions with syntax mask)
+        syntax_mask = self.syntax_mask[None, None, ...].to(device).to(dtype)
+        syntax_mask = einops.repeat(syntax_mask, "1 1 a v -> b e a v", b=b, e=e)
+        # Normalize syntax mask to get uniform distribution over valid tokens
+        syntax_prior = syntax_mask / (syntax_mask.sum(dim=-1, keepdim=True) + self.eps)
+        
+        # Find unknown positions (more than one token has non-zero probability)
+        is_unknown = (x > 0).sum(dim=-1, keepdim=True) > 1  # shape: (b, e, a, 1)
+        
+        # Keep known positions, replace unknown with syntax prior
+        uncond_x = torch.where(is_unknown, syntax_prior, x)
+        
+        # Unconditional forward pass
+        uncond_logits = self.slm_forward(uncond_x, enforce_constraint=False)
+
+
+        
+        # CFG combination
+        logits = uncond_logits + guidance_scale * (cond_logits - uncond_logits)
+
+        # combining logits!
+        
+        # Re-apply constraint masking to final logits
+        zero = torch.zeros_like(x, device=device, dtype=dtype)
+        if self.enforce_constraint_in_forward:
+            logits[x.isclose(zero, rtol=1e-5)] = torch.finfo(logits.dtype).min
+        
+        return logits
+
+    def slm_forward(self, x, return_activations=False, enforce_constraint=True):
         """
         Forward pass for Superposed Language Model (SLM).
         Input:
@@ -298,12 +353,18 @@ class SuperposedLanguageModel(torch.nn.Module):
         logits[syntax_mask.isclose(zero, rtol=1e-5)] = torch.finfo(logits.dtype).min
 
         # enforce constraint with appropriate tolerances
-        if self.enforce_constraint_in_forward:
+        if self.enforce_constraint_in_forward and enforce_constraint:
             logits[x.isclose(zero, rtol=1e-5)] = torch.finfo(logits.dtype).min
 
         if return_activations:
             return logits, z_post
         return logits
+
+    def mlm_as_slm_forward(self, x, return_activations=False):
+        # x is a tensor of shape (batch_size, events, attributes, vocab_size)
+        # add an empty channel at the end
+        x = torch.cat([x, torch.zeros_like(x[..., :1])], dim=-1)
+        return self.slm_forward(x, return_activations)
 
     def mlm_forward(self, x_masked, return_activations=False):
         """
@@ -372,6 +433,7 @@ class SuperposedLanguageModel(torch.nn.Module):
         attribute_temperature=None,
         tokens_per_step=1,
         collapse_duplicates=False,
+        constraint_cfg = 1.0,
     ):
         """
         Generate completions using Superposed Language Model (SLM) or Masked Language Model (MLM).
@@ -410,7 +472,10 @@ class SuperposedLanguageModel(torch.nn.Module):
                     if self.use_mlm:
                         logits = self.mlm_forward_from_constraint(x)
                     else:
-                        logits = self(x)
+                        if constraint_cfg != 1.0:
+                            logits = self.cfg_forward(x, guidance_scale=constraint_cfg)
+                        else:
+                            logits = self(x)
                     flat_logits = einops.rearrange(logits, "b t a v -> (b t a) v")
                     flat_logits = top_k_top_p_filtering(
                         flat_logits, top_k=top_k, top_p=top_p

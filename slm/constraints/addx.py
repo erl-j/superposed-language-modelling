@@ -14,13 +14,13 @@ def funky_bassline(
     # remove all bass
     e = [ev for ev in e if ev.a["instrument"].isdisjoint({"Bass"})]
 
-    # # add 10 bass notes under 36
-    # e += [
-    #     ec()
-    #     .intersect({"instrument": {"Bass"}})
-    #     .force_active()
-    #     for _ in range(10)
-    # ]
+    # add 10 bass notes under 36
+    e += [
+        ec()
+        .intersect({"instrument": {"Bass"}})
+        .force_active()
+        for _ in range(10)
+    ]
 
     # add 10 bass notes over 36
     e += [
@@ -90,7 +90,7 @@ def add_percussion(
 
     e += [
         ec().intersect({"pitch": PERCUSSION_PITCHES | {"-"}}).force_active()
-        for _ in range(5)
+        for _ in range(30)
     ]
 
     e += [ec().intersect({"pitch": PERCUSSION_PITCHES | {"-"}}) for _ in range(20)]
@@ -112,12 +112,20 @@ def add_tom_fill(
 ):
     # remove empty notes
     e = [ev for ev in e if ev.is_active()]
-    # remove drums in last 4 bars
+    
+    # Convert beats 14-15 to ticks (last 2 beats of 4-bar loop)
+    ticks_per_beat = ec().tokenizer.config["ticks_per_beat"]
+    beat_14_start_tick = 14 * ticks_per_beat
+    beat_16_start_tick = 16 * ticks_per_beat
+    tick_range = set(str(t) for t in range(beat_14_start_tick, beat_16_start_tick))
+    
+    # remove drums in last 2 beats (beats 14-15)
     e = [
         ev
         for ev in e
         if not (
-            not ev.a["onset/beat"].isdisjoint({"14", "15"})
+            "onset/global_tick" in ev.a
+            and not ev.a["onset/global_tick"].isdisjoint(tick_range)
             and not ev.a["instrument"].isdisjoint({"Drums"})
         )
     ]
@@ -128,15 +136,15 @@ def add_tom_fill(
             {
                 "instrument": {"Drums"},
                 "pitch": TOM_PITCHES,
-                "onset/beat": {"14", "15", "_"},
+                "onset/global_tick": tick_range | {"-"},
             }
         )
         .force_active()
-        for e in range(3)
+        for _ in range(3)
     ]
     # add up to 10 more drums
     e += [
-        ec().intersect({"instrument": {"Drums"}, "onset/beat": {"14", "15", "_"}})
+        ec().intersect({"instrument": {"Drums"}, "onset/global_tick": tick_range | {"-"}})
         for _ in range(10)
     ]
     # pad with empty notes
@@ -348,15 +356,16 @@ def add_locked_in_bassline(e, ec, n_events, beat_range, pitch_range, drums, tag,
     ]
     # add bass on every kick
     for kick in kicks:
+        # Use onset/global_tick if available, otherwise try onset/beat and onset/tick
+        bass_constraint = {"instrument": {"Bass"}}
+        if "onset/global_tick" in kick.a:
+            bass_constraint["onset/global_tick"] = kick.a["onset/global_tick"]
+        elif "onset/beat" in kick.a and "onset/tick" in kick.a:
+            bass_constraint["onset/beat"] = kick.a["onset/beat"]
+            bass_constraint["onset/tick"] = kick.a["onset/tick"]
         e += [
             ec()
-            .intersect(
-                {
-                    "instrument": {"Bass"},
-                    "onset/beat": kick.a["onset/beat"],
-                    "onset/tick": kick.a["onset/tick"],
-                }
-            )
+            .intersect(bass_constraint)
             .force_active()
         ]
     # add up to 5 more bass notes

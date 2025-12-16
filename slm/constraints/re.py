@@ -192,6 +192,103 @@ def humanize(
 
     return e
 
+# def replace(
+#     e,
+#     ec,
+#     n_events,
+#     tick_range,
+#     pitch_range,
+#     drums,
+#     tag,
+#     tempo,
+# ):
+#     # remove empty events
+#     e = [ev for ev in e if not ev.is_inactive()]
+
+#     # find instruments that are present
+#     instruments = set()
+#     for i in range(len(e)):
+#         instruments = instruments.union(e[i].a["instrument"])
+#     # if empty every instrument is present
+#     instruments = ec().a["instrument"]
+#     if len(instruments) == 0:
+#         instruments = ec().a["instrument"]
+
+#     # non drum events
+#     non_drum_events = [ev for ev in e if "Drums" not in ev.a["instrument"]]
+
+#     # set all tags to tag and all tempos to tempo
+#     for i in range(len(e)):
+#         e[i].a["tag"] = {tag}
+#         e[i].a["tempo"] = {str(ec().quantize_tempo(tempo))}
+
+#     ticks = set([str(r) for r in range(tick_range[0], tick_range[1])])
+#     pitches = set(
+#         [
+#            f"{r} (Drums)" if drums else f"{r}"  for r in range(pitch_range[0], pitch_range[1])
+#         ]
+#     )
+
+#     notes_before_removal = len(e)
+
+#     infill_region_pitches = pitch_range[1] - pitch_range[0]
+
+#     # remove if in beat range and pitch range
+#     e = [
+#         ev
+#         for ev in e
+#         if not (ev.a["onset/global_tick"].issubset(ticks) and ev.a["pitch"].issubset(pitches))
+#     ]
+#     notes_after_removal = len(e)
+#     notes_removed = notes_before_removal - notes_after_removal
+
+#     infill_region_ticks = tick_range[1] - tick_range[0]
+#     infill_region_bars = infill_region_ticks / 4 * ec().tokenizer.config["ticks_per_beat"]
+#     # get valid durations
+#     valid_durations = set()
+#     for d in ec().tokenizer.config["durations"]:
+#         if d <= infill_region_bars:
+#             valid_durations.add(str(d))
+
+#     print(f"Valid durations: {valid_durations}")
+
+#     valid_onsets = {str(r) for r in range(tick_range[0], tick_range[1])} 
+#     valid_offsets = {"none (Drums)"} if drums else {str(r) for r in range(tick_range[0]+4, tick_range[1]+1)}
+#     valid_pitches = pitches
+#     valid_durations = {"none (Drums)"} if drums else valid_durations
+    
+#     infill_constraint = {
+#         "pitch": valid_pitches | {"-"},
+#         "onset/global_tick": valid_onsets | {"-"},
+#         "offset/global_tick": valid_offsets | {"-"},
+#         "instrument": ({"Drums"} if drums else instruments - {"Drums"}) | {"-"},
+#         # "duration": valid_durations  | {"-"},
+#     }
+
+#     forced_fill_count = max(notes_removed, 1)
+#     forced_notes = [
+#         ec().intersect(infill_constraint).force_active()
+#         for _ in range(forced_fill_count)
+#     ]
+#     e += forced_notes
+
+#     padding_count = max(0, n_events - len(e))
+#     e += [ec().force_inactive() for _ in range(padding_count)]
+
+
+#     # # pad with empty notes
+#     # e += [ec().force_inactive() for e in range(n_events - len(e))]
+
+#     # set tag
+#     e = [ev.intersect({"tag":{f"{tag}","-"}}) for ev in e]
+
+#     # set tempo
+
+#     e = [ e.intersect(ec().tempo_constraint(tempo)) for e in e]
+
+#     return e
+
+
 def replace(
     e,
     ec,
@@ -202,99 +299,85 @@ def replace(
     tag,
     tempo,
 ):
-    # remove empty events
     e = [ev for ev in e if not ev.is_inactive()]
-
-    # find instruments that are present
-    instruments = set()
-    for i in range(len(e)):
-        instruments = instruments.union(e[i].a["instrument"])
-    # if empty every instrument is present
     instruments = ec().a["instrument"]
-    if len(instruments) == 0:
+    if not instruments:
         instruments = ec().a["instrument"]
 
-    # non drum events
-    non_drum_events = [ev for ev in e if "Drums" not in ev.a["instrument"]]
+    box_ticks = set(range(tick_range[0], tick_range[1]))
+    valid_onsets = {str(r) for r in box_ticks}
+    valid_offsets = {str(r) for r in range(tick_range[0] + 1, tick_range[1] + 1)}
+    valid_pitches = {
+        f"{r} (Drums)" if drums else f"{r}"
+        for r in range(pitch_range[0], pitch_range[1])
+    }
 
-    # set all tags to tag and all tempos to tempo
-    for i in range(len(e)):
-        e[i].a["tag"] = {tag}
-        e[i].a["tempo"] = {str(ec().quantize_tempo(tempo))}
+    def _min_tick(values):
+        ints = [int(v) for v in values if v.isdigit()]
+        return min(ints) if ints else None
 
-    ticks = set([str(r) for r in range(tick_range[0], tick_range[1])])
-    pitches = set(
-        [
-           f"{r} (Drums)" if drums else f"{r}"  for r in range(pitch_range[0], pitch_range[1])
-        ]
-    )
+    def _max_tick(values):
+        ints = [int(v) for v in values if v.isdigit()]
+        return max(ints) if ints else None
 
-    notes_before_removal = len(e)
+    def _pitch_in_box(pitch_set):
+        return bool(pitch_set & valid_pitches)
 
-    infill_region_pitches = pitch_range[1] - pitch_range[0]
+    filtered = []
+    for ev in e:
+        start = _min_tick(ev.a["onset/global_tick"])
+        end = _max_tick(ev.a["offset/global_tick"])
+        pitch_in = _pitch_in_box(ev.a["pitch"])
 
-    # remove if in beat range and pitch range
-    e = [
-        ev
-        for ev in e
-        if not (ev.a["onset/global_tick"].issubset(ticks) and ev.a["pitch"].issubset(pitches))
-    ]
-    notes_after_removal = len(e)
-    notes_removed = notes_before_removal - notes_after_removal
+        # only consider notes that overlap the pitch range
+        if not pitch_in:
+            filtered.append(ev)
+            continue
 
-    infill_region_ticks = tick_range[1] - tick_range[0]
-    infill_region_bars = infill_region_ticks / 4 * ec().tokenizer.config["ticks_per_beat"]
-    # get valid durations
-    valid_durations = set()
-    for d in ec().tokenizer.config["durations"]:
-        if d <= infill_region_bars:
-            valid_durations.add(str(d))
+        # check time overlap with box
+        starts_before = start is not None and start < tick_range[0]
+        starts_in = start is not None and tick_range[0] <= start < tick_range[1]
+        ends_in = end is not None and tick_range[0] < end <= tick_range[1]
+        ends_after = end is not None and end > tick_range[1]
 
-    print(f"Valid durations: {valid_durations}")
+        # note entirely in box -> delete
+        if starts_in and ends_in:
+            continue
 
-    valid_onsets = {str(r) for r in range(tick_range[0], tick_range[1])} 
-    valid_offsets = {"none (Drums)"} if drums else {str(r) for r in range(tick_range[0]+4, tick_range[1]+1)}
-    valid_pitches = pitches
-    valid_durations = {"none (Drums)"} if drums else valid_durations
-    
+        # note spans the entire box (starts before, ends after) -> delete
+        if starts_before and ends_after:
+            continue
+
+        # note starts before and ends in box -> resample offset
+        if starts_before and ends_in:
+            ev.a["offset/global_tick"] = valid_offsets.copy()
+            filtered.append(ev)
+            continue
+
+        # note starts in box and ends outside -> resample onset
+        if starts_in and ends_after:
+            ev.a["onset/global_tick"] = valid_onsets.copy()
+            filtered.append(ev)
+            continue
+
+        # note doesn't touch the box at all
+        filtered.append(ev)
+
     infill_constraint = {
         "pitch": valid_pitches | {"-"},
         "onset/global_tick": valid_onsets | {"-"},
-        "offset/global_tick":  valid_offsets | {"-"},
+        "offset/global_tick": valid_offsets | {"-"},
         "instrument": ({"Drums"} if drums else instruments - {"Drums"}) | {"-"},
-        # "duration": valid_durations  | {"-"},
     }
 
-    # add notes removed with infill constraint
-    # e += [
-    #     ec().intersect(infill_constraint).force_active()
-    #     for _ in range(1)
-    # ]
 
-    # e += [
-    #     ec().intersect(infill_constraint).force_active() for _ in range(notes_removed)
-    # ]
+    # force at least one event
+    filtered += [ec().intersect(infill_constraint).force_active() for _ in range(3)]
+    filtered += [ec().intersect(infill_constraint) for _ in range(n_events - len(filtered))]
 
-    e += [ec().intersect(infill_constraint).force_active()  for _ in range(notes_removed)]
-    # add one forced note
-    # e += [ec().intersect(infill_constraint).force_active() for _ in range(1)]
-    # # add 50 optional notes 
-    # e += [ec().intersect(infill_constraint) for _ in range(n_events - len(e)-50)]
-    # pitch time box size
-    pitch_time_box_notes = int( infill_region_bars * infill_region_pitches / 800)
-
-
-    # # pad with empty notes
-    e += [ec().force_inactive() for e in range(n_events - len(e))]
-
-    # set tag
-    e = [ev.intersect({"tag":{f"{tag}","-"}}) for ev in e]
-
-    # set tempo
-
-    e = [ e.intersect(ec().tempo_constraint(tempo)) for e in e]
-
-    return e
+    filtered = [ev.intersect({"tag": {f"{tag}", "-"}}) for ev in filtered]
+    filtered = [ev.intersect(ec().tempo_constraint(tempo)) for ev in filtered]
+    return filtered
 
 
 # def replace(

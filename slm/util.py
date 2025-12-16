@@ -165,9 +165,9 @@ def detail_plot(sm):
         # Map the pitches to display positions
         display_positions = [pitch_to_position[pitch] for pitch in drum_non_zero[0]]
         
-        # Plot drum hits
-        ax2.scatter(drum_non_zero[1], display_positions, 
-                   color='black', marker='s', s=20)
+        # Plot drum hits as circles (piano roll style)
+        ax2.scatter(drum_non_zero[1] + 0.5, display_positions, 
+                   color='black', marker='o', s=50, edgecolors='black', linewidths=0.5)
         
         # Add only vertical lines for each beat (same as above)
         for tick in time_ticks:

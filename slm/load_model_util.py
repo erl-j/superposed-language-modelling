@@ -1,4 +1,12 @@
+import torch
+import fractions
 
+torch.serialization.add_safe_globals([fractions.Fraction])
+
+import os
+import requests
+from pathlib import Path
+from .train import TrainingWrapper
 def load_model(
     model_type="slm_mixed",
     epochs=150,
@@ -17,13 +25,10 @@ def load_model(
     Returns:
         SuperposedLanguageModel: The loaded model.
     """
-    import os
-    import requests
-    from pathlib import Path
-    from .train import TrainingWrapper
+    
 
-    if model_type not in ["mlm", "slm_sparse", "slm_mixed"]:
-        raise ValueError(f"Invalid model_type: {model_type}. Options: 'mlm', 'slm_sparse', 'slm_mixed'")
+    if model_type not in ["mlm", "slm_full", "slm_mixed", "slm_sparse"]:
+        raise ValueError(f"Invalid model_type: {model_type}. Options: 'mlm', 'slm_full', 'slm_mixed', 'slm_sparse'")
     
     if epochs not in [50, 100, 150]:
         raise ValueError(f"Invalid epochs: {epochs}. Options: 50, 100, 150")
