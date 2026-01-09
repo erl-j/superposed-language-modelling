@@ -14,6 +14,7 @@ import math
 import glob
 from tqdm import tqdm
 from .CONSTANTS import instrument_class_to_selected_program_nr
+from matplotlib.patches import Rectangle
 
 
 def detail_plot(sm):
@@ -218,6 +219,8 @@ def sm_set_track_order(sm):
 
 def sm_fix_overlap_notes(sm):
     sm = sm.copy()
+    # print number of notes before
+    print(f"Number of notes before: {sm.note_num()}")
     for track_idx in range(len(sm.tracks)):
         track = sm.tracks[track_idx]
         notes = track.notes
@@ -237,6 +240,8 @@ def sm_fix_overlap_notes(sm):
                     new_pitch_notes.append(pitch_notes[i+1])
             new_notes.extend(new_pitch_notes)
         sm.tracks[track_idx].notes = new_notes
+    # print number of notes after
+    print(f"Number of notes after: {sm.note_num()}")
     return sm
 
 def sm_reduce_dynamics(sm, factor):
@@ -511,3 +516,298 @@ def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float("Inf")
     logits = torch.gather(sorted_logits, 1, sorted_indices.argsort(-1))
 
     return logits
+
+import os
+import subprocess
+import sys
+
+def download_matrix_soundfont():
+    """Download and extract soundfont to assets directory"""
+    assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets')
+    os.makedirs(assets_dir, exist_ok=True)
+    
+    soundfont_path = os.path.join(assets_dir, 'MatrixSF SF2 v2.1.5.sf2')
+    
+    # Check if soundfont already exists
+    if os.path.exists(soundfont_path):
+        print(f"Soundfont already exists at {soundfont_path}")
+        return soundfont_path
+    
+    # Install gdown if not available
+    try:
+        import gdown
+    except ImportError:
+        print("Installing gdown...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "gdown"])
+        import gdown
+    
+    # Install unrar if not available
+    if subprocess.run(['which', 'unrar'], capture_output=True).returncode != 0:
+        print("Installing unrar...")
+        subprocess.check_call(['apt-get', 'update'])
+        subprocess.check_call(['apt-get', 'install', '-y', 'unrar'])
+    
+    # Download the soundfont
+    print("Downloading soundfont...")
+    rar_file = os.path.join(assets_dir, 'MatrixSF SF2 v2.1.5.rar')
+    gdown.download('https://drive.google.com/uc?id=1hXoHCSxsq1-oOHcq5ZaEf5i-lgVyKvCy', 
+                   rar_file, quiet=False)
+    
+    # Extract the RAR file
+    print("Extracting soundfont...")
+    subprocess.check_call(['unrar', 'x', '-y', rar_file], cwd=assets_dir)
+    
+    # Clean up RAR file
+    os.remove(rar_file)
+    
+    print(f"Soundfont ready at {soundfont_path}")
+    return soundfont_path
+
+INSTRUMENT_COLORS = {
+    "Piano": (0.2, 0.4, 0.8), "Bass": (0.8, 0.2, 0.2), "Guitar": (0.2, 0.7, 0.3),
+    "Drums": (0.1, 0.1, 0.1), "Strings": (0.6, 0.3, 0.7), "Brass": (0.9, 0.6, 0.1),
+    "Reed": (0.4, 0.7, 0.7), "Organ": (0.5, 0.3, 0.1), "Synth Lead": (0.9, 0.3, 0.6),
+    "Synth Pad": (0.4, 0.5, 0.8), "Chromatic Percussion": (0.7, 0.7, 0.2),
+}
+
+def plot_piano_roll(sm, highlight=None, fixed_pitch_range=None, drums_only=False, locked_sm=None):
+    """
+    Plot piano roll with optional highlight box and locked notes visualization.
+    locked_sm: A symusic Score containing notes that were constrained/fixed.
+    """
+    pr_tpq = 12
+    tempo = int(sm.tempos[-1].qpm) if sm.tempos else 120
+    time_sig = f"{sm.time_signatures[-1].numerator}/{sm.time_signatures[-1].denominator}" if sm.time_signatures else "4/4"
+    
+    instrument_names = [
+        pretty_midi.program_to_instrument_class(t.program) if not t.is_drum else "Drums" 
+        for t in sm.tracks
+    ]
+    
+    # Generate piano rolls for the main score
+    pr = sm.copy().resample(pr_tpq, min_dur=0).pianoroll(modes=["frame"])[0]
+    
+    # Generate piano rolls for the locked notes if provided
+    locked_pr = None
+    if locked_sm:
+        try:
+            locked_pr = locked_sm.copy().resample(pr_tpq, min_dur=0).pianoroll(modes=["frame"])[0]
+        except Exception:
+            pass # Fail silently if locked_sm is incompatible or empty
+
+    unique_instruments = np.unique(instrument_names)
+    instrument_to_tracks = {inst: [i for i, n in enumerate(instrument_names) if n == inst] for inst in unique_instruments}
+    
+    loop_ticks = pr_tpq * 4 * 4
+    drum_indices = np.where(np.array(instrument_names) == "Drums")[0]
+    has_drums = len(drum_indices) > 0
+    melodic_indices = [i for i, n in enumerate(instrument_names) if n != "Drums"]
+    has_melodic = len(melodic_indices) > 0 and not drums_only
+    
+    # Determine pitch range
+    all_pitches = []
+    for idx in melodic_indices:
+        if idx < len(pr):
+            all_pitches.extend(np.where(np.any(pr[idx][:, :loop_ticks] > 0, axis=1))[0])
+    
+    if fixed_pitch_range:
+        min_pitch, max_pitch = fixed_pitch_range
+    elif all_pitches:
+        min_pitch, max_pitch = max(0, min(all_pitches) - 3), min(127, max(all_pitches) + 3)
+    else:
+        min_pitch, max_pitch = 24, 84  # C1 to C6
+    
+    # Create figure - reduced height for harmonic plots
+    if has_drums and has_melodic:
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9.4, 8), gridspec_kw={'height_ratios': [2, 1]})
+        plt.subplots_adjust(hspace=0.3)
+    elif has_drums and not has_melodic:
+        fig, ax2 = plt.subplots(figsize=(9.4, 4))
+        ax1 = None
+    else:
+        fig, ax1 = plt.subplots(figsize=(8.0, 5))
+        ax2 = None
+    
+    time_ticks = np.arange(0, loop_ticks, pr_tpq)
+    
+    # Helper to plot notes with per-instrument colors using barh
+    def plot_notes_on_ax(ax, track_indices, is_drum, p_roll_source, is_locked_layer=False, drum_pitch_map=None):
+        if ax is None: return
+        
+        fallback_colors = plt.cm.Set2.colors
+        target_indices = [idx for idx in track_indices if idx < len(p_roll_source)]
+        if not target_indices: return
+
+        if is_drum:
+            # Aggregate drums
+            combined_pr = sum(p_roll_source[idx] for idx in target_indices)[:, :loop_ticks]
+            
+            # Find continuous note segments
+            for pitch in range(combined_pr.shape[0]):
+                row = combined_pr[pitch, :]
+                if not np.any(row > 0):
+                    continue
+                
+                # Find note start/end positions
+                diff = np.diff(np.concatenate([[0], row > 0, [0]]).astype(int))
+                starts = np.where(diff == 1)[0]
+                ends = np.where(diff == -1)[0]
+                
+                # Map pitch to ordinal position if needed
+                y_pos = drum_pitch_map.get(pitch, pitch) if drum_pitch_map else pitch
+                
+                for start, end in zip(starts, ends):
+                    duration = end - start
+                    vel = np.mean(row[start:end])
+                    
+                    if is_locked_layer:
+                        # Desaturated drums (lighten black to gray)
+                        brightness = np.clip(vel / 127.0, 0.0, 1.0)
+                        base_gray = (brightness, brightness, brightness)
+                        # Mix with white to desaturate
+                        color = np.clip(np.array(base_gray) + 0.6, 0.0, 1.0)
+                        ax.barh(y_pos, duration, left=start, height=0.8,
+                               color=color, edgecolor='gray', linewidth=0.3, alpha=0.5)
+                    else:
+                        # Velocity modulates brightness (grayscale)
+                        brightness = np.clip(vel / 127.0, 0.0, 1.0)
+                        color = (brightness, brightness, brightness)
+                        ax.barh(y_pos, duration, left=start, height=0.8,
+                               color=color, edgecolor='black', linewidth=0.3)
+
+        else:
+            # Melodic - plot per instrument with colors
+            for i, inst in enumerate(unique_instruments):
+                if inst == "Drums": continue
+                
+                inst_indices = [x for x in instrument_to_tracks[inst] if x in target_indices]
+                if not inst_indices: continue
+                
+                inst_pr = p_roll_source[inst_indices].sum(axis=0)[:, :loop_ticks]
+                
+                # Track if we've added a label for this instrument
+                labeled = False
+                
+                # Find continuous note segments for each pitch
+                for pitch in range(inst_pr.shape[0]):
+                    row = inst_pr[pitch, :]
+                    if not np.any(row > 0):
+                        continue
+                    
+                    # Find note start/end positions
+                    diff = np.diff(np.concatenate([[0], row > 0, [0]]).astype(int))
+                    starts = np.where(diff == 1)[0]
+                    ends = np.where(diff == -1)[0]
+                    
+                    for start, end in zip(starts, ends):
+                        duration = end - start
+                        vel = np.mean(row[start:end])
+                        
+                        if is_locked_layer:
+                            # Desaturated instrument color for locked notes
+                            base_color = np.array(INSTRUMENT_COLORS.get(inst, fallback_colors[i % len(fallback_colors)]))
+                            # Mix heavily with white to desaturate
+                            color = np.clip(base_color * 0.3 + 0.7, 0.0, 1.0)
+                            ax.barh(pitch, duration, left=start, height=0.8,
+                                   color=color, edgecolor='gray', linewidth=0.3, alpha=0.5)
+                        else:
+                            # Velocity modulates color: lower velocity = lighter (more white mixed in)
+                            base_color = np.array(INSTRUMENT_COLORS.get(inst, fallback_colors[i % len(fallback_colors)]))
+                            brightness = np.clip((1.0 - vel / 127.0) * 0.5, 0.0, 0.5)
+                            color = np.clip(base_color + (1.0 - base_color) * brightness, 0.0, 1.0)
+                            
+                            # Only label once per instrument
+                            label = inst if not labeled else ""
+                            labeled = True
+                            ax.barh(pitch, duration, left=start, height=0.8,
+                                   color=color, edgecolor='black', linewidth=0.3, label=label)
+
+    # Create drum pitch mapping for ordinal y-axis
+    drum_pitch_map = None
+    unique_drum_pitches = []
+    if ax2 and has_drums:
+        # Collect all unique drum pitches from main and locked scores
+        drum_pr_main = sum(pr[idx] for idx in drum_indices if idx < len(pr))[:, :loop_ticks]
+        nz_main = np.where(drum_pr_main > 0)
+        unique_pitches = set(nz_main[0])
+        
+        # Also include locked drums if present
+        if locked_pr is not None:
+            l_inst_names = [
+                pretty_midi.program_to_instrument_class(t.program) if not t.is_drum else "Drums" 
+                for t in locked_sm.tracks
+            ]
+            l_drum_idxs = np.where(np.array(l_inst_names) == "Drums")[0]
+            if len(l_drum_idxs) > 0:
+                l_drum_pr = sum(locked_pr[idx] for idx in l_drum_idxs if idx < len(locked_pr))[:, :loop_ticks]
+                nz_l = np.where(l_drum_pr > 0)
+                unique_pitches.update(nz_l[0])
+        
+        # Sort pitches in drum kit order (low to high is typical)
+        unique_drum_pitches = sorted(list(unique_pitches))
+        drum_pitch_map = {pitch: i for i, pitch in enumerate(unique_drum_pitches)}
+    
+    # 1. Plot the Locked (Source) Notes First (if available)
+    if locked_pr is not None:
+        locked_inst_names = [
+            pretty_midi.program_to_instrument_class(t.program) if not t.is_drum else "Drums" 
+            for t in locked_sm.tracks
+        ]
+        locked_drum_indices = np.where(np.array(locked_inst_names) == "Drums")[0]
+        locked_melodic_indices = [i for i, n in enumerate(locked_inst_names) if n != "Drums"]
+        
+        if ax1 and locked_melodic_indices:
+            plot_notes_on_ax(ax1, locked_melodic_indices, False, locked_pr, is_locked_layer=True)
+        if ax2 and locked_drum_indices:
+            plot_notes_on_ax(ax2, locked_drum_indices, True, locked_pr, is_locked_layer=True, drum_pitch_map=drum_pitch_map)
+    
+    # 2. Plot the Generated (Main) Score on top
+    if ax1:
+        plot_notes_on_ax(ax1, melodic_indices, False, pr, is_locked_layer=False)
+    if ax2:
+        plot_notes_on_ax(ax2, drum_indices, True, pr, is_locked_layer=False, drum_pitch_map=drum_pitch_map)
+
+    # Standard Formatting
+    if ax1:
+        ax1.set_xticks(time_ticks)
+        ax1.set_xticklabels(np.arange(len(time_ticks)))
+        ax1.set_xlim(0, loop_ticks)
+        ax1.set_ylim(min_pitch, max_pitch)
+        pitch_ticks = [p for p in range(min_pitch - (min_pitch % 12), max_pitch + 12, 12) if min_pitch <= p <= max_pitch]
+        ax1.set_yticks(pitch_ticks)
+        ax1.set_yticklabels([f"C{p // 12 - 1}" for p in pitch_ticks])
+        ax1.grid(True, which='both', linestyle='--', alpha=0.3, color='gray')
+        ax1.set_xlabel("Beat")
+        ax1.set_ylabel("Pitch")
+        ax1.set_title(f"Melodic Instruments - Tempo: {tempo}, Time Signature: {time_sig}")
+        
+        # Fix duplicate labels in legend
+        handles, labels = ax1.get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        if by_label:
+            ax1.legend(by_label.values(), by_label.keys(), title="Instruments", loc='upper right', bbox_to_anchor=(1.15, 1))
+        
+        # Highlight box (Infill)
+        if highlight:
+            scale = pr_tpq / 24  # tokenizer tpq = 24
+            t0, t1 = [t * scale for t in highlight["tick_range"]]
+            p0, p1 = highlight["pitch_range"]
+            ax1.add_patch(Rectangle((t0, p0), t1 - t0, p1 - p0, lw=1.5, ec="magenta", fc="none", ls="--", alpha=0.8))
+    
+    if ax2 and has_drums and unique_drum_pitches:
+        ordinal_positions = list(range(len(unique_drum_pitches)))
+        
+        ax2.set_xticks(time_ticks)
+        ax2.set_xticklabels(np.arange(len(time_ticks)))
+        ax2.set_xlim(0, loop_ticks)
+        # Set y-ticks at ordinal positions with drum names as labels
+        ax2.set_yticks(ordinal_positions)
+        ax2.set_yticklabels([pretty_midi.note_number_to_drum_name(p) or str(p) for p in unique_drum_pitches])
+        ax2.set_ylim(-0.5, len(unique_drum_pitches) - 0.5)
+        ax2.grid(True, which='both', linestyle='--', alpha=0.3, color='gray')
+        ax2.set_xlabel("Beat")
+        ax2.set_ylabel("Drum Type")
+        ax2.set_title("Drum Pattern")
+    
+    plt.tight_layout()
+    return fig

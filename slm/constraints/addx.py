@@ -89,11 +89,11 @@ def add_percussion(
     e = [ev for ev in e if ev.a["pitch"].isdisjoint(PERCUSSION_PITCHES)]
 
     e += [
-        ec().intersect({"pitch": PERCUSSION_PITCHES | {"-"}}).force_active()
+        ec().intersect({"pitch": PERCUSSION_PITCHES | {"-"}, "instrument": {"Drums"} | {"-"}}).force_active()
         for _ in range(30)
     ]
 
-    e += [ec().intersect({"pitch": PERCUSSION_PITCHES | {"-"}}) for _ in range(20)]
+    e += [ec().intersect({"pitch": PERCUSSION_PITCHES | {"-"}, "instrument": {"Drums"} | {"-"}}) for _ in range(20)]
     # pad
     e += [ec().force_inactive() for _ in range(n_events - len(e))]
 

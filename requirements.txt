@@ -15,3 +15,6 @@ transformers
 tqdm
 ipython
 midi-player
+gdown
+# requires apt-get update && apt-get install -y portaudio19-dev
+tinysoundfont
