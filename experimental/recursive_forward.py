@@ -83,7 +83,9 @@ plt.ylabel('Average Entropy (nats)')
 plt.title('Entropy vs Recursion Step')
 plt.grid(True, alpha=0.3)
 plt.tight_layout()
-plt.savefig('recursive_entropy.png', dpi=150, bbox_inches='tight')
+entropy_base = 'recursive_entropy'
+plt.savefig(f'{entropy_base}.png', dpi=150, bbox_inches='tight')
+plt.savefig(f'{entropy_base}.pdf', bbox_inches='tight')
 plt.show()
 
 print("\nSampling from final distribution...")
@@ -101,8 +103,10 @@ print("Saved to recursive_output.mid")
 
 # Plot piano roll
 fig = plot_piano_roll(sm)
-plt.savefig('recursive_output_piano_roll.png', dpi=150, bbox_inches='tight')
-print("Saved piano roll to recursive_output_piano_roll.png")
+roll_base = 'recursive_output_piano_roll'
+plt.savefig(f'{roll_base}.png', dpi=150, bbox_inches='tight')
+plt.savefig(f'{roll_base}.pdf', bbox_inches='tight')
+print("Saved piano roll to recursive_output_piano_roll.png and .pdf")
 plt.show()
 
 # %%
