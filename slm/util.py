@@ -15,6 +15,9 @@ import glob
 from tqdm import tqdm
 from .CONSTANTS import instrument_class_to_selected_program_nr
 from matplotlib.patches import Rectangle
+import subprocess
+import sys
+import tinysoundfont
 
 
 def detail_plot(sm):
@@ -298,12 +301,99 @@ def top_p_probs(probs, top_p=0.0):
     probs = probs / probs.sum(dim=-1, keepdim=True)
     return probs
 
-def preview_sm(x_sm):
-    # rand int
+def preview_w_player(x_sm):
+    """Preview symusic Score with HTML MIDI player"""
     rand_int = np.random.randint(0, 1000000)
     tmp_file_path = "sm_preview_" + str(rand_int) + ".mid"
     x_sm.dump_midi(tmp_file_path)
+    
+    # Display MIDI player
     ipd.display(MIDIPlayer(tmp_file_path, 400, styler=cifka_advanced, title='My Player'))
+    
+    # delete file
+    os.remove(tmp_file_path)
+
+def preview_sm(x_sm, soundfont_path=None, sample_rate=44100):
+    """
+    Preview symusic Score with audio rendering.
+    
+    Parameters:
+    -----------
+    x_sm : symusic.Score
+        The score to preview
+    soundfont_path : str, optional
+        Path to soundfont file. If provided, renders audio with tinysoundfont.
+        If None, only displays HTML MIDI player.
+    sample_rate : int
+        Sample rate for audio rendering (default: 44100)
+    """
+    rand_int = np.random.randint(0, 1000000)
+    tmp_file_path = "sm_preview_" + str(rand_int) + ".mid"
+    x_sm.dump_midi(tmp_file_path)
+    
+    # If soundfont path provided, render and display audio with tinysoundfont
+    if soundfont_path is not None:
+        try:
+            # Ensure soundfont exists
+            if not os.path.exists(soundfont_path):
+                print(f"Soundfont not found at {soundfont_path}")
+            else:
+                # Determine duration
+                try:
+                    sm = symusic.Score(tmp_file_path)
+                    duration_seconds = sm.end() / sm.ticks_per_quarter / 2
+                    duration_seconds = max(duration_seconds, 10.0)
+                except:
+                    duration_seconds = 10.0
+                
+                # Initialize the synthesizer
+                synth = tinysoundfont.Synth(samplerate=sample_rate)
+                sfid = synth.sfload(soundfont_path)
+                
+                # Clear the synth state
+                synth.notes_off()
+                synth.sounds_off()
+                
+                # Flush the synth
+                dummy_buffer = synth.generate(4 * sample_rate)
+                
+                # Create sequencer and load MIDI
+                seq = tinysoundfont.Sequencer(synth)
+                seq.midi_load(tmp_file_path)
+                
+                # Generate audio buffer
+                buffer_size = int(sample_rate * duration_seconds)
+                buffer = synth.generate(buffer_size)
+                
+                # Convert to numpy array
+                block = np.frombuffer(bytes(buffer), dtype=np.float32)
+                
+                # Reshape to stereo (channels, samples)
+                stereo_audio = np.stack([block[::2], block[1::2]])
+                
+                # Normalize
+                if stereo_audio.shape[1] > 0:
+                    stereo_audio = stereo_audio / (np.abs(stereo_audio).max() + 1e-6)
+                else:
+                    stereo_audio = np.zeros((2, sample_rate))
+                
+                # Save to temporary WAV file and load it
+                import scipy.io.wavfile as wavfile
+                tmp_audio_path = f"audio_preview_{rand_int}.wav"
+                audio_for_display = stereo_audio.T
+                # Convert to int16 for WAV
+                audio_int16 = (audio_for_display * 32767).astype(np.int16)
+                wavfile.write(tmp_audio_path, sample_rate, audio_int16)
+                ipd.display(ipd.Audio(tmp_audio_path))
+                os.remove(tmp_audio_path)
+        except Exception as e:
+            print(f"Could not render audio: {e}")
+            import traceback
+            traceback.print_exc()
+    else:
+        # No soundfont provided, display HTML MIDI player
+        ipd.display(MIDIPlayer(tmp_file_path, 400, styler=cifka_advanced, title='My Player'))
+    
     # delete file
     os.remove(tmp_file_path)
 
@@ -525,8 +615,8 @@ def download_matrix_soundfont():
     """Download and extract soundfont to assets directory"""
     assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets')
     os.makedirs(assets_dir, exist_ok=True)
-    
-    soundfont_path = os.path.join(assets_dir, 'MatrixSF SF2 v2.1.5.sf2')
+
+    soundfont_path = os.path.join(assets_dir, 'MatrixSF_v2.1.5.sf2')
     
     # Check if soundfont already exists
     if os.path.exists(soundfont_path):
@@ -562,6 +652,71 @@ def download_matrix_soundfont():
     
     print(f"Soundfont ready at {soundfont_path}")
     return soundfont_path
+
+def get_matrix_soundfont_path():
+    """Get path to Matrix soundfont, downloading if necessary"""
+    assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets')
+    soundfont_path = os.path.join(assets_dir, 'MatrixSF_v2.1.5.sf2')
+    
+    if not os.path.exists(soundfont_path):
+        print("Matrix soundfont not found, downloading...")
+        return download_matrix_soundfont()
+    
+    return soundfont_path
+
+def render_midi_with_tinysoundfont(midi_path, sample_rate=44100, duration_seconds=None):
+    """Render MIDI file to audio using tinysoundfont with Matrix soundfont"""
+    # Get the soundfont path
+    assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets')
+    soundfont_path = os.path.join(assets_dir, 'MatrixSF_v2.1.5.sf2')
+    
+    # Download soundfont if not available
+    if not os.path.exists(soundfont_path):
+        print("Matrix soundfont not found, downloading...")
+        soundfont_path = download_matrix_soundfont()
+    
+    # Determine duration if not provided
+    if duration_seconds is None:
+        try:
+            sm = symusic.Score(midi_path)
+            duration_seconds = sm.end() / sm.ticks_per_quarter / 2  # Convert ticks to seconds (assuming 120 BPM)
+            duration_seconds = max(duration_seconds, 10.0)  # At least 10 seconds
+        except:
+            duration_seconds = 10.0  # Default fallback
+    
+    # Initialize the synthesizer
+    synth = tinysoundfont.Synth(samplerate=sample_rate)
+    sfid = synth.sfload(soundfont_path)
+    
+    # Clear the synth state
+    synth.notes_off()
+    synth.sounds_off()
+    
+    # Flush the synth
+    dummy_buffer = synth.generate(4 * sample_rate)
+    
+    # Create sequencer and load MIDI
+    seq = tinysoundfont.Sequencer(synth)
+    seq.midi_load(midi_path)
+    
+    # Generate audio buffer
+    buffer_size = int(sample_rate * duration_seconds)
+    buffer = synth.generate(buffer_size)
+    
+    # Convert to numpy array
+    block = np.frombuffer(bytes(buffer), dtype=np.float32)
+    
+    # Reshape to stereo (channels, samples)
+    # The buffer is interleaved stereo: left=even, right=odd
+    stereo_audio = np.stack([block[::2], block[1::2]])
+    
+    # Normalize
+    if stereo_audio.shape[1] > 0:
+        stereo_audio = stereo_audio / (np.abs(stereo_audio).max() + 1e-6)
+    else:
+        stereo_audio = np.zeros((2, sample_rate))
+    
+    return stereo_audio, sample_rate
 
 INSTRUMENT_COLORS = {
     "Piano": (0.2, 0.4, 0.8), "Bass": (0.8, 0.2, 0.2), "Guitar": (0.2, 0.7, 0.3),
@@ -669,8 +824,9 @@ def plot_piano_roll(sm, highlight=None, fixed_pitch_range=None, drums_only=False
                         ax.barh(y_pos, duration, left=start, height=0.8,
                                color=color, edgecolor='gray', linewidth=0.3, alpha=0.5)
                     else:
-                        # Velocity modulates brightness (grayscale)
-                        brightness = np.clip(vel / 127.0, 0.0, 1.0)
+                        # Velocity modulates brightness (grayscale) with power scaling for better perception
+                        normalized_vel = np.clip(vel / 127.0, 0.0, 1.0)
+                        brightness = normalized_vel  # Floor at 0.15, stronger power scale for more contrast
                         color = (brightness, brightness, brightness)
                         ax.barh(y_pos, duration, left=start, height=0.8,
                                color=color, edgecolor='black', linewidth=0.3)
@@ -713,7 +869,7 @@ def plot_piano_roll(sm, highlight=None, fixed_pitch_range=None, drums_only=False
                         else:
                             # Velocity modulates color: lower velocity = lighter (more white mixed in)
                             base_color = np.array(INSTRUMENT_COLORS.get(inst, fallback_colors[i % len(fallback_colors)]))
-                            brightness = np.clip((1.0 - vel / 127.0) * 0.5, 0.0, 0.5)
+                            brightness = np.clip((1.0 - vel / 127.0) * 0.5, 0.0, 1.0)
                             color = np.clip(base_color + (1.0 - base_color) * brightness, 0.0, 1.0)
                             
                             # Only label once per instrument
@@ -779,13 +935,11 @@ def plot_piano_roll(sm, highlight=None, fixed_pitch_range=None, drums_only=False
         ax1.grid(True, which='both', linestyle='--', alpha=0.3, color='gray')
         ax1.set_xlabel("Beat")
         ax1.set_ylabel("Pitch")
-        ax1.set_title(f"Melodic Instruments - Tempo: {tempo}, Time Signature: {time_sig}")
+        ax1.set_title(f"Harmonic Instruments")
         
         # Fix duplicate labels in legend
         handles, labels = ax1.get_legend_handles_labels()
         by_label = dict(zip(labels, handles))
-        if by_label:
-            ax1.legend(by_label.values(), by_label.keys(), title="Instruments", loc='upper right', bbox_to_anchor=(1.15, 1))
         
         # Highlight box (Infill)
         if highlight:
@@ -793,6 +947,12 @@ def plot_piano_roll(sm, highlight=None, fixed_pitch_range=None, drums_only=False
             t0, t1 = [t * scale for t in highlight["tick_range"]]
             p0, p1 = highlight["pitch_range"]
             ax1.add_patch(Rectangle((t0, p0), t1 - t0, p1 - p0, lw=1.5, ec="magenta", fc="none", ls="--", alpha=0.8))
+            # Add legend entry for edited portion
+            from matplotlib.patches import Patch
+            by_label["Edited Portion"] = Patch(edgecolor="magenta", facecolor="none", linestyle="--", linewidth=1.5)
+        
+        if by_label:
+            ax1.legend(by_label.values(), by_label.keys(), title="Legend", loc='upper right', bbox_to_anchor=(1.15, 1))
     
     if ax2 and has_drums and unique_drum_pitches:
         ordinal_positions = list(range(len(unique_drum_pitches)))
