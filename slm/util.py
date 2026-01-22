@@ -10,14 +10,12 @@ import symusic
 from midi_player import MIDIPlayer
 from midi_player.stylers import basic, cifka_advanced
 import IPython.display as ipd
-import math
 import glob
 from tqdm import tqdm
 from .CONSTANTS import instrument_class_to_selected_program_nr
 from matplotlib.patches import Rectangle
 import subprocess
 import sys
-import tinysoundfont
 
 
 def detail_plot(sm):
@@ -321,6 +319,9 @@ def preview_sm(x_sm, soundfont_path=None, sample_rate=44100):
     sample_rate : int
         Sample rate for audio rendering (default: 44100)
     """
+    # assert that tinysoundfont is not installed
+    assert "tinysoundfont" not in sys.modules, "tinysoundfont is not installed"
+    
     rand_int = np.random.randint(0, 1000000)
     tmp_file_path = "sm_preview_" + str(rand_int) + ".mid"
     x_sm.dump_midi(tmp_file_path)
