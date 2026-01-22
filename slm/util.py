@@ -223,7 +223,6 @@ def sm_set_track_order(sm):
 def sm_fix_overlap_notes(sm):
     sm = sm.copy()
     # print number of notes before
-    print(f"Number of notes before: {sm.note_num()}")
     for track_idx in range(len(sm.tracks)):
         track = sm.tracks[track_idx]
         notes = track.notes
@@ -243,8 +242,6 @@ def sm_fix_overlap_notes(sm):
                     new_pitch_notes.append(pitch_notes[i+1])
             new_notes.extend(new_pitch_notes)
         sm.tracks[track_idx].notes = new_notes
-    # print number of notes after
-    print(f"Number of notes after: {sm.note_num()}")
     return sm
 
 def sm_reduce_dynamics(sm, factor):
@@ -306,10 +303,7 @@ def preview_w_player(x_sm):
     rand_int = np.random.randint(0, 1000000)
     tmp_file_path = "sm_preview_" + str(rand_int) + ".mid"
     x_sm.dump_midi(tmp_file_path)
-    
-    # Display MIDI player
     ipd.display(MIDIPlayer(tmp_file_path, 400, styler=cifka_advanced, title='My Player'))
-    
     # delete file
     os.remove(tmp_file_path)
 

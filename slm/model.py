@@ -276,7 +276,7 @@ class SuperposedLanguageModel(torch.nn.Module):
         
         Args:
             x: Input tensor of shape (batch_size, events, attributes, vocab_size) with constraints
-            guidance_scale: CFG scale. 1.0 = no guidance, >1.0 = stronger constraint adherence
+            guidance_scale: CFG scale. 0.0 = effecively becomes an mlm w/ restricted sampling, 1.0 = slm default behaviour, >1.0 = stronger constraint adherence
         
         Returns:
             Combined logits of shape (batch_size, events, attributes, vocab_size)
