@@ -1,5 +1,7 @@
 # SLM: Superposed Language Modelling
 
+<img width="961" height="417" alt="image" src="https://github.com/user-attachments/assets/15d6a4aa-03a4-4353-8e0a-538db8c4c891" />
+
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/erl-j/superposed-language-modelling/blob/main/examples/tutorial.ipynb)
 [![arXiv](https://img.shields.io/badge/arXiv-2408.02434-b31b1b.svg)](https://arxiv.org/abs/2408.02434)
 
